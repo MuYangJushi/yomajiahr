@@ -1,0 +1,102 @@
+// OpenClaw HR 智能助手 — 配置文件
+// 使用方法: 合并到 ~/.openclaw/openclaw.json 或作为独立配置加载
+{
+  // ---------------------------------------------------------------------------
+  // Channels
+  // ---------------------------------------------------------------------------
+  "channels": {
+    // 飞书 (Phase 1: Bot 1 全员 + Bot 4 管理员)
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "accounts": {
+        // Bot 1: HR小助手 — 全员可用
+        "hr-assistant": {
+          "appId": "${FEISHU_HR_BOT_APP_ID}",
+          "appSecret": { "source": "env", "id": "FEISHU_HR_BOT_APP_SECRET" },
+          "botName": "HR小助手",
+          "enabled": true,
+        },
+        // Bot 4: HR管理后台 — 仅 HR 管理员
+        "hr-admin": {
+          "appId": "${FEISHU_ADMIN_BOT_APP_ID}",
+          "appSecret": { "source": "env", "id": "FEISHU_ADMIN_BOT_APP_SECRET" },
+          "botName": "HR管理后台",
+          "enabled": true,
+        },
+        // Phase 2+: 取消注释以启用
+        // "hr-recruit": {
+        //   "appId": "${FEISHU_RECRUIT_BOT_APP_ID}",
+        //   "appSecret": { "source": "env", "id": "FEISHU_RECRUIT_BOT_APP_SECRET" },
+        //   "botName": "招聘助手",
+        //   "enabled": true
+        // },
+        // "hr-analytics": {
+        //   "appId": "${FEISHU_ANALYTICS_BOT_APP_ID}",
+        //   "appSecret": { "source": "env", "id": "FEISHU_ANALYTICS_BOT_APP_SECRET" },
+        //   "botName": "HR数据分析师",
+        //   "enabled": true
+        // }
+      },
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "streaming": true,
+    },
+
+    // Web Portal — 管理员后台
+    "web": {
+      "enabled": true,
+      "auth": "token",
+      "allowedAgents": ["hr-admin"],
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Agents
+  // ---------------------------------------------------------------------------
+  "agents": {
+    "defaults": {
+      "subagents": {
+        "maxSpawnDepth": 2, // orchestrator → sub-agent → worker
+        "maxChildrenPerAgent": 5,
+        "maxConcurrent": 8,
+        "runTimeoutSeconds": 300, // 5 min timeout
+      },
+    },
+    "list": [
+      {
+        "id": "hr-assistant",
+        "name": "HR小助手",
+        "description": "全员 Agent (orchestrator)",
+        "skills": ["hr-assistant"],
+        "subagents": {
+          "allowAgents": ["hr-policy-rag", "hr-onboard", "hr-schedule"],
+        },
+      },
+      {
+        "id": "hr-policy-rag",
+        "name": "政策问答",
+        "description": "政策问答 Sub-agent (只读 RAG)",
+        "skills": ["hr-policy-rag"],
+      },
+      {
+        "id": "hr-admin",
+        "name": "HR管理后台",
+        "description": "管理员 Agent (知识库读写)",
+        "skills": ["hr-admin"],
+      },
+    ],
+  },
+
+  // ---------------------------------------------------------------------------
+  // Tool policies (sub-agent 工具权限)
+  // ---------------------------------------------------------------------------
+  "tools": {
+    "subagents": {
+      "tools": {
+        "deny": ["gateway", "cron", "sessions_send"],
+      },
+    },
+  },
+}
