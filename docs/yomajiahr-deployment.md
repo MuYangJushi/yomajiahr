@@ -119,15 +119,34 @@ nano ~/.ymjhr/.env
 
 需要填写的关键值：
 
-| 变量                                    | 说明                     | 获取方式               |
-| --------------------------------------- | ------------------------ | ---------------------- |
-| `ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY` | LLM API 密钥（至少一个） | 从对应平台获取         |
-| `OPENCLAW_GATEWAY_TOKEN`                | Gateway 访问令牌         | `openssl rand -hex 32` |
-| `FEISHU_HR_BOT_APP_ID`                  | HR小助手 App ID          | 飞书开放平台           |
-| `FEISHU_HR_BOT_APP_SECRET`              | HR小助手 App Secret      | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_ID`               | HR管理后台 App ID        | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_SECRET`           | HR管理后台 App Secret    | 飞书开放平台           |
-| `OPENCLAW_WEB_AUTH_TOKEN`               | Web Portal 认证令牌      | `openssl rand -hex 32` |
+| 变量                                   | 说明                                                 | 获取方式               |
+| -------------------------------------- | ---------------------------------------------------- | ---------------------- |
+| `MINIMAX_API_KEY`                      | MiniMax 国内站模型调用密钥（当前推荐）               | MiniMax 平台           |
+| `MINIMAX_CODE_PLAN_KEY`                | MiniMax Coding Plan 用量查询密钥（可选，但建议填写） | MiniMax 平台           |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 其他 LLM provider 的 API 密钥（按需填写，不是必填）  | 从对应平台获取         |
+| `OPENCLAW_GATEWAY_TOKEN`               | Gateway 访问令牌                                     | `openssl rand -hex 32` |
+| `FEISHU_HR_BOT_APP_ID`                 | HR小助手 App ID                                      | 飞书开放平台           |
+| `FEISHU_HR_BOT_APP_SECRET`             | HR小助手 App Secret                                  | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_ID`              | HR管理后台 App ID                                    | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_SECRET`          | HR管理后台 App Secret                                | 飞书开放平台           |
+| `OPENCLAW_WEB_AUTH_TOKEN`              | Web Portal 认证令牌                                  | `openssl rand -hex 32` |
+
+当前 `config/ymjhr.jsonc` 已默认指向 MiniMax 国内 Anthropic 兼容入口
+`https://api.minimaxi.com/anthropic`，因此部署时通常只需补 `MINIMAX_API_KEY`。
+
+如果你的 MiniMax 账号把“模型调用密钥”和 “Coding Plan 用量查询密钥”分开，保持：
+
+- `MINIMAX_API_KEY` 用于实际模型调用
+- `MINIMAX_CODE_PLAN_KEY` 用于 `/usage` 等额度查询
+
+如果它们实际上是同一个 key，只填 `MINIMAX_API_KEY` 也可以工作。
+
+如果后续接入其他模型，建议继续沿用：
+
+- `models.mode: "merge"`，保留内置和已接入 provider
+- `agents.defaults.model.primary` 指向当前主模型
+- `agents.defaults.model.fallbacks` 追加备用模型
+- 尽量不要过早设置 `agents.defaults.models` allowlist，否则每次新增模型都要同步维护
 
 ### Step 5: 写入配置
 
@@ -154,6 +173,8 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 ```
 
 或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。
+
+如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新 provider，则在 `models.providers` 下继续追加对应配置块即可。
 
 ### Step 6: 安装 Skills
 
