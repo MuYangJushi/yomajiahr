@@ -81,6 +81,17 @@
         "name": "政策问答",
         "workspace": "~/.ymjhr/workspace-hr-policy-rag",
         "skills": ["hr-policy-rag"],
+        "memorySearch": {
+          // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
+          "provider": "openai",
+          "model": "text-embedding-v4",
+          "fallback": "none",
+          "remote": {
+            "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "apiKey": "${DASHSCOPE_API_KEY}",
+          },
+          "extraPaths": ["../memory/hr-policies"],
+        },
         "tools": {
           "deny": ["memory_write", "memory_delete", "exec"],
         },
@@ -139,6 +150,7 @@
   "tools": {
     "subagents": {
       "tools": {
+        "alsoAllow": ["memory_search", "memory_get"],
         "deny": ["gateway", "cron", "sessions_send"],
       },
     },

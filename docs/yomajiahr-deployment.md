@@ -139,6 +139,20 @@ mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,t
 `~/.ymjhr/workspace-<agentId>`，这样
 workspace、sessions、memory 都集中在 `~/.ymjhr/` 下，便于统一备份和排障。
 
+其中 `hr-policy-rag` 的 `memory_search` 需要通过
+`agents.list[].memorySearch.extraPaths` 显式指向知识库目录。当前模板使用相对
+workspace 的 `../memory/hr-policies`，这样会稳定解析到
+`~/.ymjhr/memory/hr-policies`；不要在这里写 `~/.ymjhr/...`，因为该字段不会展开 `~`，
+会被误当成相对路径，最终表现为知识库“空命中”。
+
+当前模板还将 `hr-policy-rag.memorySearch.provider` 显式固定为
+`openai`，但实际指向阿里百炼的 OpenAI-compatible embedding 接口：
+
+- `model`: `text-embedding-v4`
+- `remote.baseUrl`: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+
+这样知识库检索不会再依赖 auto-detect，也能避免在只配置 MiniMax 主模型时退回到效果很差的中文 FTS-only 路径。
+
 如果你是通过 `sudo -iu ymjhr` 切进专用运行用户后执行这些命令，
 这里的 `~/.ymjhr` 实际就是 `/home/ymjhr/.ymjhr`。
 
@@ -160,20 +174,26 @@ nano ~/.ymjhr/.env
 
 需要填写的关键值：
 
-| 变量                                   | 说明                                                 | 获取方式               |
-| -------------------------------------- | ---------------------------------------------------- | ---------------------- |
-| `MINIMAX_API_KEY`                      | MiniMax 国内站模型调用密钥（当前推荐）               | MiniMax 平台           |
-| `MINIMAX_CODE_PLAN_KEY`                | MiniMax Coding Plan 用量查询密钥（可选，但建议填写） | MiniMax 平台           |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 其他 LLM provider 的 API 密钥（按需填写，不是必填）  | 从对应平台获取         |
-| `OPENCLAW_GATEWAY_TOKEN`               | Gateway 访问令牌                                     | `openssl rand -hex 32` |
-| `FEISHU_HR_BOT_APP_ID`                 | HR小助手 App ID                                      | 飞书开放平台           |
-| `FEISHU_HR_BOT_APP_SECRET`             | HR小助手 App Secret                                  | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_ID`              | HR管理后台 App ID                                    | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_SECRET`          | HR管理后台 App Secret                                | 飞书开放平台           |
-| `OPENCLAW_WEB_AUTH_TOKEN`              | Web Portal 认证令牌                                  | `openssl rand -hex 32` |
+| 变量                          | 说明                                                  | 获取方式               |
+| ----------------------------- | ----------------------------------------------------- | ---------------------- |
+| `MINIMAX_API_KEY`             | MiniMax 国内站模型调用密钥（当前推荐）                | MiniMax 平台           |
+| `MINIMAX_CODE_PLAN_KEY`       | MiniMax Coding Plan 用量查询密钥（可选，但建议填写）  | MiniMax 平台           |
+| `DASHSCOPE_API_KEY`           | `hr-policy-rag` 知识库 embedding 密钥（当前模板必填） | 阿里百炼 / DashScope   |
+| `ANTHROPIC_API_KEY`           | 其他 LLM provider 的 API 密钥（按需填写）             | 从对应平台获取         |
+| `OPENCLAW_GATEWAY_TOKEN`      | Gateway 访问令牌                                      | `openssl rand -hex 32` |
+| `FEISHU_HR_BOT_APP_ID`        | HR小助手 App ID                                       | 飞书开放平台           |
+| `FEISHU_HR_BOT_APP_SECRET`    | HR小助手 App Secret                                   | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_ID`     | HR管理后台 App ID                                     | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_SECRET` | HR管理后台 App Secret                                 | 飞书开放平台           |
+| `OPENCLAW_WEB_AUTH_TOKEN`     | Web Portal 认证令牌                                   | `openssl rand -hex 32` |
 
 当前 `config/ymjhr.jsonc` 已默认指向 MiniMax 国内 Anthropic 兼容入口
-`https://api.minimaxi.com/anthropic`，因此部署时通常只需补 `MINIMAX_API_KEY`。
+`https://api.minimaxi.com/anthropic`，同时将 `hr-policy-rag` 的
+`memorySearch.provider` 显式固定为阿里百炼的 OpenAI-compatible embedding 配置。
+因此当前模板至少需要补：
+
+- `MINIMAX_API_KEY`：主对话模型
+- `DASHSCOPE_API_KEY`：政策知识库 embedding / 混合检索
 
 如果你的 MiniMax 账号把“模型调用密钥”和 “Coding Plan 用量查询密钥”分开，保持：
 
@@ -181,6 +201,18 @@ nano ~/.ymjhr/.env
 - `MINIMAX_CODE_PLAN_KEY` 用于 `/usage` 等额度查询
 
 如果它们实际上是同一个 key，只填 `MINIMAX_API_KEY` 也可以工作。
+
+如果你后续希望把知识库 embedding 换成 `OpenAI`、`gemini`、`voyage`、`mistral` 或 `ollama`，
+请同步修改：
+
+- `agents.list[].memorySearch.provider`
+- `agents.list[].memorySearch.model`
+- `agents.list[].memorySearch.remote`
+- `~/.ymjhr/.env` 中对应 provider 的密钥
+
+不要把 `hr-policy-rag.memorySearch.provider` 留给 `auto`，否则当主模型是 MiniMax、
+但 embedding provider 未配置时，运行时会退回到 FTS-only；对于中文 HR 文档，
+这通常会导致检索命中率明显下降。
 
 如果后续接入其他模型，建议继续沿用：
 
@@ -215,7 +247,7 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 
 或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。当前模板已将各 agent 的 workspace 显式配置为 `~/.ymjhr/workspace-<agentId>`。
 
-如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新 provider，则在 `models.providers` 下继续追加对应配置块即可。
+如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新主模型 provider，则在 `models.providers` 下继续追加对应配置块即可。知识库 embedding 则单独维护在 `hr-policy-rag.memorySearch` 下，不和主对话模型绑定。
 
 当前模板还包含两条显式 Feishu account 路由：
 
