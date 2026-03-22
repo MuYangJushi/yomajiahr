@@ -54,6 +54,8 @@
   // ---------------------------------------------------------------------------
   "agents": {
     "defaults": {
+      // 将默认 agent workspace 显式固定到运行时状态目录，便于服务器排查和备份。
+      "workspace": "~/.ymjhr/workspace",
       "model": {
         // 当前默认使用 MiniMax 国内站；后续可在 fallbacks 中追加其他 provider/model。
         "primary": "minimax/MiniMax-M2.7",

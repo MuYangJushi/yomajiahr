@@ -101,9 +101,15 @@ ymjhr --version
 # 创建 Yoma+HR 状态目录
 mkdir -p ~/.ymjhr
 
+# 创建默认 agent workspace（会放 AGENTS.md / MEMORY.md 等 bootstrap 文件）
+mkdir -p ~/.ymjhr/workspace
+
 # 创建知识库目录结构
 mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
 ```
+
+当前模板会将默认 agent 的 workspace 显式写到 `~/.ymjhr/workspace`，这样
+workspace、sessions、memory 都集中在 `~/.ymjhr/` 下，便于统一备份和排障。
 
 ### Step 4: 配置环境变量
 
@@ -172,7 +178,7 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 "
 ```
 
-或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。
+或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。默认 agent workspace 已显式配置为 `~/.ymjhr/workspace`。
 
 如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新 provider，则在 `models.providers` 下继续追加对应配置块即可。
 
@@ -468,10 +474,12 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 ~/.ymjhr/                               # Yoma+HR 运行时状态目录
 ├── .env                                 # 环境变量（密钥，不入库）
 ├── ymjhr.json                          # 运行时配置
-├── skills/                              # skills 软链接
-│   ├── hr-assistant -> /opt/ymjhr/skills/hr-assistant
-│   ├── hr-policy-rag -> /opt/ymjhr/skills/hr-policy-rag
-│   └── hr-admin -> /opt/ymjhr/skills/hr-admin
+├── workspace/                           # 默认 agent workspace
+│   ├── AGENTS.md
+│   ├── MEMORY.md
+│   ├── SOUL.md
+│   ├── TOOLS.md
+│   └── ...
 └── memory/
     ├── hr-admin/
     │   └── audit-log.jsonl              # 操作审计日志（JSONL 格式）
@@ -485,6 +493,12 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
         ├── compensation/
         ├── training/
         └── general/
+```
+
+如果后续新增命名 agent，未单独指定 `workspace` 时，它们默认会落到：
+
+```text
+~/.ymjhr/workspace-<agentId>
 ```
 
 ---
