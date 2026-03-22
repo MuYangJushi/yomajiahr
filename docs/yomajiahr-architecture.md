@@ -437,11 +437,9 @@ Admin Portal (http://<server>:18790)
       "groupPolicy": "open",
       "streaming": true,
     },
-    "web": {
-      "enabled": true,
-      "auth": "token",
-      "allowedAgents": ["hr-admin"],
-    },
+  },
+  "web": {
+    "enabled": true,
   },
 }
 ```
@@ -503,8 +501,8 @@ Admin Portal (http://<server>:18790)
    - 环境变量模板 `.env.ymjhr.example`
 
 2. **Web Portal 配置**
-   - OpenClaw Web Provider，token 认证
-   - 仅允许管理员 Agent 访问
+   - 启用顶层 `web.enabled`
+   - Gateway 认证复用 `OPENCLAW_GATEWAY_TOKEN`
 
 3. **全员 Agent Skill**
    - 简单意图识别（政策问答 vs 其他）
@@ -537,7 +535,7 @@ Admin Portal (http://<server>:18790)
 8. **部署配置**
    - `.env.ymjhr.example` 环境变量模板
    - 飞书 channel 配置（2 个 Bot）
-   - Web channel 配置
+   - 顶层 web 配置
    - Sub-agent 配置
    - Admin Portal systemd 服务配置
    - Nginx 反向代理（双服务：Web Portal + Admin Portal）
@@ -650,7 +648,7 @@ assets/sample-policies/
 
 - 在项目根目录创建 `.env.ymjhr.example`
 - 配置 `openclaw.json` 的 `channels.feishu` 节点（Bot 1 + Bot 4）
-- 配置 `openclaw.json` 的 `channels.web` 节点（管理员 Web Portal）
+- 配置 `openclaw.json` 的顶层 `web` 节点（管理员 Web Portal）
 - 配置 `agents` 的 Sub-agent 参数
 
 ### Step 10: 打包验证

@@ -1,6 +1,10 @@
 // Yoma+HR 智能助手 — 配置文件
 // 使用方法: 写入 ~/.ymjhr/ymjhr.json（通过 OPENCLAW_CONFIG_PATH 指定）
 {
+  "web": {
+    "enabled": true,
+  },
+
   // ---------------------------------------------------------------------------
   // Channels
   // ---------------------------------------------------------------------------
@@ -43,13 +47,6 @@
       "groupPolicy": "open",
       "streaming": true,
     },
-
-    // Web Portal — 管理员后台
-    "web": {
-      "enabled": true,
-      "auth": "token",
-      "allowedAgents": ["hr-admin"],
-    },
   },
 
   // ---------------------------------------------------------------------------
@@ -68,7 +65,6 @@
       {
         "id": "hr-assistant",
         "name": "HR小助手",
-        "description": "全员 Agent (orchestrator)",
         "skills": ["hr-assistant"],
         "subagents": {
           "allowAgents": ["hr-policy-rag", "hr-onboard", "hr-schedule"],
@@ -77,13 +73,11 @@
       {
         "id": "hr-policy-rag",
         "name": "政策问答",
-        "description": "政策问答 Sub-agent (只读 RAG)",
         "skills": ["hr-policy-rag"],
       },
       {
         "id": "hr-admin",
         "name": "HR管理后台",
-        "description": "管理员 Agent (知识库读写)",
         "skills": ["hr-admin"],
       },
     ],

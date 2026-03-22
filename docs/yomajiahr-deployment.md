@@ -75,11 +75,13 @@ pnpm build
 
 ### Step 2.5: 注册 ymjhr CLI 命令
 
-构建完成后，通过 `npm link` 将 `ymjhr` 注册到系统 PATH：
+构建完成后，将 `ymjhr` 注册到系统 PATH。
+
+如果服务器上的 Node.js 是通过系统包安装的（例如 Ubuntu 上的 `/usr/bin/node`），通常需要使用 `sudo npm link`：
 
 ```bash
 cd /opt/ymjhr
-npm link
+sudo npm link
 ```
 
 验证命令可用：
@@ -88,7 +90,7 @@ npm link
 ymjhr --version
 ```
 
-> 如果服务器使用 `nvm` 管理 Node.js 版本，`npm link` 会将命令链接到当前活跃版本的 bin 目录。
+> 如果服务器使用 `nvm` 管理 Node.js 版本，通常可以直接执行 `npm link`。
 > 切换 Node.js 版本后需重新执行 `npm link`。
 
 后续所有 CLI 操作均使用 `ymjhr` 命令（等同于原 `openclaw` 命令，子命令和参数完全一致）。
@@ -132,19 +134,26 @@ nano ~/.ymjhr/.env
 将 `config/ymjhr.jsonc` 转为 JSON 写入配置目录：
 
 ```bash
-# 去掉 JSONC 注释，生成标准 JSON
+# 使用 Node 解析 JSONC（支持注释和尾随逗号），写入运行时 JSON
 node -e "
 const fs = require('fs');
+const vm = require('vm');
 const text = fs.readFileSync('config/ymjhr.jsonc', 'utf-8');
-const cleaned = text.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-const json = JSON.parse(cleaned);
+const sanitized = text
+  .replace(/^\uFEFF/, '')
+  .replace(/^\s*\/\/.*$/gm, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+const json = vm.runInNewContext('(' + sanitized + ')', {});
 json.gateway = { mode: 'local' };
-fs.writeFileSync(process.env.HOME + '/.ymjhr/ymjhr.json', JSON.stringify(json, null, 2));
+fs.writeFileSync(
+  process.env.HOME + '/.ymjhr/ymjhr.json',
+  JSON.stringify(json, null, 2) + '\n'
+);
 console.log('Written to ~/.ymjhr/ymjhr.json');
 "
 ```
 
-或者手动创建 `~/.ymjhr/ymjhr.json`（参考 `config/ymjhr.jsonc`，去掉注释，添加 `"gateway": { "mode": "local" }`）。
+或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。
 
 ### Step 6: 安装 Skills
 
@@ -154,15 +163,14 @@ Skills 通过目录发现机制加载。引擎按以下优先级扫描 `SKILL.md
 2. `~/.ymjhr/skills/`（托管目录）
 3. 内置 bundled skills（最低）
 
-由于我们从仓库运行，`skills/` 目录已在工作区中，**理论上不需要额外操作**。但为确保 gateway 以任意工作目录启动时都能找到 skills，建议同时链接到托管目录：
+由于我们从仓库运行，`skills/` 目录已在工作区中，**默认不需要额外操作**。
+在 systemd 中将 `WorkingDirectory` 设为 `/opt/ymjhr` 后，gateway 会直接从仓库根目录发现这些 skills。
+
+如果你确实需要把 skills 复制到托管目录，请直接复制目录；不建议在 `~/.ymjhr/skills` 下放指向仓库外部的软链接，当前技能加载器会跳过这类路径。
 
 ```bash
-# 方式 A: 软链接（推荐，保持同步）
-ln -s /opt/ymjhr/skills/hr-assistant   ~/.ymjhr/skills/hr-assistant
-ln -s /opt/ymjhr/skills/hr-policy-rag  ~/.ymjhr/skills/hr-policy-rag
-ln -s /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/hr-admin
-
-# 方式 B: 直接复制（不需要保持同步时）
+# 可选：复制一份到托管目录
+mkdir -p ~/.ymjhr/skills
 cp -r /opt/ymjhr/skills/hr-assistant   ~/.ymjhr/skills/
 cp -r /opt/ymjhr/skills/hr-policy-rag  ~/.ymjhr/skills/
 cp -r /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/
