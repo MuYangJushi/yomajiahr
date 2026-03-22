@@ -1,0 +1,17 @@
+{
+  "name": "hr-admin-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HR Admin Portal - document management, audit log viewer",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.mjs",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mammoth": "^1.9.0",
+    "multer": "^2.0.1",
+    "pdfjs-dist": "^5.5.207"
+  }
+}

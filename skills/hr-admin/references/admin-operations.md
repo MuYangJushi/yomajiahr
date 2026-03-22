@@ -15,21 +15,31 @@
 
 ### 步骤 1: 接收文件
 
-管理员可通过以下方式提供 PDF：
+管理员可通过以下方式提供文档：
 
-- 飞书消息中直接发送 PDF 附件
-- 提供文件路径（服务器上的 PDF 文件）
-- 提供文件 URL（需下载后处理）
+- **Admin Portal 上传（推荐）**：拖拽或选择文件，支持 PDF/Word(docx)/文本
+- 提供文件路径（服务器上的文件）
+- 飞书消息中直接发送附件（受限于飞书 channel 支持的格式）
 
-### 步骤 2: PDF 转换
+### 步骤 2: 文档转换
 
-调用转换脚本：
+**方式 A: Admin Portal 自动转换**
+
+通过 Admin Portal 上传时，系统自动调用 `doc-converter.mjs` 完成转换，无需手动操作。
+
+**方式 B: 命令行转换**
 
 ```bash
+# 使用独立的多格式转换器
+node admin-portal/lib/doc-converter.mjs  # 作为库被 server.mjs 调用
+
+# 或使用原有 PDF 专用脚本
 node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs <pdf-path> \
   --out-dir memory/hr-policies/ \
   --category <category>
 ```
+
+支持的格式：PDF (.pdf)、Word (.docx)、文本 (.txt, .md)。
 
 转换完成后检查警告：
 
@@ -54,17 +64,18 @@ node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs <pdf-path> \
 
 ## 审计日志格式
 
-审计日志存储在 `memory/hr-admin/audit-log.md`，追加写入：
+审计日志存储在 `memory/hr-admin/audit-log.jsonl`，JSONL 格式追加写入（每行一条 JSON 记录）：
 
-```markdown
-## 操作记录
-
-| 时间             | 操作   | 文件                   | 文档编号          | 操作人 | 备注       |
-| ---------------- | ------ | ---------------------- | ----------------- | ------ | ---------- |
-| 2026-03-22 14:30 | UPLOAD | annual-leave-policy.md | HR-LEAVE-001 v2.1 | admin  | 新增       |
-| 2026-03-22 15:00 | UPDATE | annual-leave-policy.md | HR-LEAVE-001 v2.2 | admin  | 更新第三条 |
-| 2026-03-22 16:00 | DELETE | old-policy.md          | HR-OLD-001 v1.0   | admin  | 版本替换   |
+```json
+{"timestamp":"2026-03-22T14:30:00.000Z","action":"UPLOAD","file":"annual-leave-policy.md","details":{"doc_id":"HR-LEAVE-001","version":"2.1","category":"leave","source_format":"PDF"}}
+{"timestamp":"2026-03-22T15:00:00.000Z","action":"UPDATE","file":"annual-leave-policy.md","details":{"doc_id":"HR-LEAVE-001","version":"2.2","category":"leave"}}
+{"timestamp":"2026-03-22T16:00:00.000Z","action":"DELETE","file":"old-policy.md","details":{"doc_id":"HR-OLD-001","version":"1.0","category":"leave","reason":"版本替换"}}
 ```
+
+**查看方式：**
+
+- **Admin Portal**（推荐）：`http://<server>:18790/#audit-log`，支持筛选、分页、CSV 导出
+- **对话查询**：通过飞书 Bot 或 Web Portal 向 Admin Agent 提问
 
 ## 分类管理
 

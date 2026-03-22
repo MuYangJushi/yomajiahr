@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HR 管理后台</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="app-header">
+      <h1>HR 管理后台</h1>
+      <ul class="nav-tabs">
+        <li><a href="#upload" class="active" data-page="upload">文档上传</a></li>
+        <li><a href="#documents" data-page="documents">文档管理</a></li>
+        <li><a href="#audit-log" data-page="audit-log">操作日志</a></li>
+      </ul>
+    </header>
+
+    <main class="main-content">
+      <!-- ============================================================ -->
+      <!-- Upload Page -->
+      <!-- ============================================================ -->
+      <div id="page-upload" class="page active">
+        <div class="card">
+          <div class="card-title">上传政策文档</div>
+
+          <div class="upload-zone" id="upload-zone">
+            <div class="icon">&#128196;</div>
+            <p>拖拽文件到此处，或点击选择文件</p>
+            <div class="formats">支持格式：PDF (.pdf)、Word (.docx)、文本 (.txt, .md)</div>
+            <input type="file" id="file-input" hidden accept=".pdf,.docx,.txt,.md" />
+          </div>
+
+          <div class="file-preview" id="file-preview">
+            <span class="file-name" id="file-name"></span>
+            <span class="file-size" id="file-size"></span>
+            <span class="remove-file" id="remove-file">&times;</span>
+          </div>
+
+          <div class="form-row">
+            <label for="upload-category">分类</label>
+            <select id="upload-category">
+              <option value="leave">leave - 假期制度</option>
+              <option value="onboarding">onboarding - 入离职</option>
+              <option value="attendance">attendance - 考勤制度</option>
+              <option value="compensation">compensation - 薪酬福利</option>
+              <option value="training">training - 培训制度</option>
+              <option value="general" selected>general - 通用制度</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="upload-doc-id">文档编号</label>
+            <input type="text" id="upload-doc-id" placeholder="如 HR-LEAVE-001" />
+          </div>
+
+          <div class="form-row">
+            <label for="upload-version">版本</label>
+            <input type="text" id="upload-version" placeholder="如 1.0" value="1.0" />
+          </div>
+
+          <div class="form-row">
+            <label for="upload-date">生效日期</label>
+            <input type="date" id="upload-date" />
+          </div>
+
+          <div class="upload-progress" id="upload-progress">
+            <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+          </div>
+
+          <div style="margin-top: 16px">
+            <button class="btn btn-primary" id="upload-btn" disabled>上传并转换</button>
+          </div>
+
+          <div class="upload-result" id="upload-result"></div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- Documents Page -->
+      <!-- ============================================================ -->
+      <div id="page-documents" class="page">
+        <div class="card">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="card-title" style="margin-bottom: 0">知识库文档</div>
+            <button class="btn btn-outline btn-sm" id="refresh-docs">刷新</button>
+          </div>
+
+          <div class="filter-bar">
+            <select id="doc-filter-category">
+              <option value="">全部分类</option>
+              <option value="leave">leave</option>
+              <option value="onboarding">onboarding</option>
+              <option value="attendance">attendance</option>
+              <option value="compensation">compensation</option>
+              <option value="training">training</option>
+              <option value="general">general</option>
+            </select>
+            <input type="text" id="doc-search" placeholder="搜索文档编号或文件名..." />
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>文档编号</th>
+                  <th>版本</th>
+                  <th>分类</th>
+                  <th>生效日期</th>
+                  <th>来源格式</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="docs-table-body"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="docs-empty" style="display: none">
+            <div class="icon">&#128203;</div>
+            <p>暂无文档</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- Audit Log Page -->
+      <!-- ============================================================ -->
+      <div id="page-audit-log" class="page">
+        <div class="card">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="card-title" style="margin-bottom: 0">操作审计日志</div>
+            <button class="btn btn-outline btn-sm" id="export-audit">导出 CSV</button>
+          </div>
+
+          <div class="filter-bar">
+            <select id="audit-filter-action">
+              <option value="">全部操作</option>
+              <option value="UPLOAD">上传</option>
+              <option value="UPDATE">更新</option>
+              <option value="DELETE">删除</option>
+              <option value="CREATE_CATEGORY">新增分类</option>
+            </select>
+            <input type="text" id="audit-filter-doc-id" placeholder="文档编号" />
+            <label style="font-size: 13px">从</label>
+            <input type="date" id="audit-filter-from" />
+            <label style="font-size: 13px">到</label>
+            <input type="date" id="audit-filter-to" />
+            <button class="btn btn-outline btn-sm" id="audit-filter-apply">筛选</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>操作</th>
+                  <th>文件</th>
+                  <th>文档编号</th>
+                  <th>版本</th>
+                  <th>分类</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody id="audit-table-body"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="audit-empty" style="display: none">
+            <div class="icon">&#128221;</div>
+            <p>暂无操作记录</p>
+          </div>
+
+          <div class="pagination" id="audit-pagination"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-backdrop" id="delete-modal">
+      <div class="modal">
+        <h3>确认删除</h3>
+        <p id="delete-modal-text"></p>
+        <div class="modal-actions">
+          <button class="btn btn-outline" id="delete-cancel">取消</button>
+          <button class="btn btn-danger" id="delete-confirm">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+  </body>
+</html>

@@ -1,19 +1,42 @@
 ---
 name: hr-admin
-description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web Portal），负责知识库文档的增删改查、PDF 上传转换、文档版本管理和操作审计日志查询。当管理员需要管理政策文档、上传新政策、废止旧政策、查看操作记录时触发。
+description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web Portal + Admin Portal），负责知识库文档的增删改查、多格式文档上传转换、文档版本管理和操作审计日志查询。当管理员需要管理政策文档、上传新政策、废止旧政策、查看操作记录时触发。
 ---
 
 # HR 管理员 Agent
 
-管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书 Bot 或 Web Portal 接受 HR 管理员指令，执行知识库管理操作。
+管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书 Bot、OpenClaw Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
+
+## 管理入口
+
+管理员有三个操作入口：
+
+| 入口                    | 适用场景                         | 说明                                                                                  |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-portal/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
+| **飞书 Bot 4**          | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
+| **OpenClaw Web Portal** | 对话式操作                       | 与飞书 Bot 功能相同，Web 聊天界面                                                     |
+
+> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、可视化元数据填写和即时反馈。飞书 Bot 和 Web Portal 适合快捷的查询和删除操作。
 
 ## 核心功能
 
 ### 1. 上传文档
 
-管理员发送 PDF 文件或提供文件路径，Agent 执行：
+**方式 A: Admin Portal 上传（推荐）**
 
-1. 调用 `scripts/pdf-to-markdown.mjs` 将 PDF 转为 Markdown
+管理员通过 Admin Portal (`http://<server>:18790`) 上传：
+
+1. 拖拽或选择文件（支持 PDF、Word/docx、文本）
+2. 选择分类，填写文档编号、版本号、生效日期
+3. 点击"上传并转换"，系统自动转为 Markdown 写入知识库
+4. 页面显示上传结果和警告信息
+
+**方式 B: 飞书 Bot / Web Portal 对话上传**
+
+管理员提供服务器上的文件路径，Agent 执行：
+
+1. 调用 `doc-converter.mjs` 将文档转为 Markdown
 2. 提示管理员补充元数据（文档编号、版本号、生效日期、分类）
 3. 使用 `memory_write` 将 Markdown 写入知识库 `memory/hr-policies/<category>/`
 4. 确认写入成功，返回文档摘要
@@ -21,7 +44,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 对话示例：
 
 ```
-管理员: 上传新的加班管理制度 [附件: overtime-policy.pdf]
+管理员: 转换 /tmp/overtime-policy.pdf 到知识库
 Agent:  文档已转换。请确认以下信息：
         - 文档编号: （请输入，如 HR-WORK-003）
         - 版本: （请输入，如 1.0）
@@ -32,6 +55,14 @@ Agent:  已写入 memory/hr-policies/attendance/overtime-policy.md
         文档编号: HR-WORK-003 | 版本: 1.0 | 生效日期: 2026-04-01
         全员 Bot 现在可以查询到该文档。
 ```
+
+**支持的文档格式：**
+
+| 格式 | 扩展名    | 转换引擎   |
+| ---- | --------- | ---------- |
+| PDF  | .pdf      | pdfjs-dist |
+| Word | .docx     | mammoth    |
+| 文本 | .txt, .md | 直接读取   |
 
 ### 2. 更新文档
 
@@ -85,14 +116,17 @@ Agent:  已删除。审计记录已生成。
 
 ### 5. 操作审计日志
 
-所有写操作（上传、更新、删除）自动记录审计日志，格式：
+所有写操作（上传、更新、删除）自动记录审计日志。审计日志存储为 JSONL 格式（`memory/hr-admin/audit-log.jsonl`），支持两种查看方式：
 
-```
-[2026-03-22 14:30:00] UPLOAD annual-leave-policy.md (HR-LEAVE-001 v2.1) by admin
-[2026-03-22 15:00:00] DELETE old-policy.md (HR-OLD-001 v1.0) by admin, reason: "版本替换"
-```
+**方式 A: Admin Portal 审计日志页面（推荐）**
 
-管理员可查询：
+- 表格展示，支持按操作类型、文档编号、日期范围筛选
+- 支持分页浏览
+- 支持导出 CSV（兼容 Excel）
+
+**方式 B: 飞书 Bot / Web Portal 对话查询**
+
+管理员可通过对话查询：
 
 - `查看最近的操作记录`
 - `查看本周的操作记录`
@@ -104,14 +138,14 @@ Agent:  已删除。审计记录已生成。
 
 ## 工具权限
 
-| 工具             | 权限 | 用途                              |
-| ---------------- | ---- | --------------------------------- |
-| `memory_write`   | 允许 | 写入/更新知识库文档               |
-| `memory_delete`  | 允许 | 删除知识库文档                    |
-| `memory_search`  | 允许 | 搜索知识库（验证写入结果）        |
-| `exec`           | 允许 | 运行 pdf-to-markdown.mjs 转换脚本 |
-| `gateway`        | 禁止 | 管理员 Agent 不操作网关           |
-| `sessions_spawn` | 禁止 | 管理员 Agent 无需 Sub-agent       |
+| 工具             | 权限 | 用途                            |
+| ---------------- | ---- | ------------------------------- |
+| `memory_write`   | 允许 | 写入/更新知识库文档             |
+| `memory_delete`  | 允许 | 删除知识库文档                  |
+| `memory_search`  | 允许 | 搜索知识库（验证写入结果）      |
+| `exec`           | 允许 | 运行 doc-converter.mjs 转换脚本 |
+| `gateway`        | 禁止 | 管理员 Agent 不操作网关         |
+| `sessions_spawn` | 禁止 | 管理员 Agent 无需 Sub-agent     |
 
 ## 回复规范
 
@@ -123,3 +157,4 @@ Agent:  已删除。审计记录已生成。
 ## 参考文档
 
 - 管理操作详细规范：[references/admin-operations.md](references/admin-operations.md)
+- Admin Portal 源码：`admin-portal/`（独立 Web 服务，端口 18790）

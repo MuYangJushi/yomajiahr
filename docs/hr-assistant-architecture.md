@@ -140,17 +140,17 @@
 ### 整体架构
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                              前端入口层                                     │
-│                                                                           │
-│  [飞书]                                              [Web Portal]         │
-│  Bot 1: HR小助手 (全员)                               管理后台 (HR管理员)  │
-│  Bot 2: 招聘助手 (招聘团队)                           - 知识库管理          │
-│  Bot 3: HR数据分析师 (管理层)                         - 权限配置            │
-│  Bot 4: HR管理后台 (HR管理员)                         - 操作审计日志        │
-└──┬─────────────┬──────────────┬───────────────┬───────────┬──────────────┘
-   │             │              │               │           │
-┌──▼──────────┐ ┌▼────────┐ ┌──▼────────┐ ┌────▼─────┐    │
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                   前端入口层                                       │
+│                                                                                  │
+│  [飞书]                         [OpenClaw Web Portal]    [Admin Portal :18790]   │
+│  Bot 1: HR小助手 (全员)          对话式管理 (HR管理员)     独立 Web 管理后台       │
+│  Bot 2: 招聘助手 (招聘团队)                                - 文档上传 (PDF/Word)  │
+│  Bot 3: HR数据分析师 (管理层)                              - 文档管理             │
+│  Bot 4: HR管理后台 (HR管理员)                              - 审计日志/CSV 导出    │
+└──┬─────────────┬──────────────┬────────────┬──────────────┬──────────────────────┘
+   │             │              │            │              │
+┌──▼──────────┐ ┌▼────────┐ ┌──▼────────┐ ┌─▼────────┐    │ (直接读写知识库目录)
 │ Agent (主)  │ │ Agent   │ │ Agent     │ │ Agent    │◄───┘
 │ 方案B       │ │ 招聘    │ │ 数据分析  │ │ 管理员   │
 │             │ │         │ │           │ │          │
@@ -161,9 +161,13 @@
 │ ├─入离职    │   方案C        方案C       └──────────┘
 │ │ Sub-agent │                              方案C
 │ └─排班考勤  │
-│   Sub-agent │
-└─────────────┘
-    方案B
+│   Sub-agent │          ┌─────────────────────────┐
+└─────────────┘          │  Admin Portal (独立服务)  │
+    方案B                │  Express + multer         │
+                         │  doc-converter            │
+                         │  直接读写 memory 目录      │
+                         │  审计日志 (JSONL)          │
+                         └─────────────────────────┘
 ```
 
 ### Agent 分配逻辑
@@ -305,7 +309,7 @@ Sub-agent 在 announce 时，如果识别到需要接力给其他模块，在回
       "memory_write",       // 写入/更新知识库文档
       "memory_delete",      // 删除知识库文档
       "memory_search",      // 搜索验证
-      "exec"                // 运行 pdf-to-markdown 转换脚本
+      "exec"                // 运行 doc-converter 转换脚本
     ],
     "deny": [
       "gateway",
@@ -336,27 +340,58 @@ Sub-agent 在 announce 时，如果识别到需要接力给其他模块，在回
 3. **审计需求**：独立 Bot 的对话记录天然就是操作审计日志
 4. **故障隔离**：管理员误操作不会卡住全员问答服务
 
-### Web Portal（管理员入口）
+### 管理员前端入口
 
-Phase 1 提供基于 OpenClaw Web Provider 的管理后台，供 HR 管理员在浏览器端操作：
+管理员有三个前端入口，各有侧重：
+
+| 入口                    | 技术方案                                | 端口  | 适用场景                                                             |
+| ----------------------- | --------------------------------------- | ----- | -------------------------------------------------------------------- |
+| **Admin Portal** (推荐) | 独立 Express Web 服务 (`admin-portal/`) | 18790 | 文档上传（拖拽 PDF/Word/文本）、文档列表管理、审计日志查看/筛选/导出 |
+| **OpenClaw Web Portal** | OpenClaw 内置 Web Provider              | 18789 | 对话式管理（快捷删除、查询等）                                       |
+| **飞书 Bot 4**          | 飞书 WebSocket                          | -     | 移动端快捷操作（"删除 HR-LEAVE-001"、"查看本周操作记录"）            |
+
+#### Admin Portal（独立管理后台）
+
+Admin Portal 是独立于 OpenClaw 的轻量 Web 服务，解决了 OpenClaw Web Portal 不支持文件上传的限制：
 
 ```
-Web Portal (管理员)
-  ├── 知识库管理
-  │   ├── 文档列表（搜索/筛选/分类浏览）
-  │   ├── 上传文档（PDF 自动转 Markdown + 索引）
-  │   ├── 编辑文档元数据（版本号、生效日期、分类）
-  │   └── 废止/删除文档
-  ├── 操作日志
-  │   └── 知识库变更记录（时间、操作人、操作内容）
-  └── 系统设置（Phase 2+）
-      └── 员工权限配置（分类级访问控制）
+Admin Portal (http://<server>:18790)
+  ├── /#upload        文档上传
+  │   ├── 拖拽或选择文件（PDF / Word docx / 文本）
+  │   ├── 选择分类、填写元数据（文档编号、版本、生效日期）
+  │   └── 自动转换为 Markdown 写入知识库
+  ├── /#documents     文档管理
+  │   ├── 分类筛选、关键词搜索
+  │   ├── 查看文档内容
+  │   └── 删除文档（二次确认）
+  └── /#audit-log     审计日志
+      ├── 按操作类型 / 文档编号 / 日期范围筛选
+      ├── 分页浏览
+      └── CSV 导出（兼容 Excel）
 ```
 
-**Web Portal 与飞书 Bot 4 共用同一个管理员 Agent 实例**，区别仅在前端入口：
+**技术栈**：
 
-- **飞书 Bot 4**：适合移动端快速操作（如"上传这份新的年假政策"、"查一下上周知识库改了什么"）
-- **Web Portal**：适合批量操作和结构化管理（如批量导入文档、浏览文档列表、查看审计日志）
+- 后端：Express + multer (文件上传) + doc-converter (多格式转换)
+- 前端：原生 HTML/CSS/JS（SPA，无框架依赖）
+- 认证：复用 `OPENCLAW_WEB_AUTH_TOKEN`
+- 存储：直接读写 `~/.openclaw/memory/hr-policies/` 目录和 `audit-log.jsonl`
+
+**支持的文档格式**：
+
+| 格式 | 扩展名    | 转换引擎   | 说明                                   |
+| ---- | --------- | ---------- | -------------------------------------- |
+| PDF  | .pdf      | pdfjs-dist | 提取文本，低文本页面警告（疑似扫描件） |
+| Word | .docx     | mammoth    | 转为 Markdown，保留基本格式            |
+| 文本 | .txt, .md | 直接读取   | 原样写入                               |
+
+#### OpenClaw Web Portal（对话式管理）
+
+基于 OpenClaw 内置 Web Provider，提供聊天界面与管理员 Agent 交互。适合快捷的查询和删除操作，但**不支持文件上传**。
+
+#### 飞书 Bot 4
+
+与 OpenClaw Web Portal 功能相同，通过飞书消息与管理员 Agent 对话。适合移动端快速操作。
 
 ### 飞书 Channel 配置结构
 
@@ -447,13 +482,17 @@ Web Portal (管理员)
   ├── 飞书 Bot 4: HR管理后台 (HR管理员)
   │     └── OpenClaw Agent (管理员 Agent)
   │           ├── 知识库 CRUD (读写)
-  │           ├── PDF 上传转换
+  │           ├── 文档转换（对话触发）
   │           └── 操作审计日志
   │
-  └── Web Portal (HR管理员)
-        └── 复用管理员 Agent
-              ├── 文档列表/上传/编辑/删除
-              └── 操作日志查看
+  ├── Admin Portal :18790 (HR管理员, 推荐)
+  │     └── 独立 Express Web 服务
+  │           ├── 文档上传（拖拽 PDF/Word/文本，自动转换）
+  │           ├── 文档管理（列表/搜索/删除）
+  │           └── 审计日志（筛选/分页/CSV 导出）
+  │
+  └── OpenClaw Web Portal :18789 (HR管理员)
+        └── 复用管理员 Agent（对话式管理）
 ```
 
 ### Phase 1 交付物
@@ -480,20 +519,28 @@ Web Portal (管理员)
 
 5. **管理员 Agent Skill**
    - 知识库文档 CRUD（上传、更新、删除、查询）
-   - PDF 上传自动转 Markdown 并索引
    - 文档版本管理（版本号、生效日期）
    - 操作审计日志查询
 
-6. **PDF 批量转换脚本**
-   - `pdf-to-markdown.mjs`（基于 pdfjs-dist）
-   - 支持批量转换 + 分类输出
-   - 管理员可通过 Bot/Web Portal 对话触发
+6. **Admin Portal（独立管理后台）**
+   - 独立 Express Web 服务（`admin-portal/`），端口 18790
+   - 文档上传页：拖拽上传 PDF/Word(docx)/文本，选分类，填元数据，自动转换写入知识库
+   - 文档管理页：分类筛选、搜索、查看内容、删除（二次确认）
+   - 审计日志页：按操作类型/文档编号/日期筛选，分页浏览，CSV 导出
+   - Token 认证（复用 `OPENCLAW_WEB_AUTH_TOKEN`）
 
-7. **部署配置**
+7. **多格式文档转换器**
+   - `admin-portal/lib/doc-converter.mjs`（通用转换库）
+   - 支持 PDF（pdfjs-dist）、Word/docx（mammoth）、文本（直接读取）
+   - `skills/hr-policy-rag/scripts/pdf-to-markdown.mjs`（PDF 专用命令行工具，保留兼容）
+
+8. **部署配置**
    - `.env.hr-assistant.example` 环境变量模板
    - 飞书 channel 配置（2 个 Bot）
    - Web channel 配置
    - Sub-agent 配置
+   - Admin Portal systemd 服务配置
+   - Nginx 反向代理（双服务：Web Portal + Admin Portal）
 
 ---
 
@@ -589,14 +636,24 @@ assets/sample-policies/
 - `skills/hr-assistant/references/routing-rules.md` — 路由规则说明
 - `skills/hr-admin/references/admin-operations.md` — 管理操作规范
 
-### Step 8: 飞书 + Web + 部署配置
+### Step 8: 实现 Admin Portal
+
+`admin-portal/`
+
+- Express Web 服务 (`server.mjs`)：文件上传 API、文档 CRUD API、审计日志 API
+- 多格式文档转换器 (`lib/doc-converter.mjs`)：PDF/Word/文本 → Markdown
+- 前端 SPA (`public/`)：文档上传、文档管理、审计日志三个页面
+- 独立 `package.json`（express, multer, mammoth, pdfjs-dist）
+- Token 认证，复用 `OPENCLAW_WEB_AUTH_TOKEN`
+
+### Step 9: 飞书 + Web + 部署配置
 
 - 在项目根目录创建 `.env.hr-assistant.example`
 - 配置 `openclaw.json` 的 `channels.feishu` 节点（Bot 1 + Bot 4）
 - 配置 `openclaw.json` 的 `channels.web` 节点（管理员 Web Portal）
 - 配置 `agents` 的 Sub-agent 参数
 
-### Step 9: 打包验证
+### Step 10: 打包验证
 
 ```bash
 skills/skill-creator/scripts/package_skill.py skills/hr-assistant
@@ -608,28 +665,35 @@ skills/skill-creator/scripts/package_skill.py skills/hr-admin
 
 ## 八、关键文件参考
 
-| 文件                                     | 用途                          |
-| ---------------------------------------- | ----------------------------- |
-| `skills/skill-creator/SKILL.md`          | Skill 创建规范                |
-| `src/media/pdf-extract.ts`               | pdfjs-dist 提取模式参考       |
-| `src/memory/internal.ts`                 | memory 文件发现机制           |
-| `src/memory/manager-search.ts`           | hybrid search 实现            |
-| `docs/tools/subagents.md`                | Sub-agent 配置与使用文档      |
-| `src/provider-web.ts`                    | Web Provider 实现参考         |
-| `extensions/feishu/src/config-schema.ts` | 飞书 channel 配置结构         |
-| `openclaw_hr_assistant_fixed.html`       | v2.0 系统设计方案（需求来源） |
+| 文件                                     | 用途                              |
+| ---------------------------------------- | --------------------------------- |
+| `skills/skill-creator/SKILL.md`          | Skill 创建规范                    |
+| `src/media/pdf-extract.ts`               | pdfjs-dist 提取模式参考           |
+| `src/memory/internal.ts`                 | memory 文件发现机制               |
+| `src/memory/manager-search.ts`           | hybrid search 实现                |
+| `docs/tools/subagents.md`                | Sub-agent 配置与使用文档          |
+| `src/provider-web.ts`                    | Web Provider 实现参考             |
+| `extensions/feishu/src/config-schema.ts` | 飞书 channel 配置结构             |
+| `admin-portal/server.mjs`                | Admin Portal 服务端               |
+| `admin-portal/lib/doc-converter.mjs`     | 多格式文档转换器（PDF/Word/Text） |
+| `admin-portal/public/`                   | Admin Portal 前端页面             |
+| `openclaw_hr_assistant_fixed.html`       | v2.0 系统设计方案（需求来源）     |
 
 ---
 
 ## 九、验证方案
 
 1. **PDF 转换**：`node scripts/pdf-to-markdown.mjs test.pdf --out-dir memory/hr-policies/leave/` → 检查输出 Markdown 格式
-2. **索引验证**：复制示例文档到 `memory/hr-policies/`，确认 memory_search 能检索到
-3. **Skill 打包**：`package_skill.py` 三个 Skill 均通过验证
-4. **问答测试**：问"年假怎么算？"→ 验证回答包含引用（文档名+版本+行号）
-5. **未命中测试**：问无关问题 → 验证返回"未找到相关信息"+ @mention HR
-6. **路由测试**：问非政策问题 → 验证返回"功能开发中"
-7. **管理员上传测试**：通过管理员 Bot 上传 PDF → 验证自动转换并索引 → 全员 Bot 可查询到新文档
-8. **管理员删除测试**：通过管理员 Bot 删除文档 → 验证全员 Bot 不再返回该文档
-9. **Web Portal 测试**：浏览器访问管理后台 → 验证文档列表、上传、审计日志功能
-10. **部署验证**：云上 `.env` + `openclaw gateway run` → 飞书 Bot + Web Portal 均可响应
+2. **多格式转换**：通过 Admin Portal 分别上传 PDF、Word(docx)、文本文件 → 验证均成功转换为 Markdown
+3. **索引验证**：复制示例文档到 `memory/hr-policies/`，确认 memory_search 能检索到
+4. **Skill 打包**：`package_skill.py` 三个 Skill 均通过验证
+5. **问答测试**：问"年假怎么算？"→ 验证回答包含引用（文档名+版本+行号）
+6. **未命中测试**：问无关问题 → 验证返回"未找到相关信息"+ @mention HR
+7. **路由测试**：问非政策问题 → 验证返回"功能开发中"
+8. **Admin Portal 上传测试**：拖拽 PDF 到上传页 → 填写元数据 → 验证转换成功并出现在文档列表
+9. **Admin Portal 文档管理**：筛选分类、搜索文档编号、查看内容、删除文档 → 验证各功能正常
+10. **Admin Portal 审计日志**：验证上传/删除操作自动记录 → 按日期筛选 → CSV 导出正常
+11. **管理员 Bot 测试**：通过飞书 Bot 4 发送"列出所有文档"→ 验证返回文档列表
+12. **Web Portal 测试**：浏览器访问 `http://<server>:18789/web` → 验证对话式管理可用
+13. **端到端测试**：Admin Portal 上传新文档 → 全员 Bot 立即可查询到该文档
+14. **部署验证**：云上启动 Gateway (18789) + Admin Portal (18790) → 飞书 Bot + Web Portal + Admin Portal 均可响应

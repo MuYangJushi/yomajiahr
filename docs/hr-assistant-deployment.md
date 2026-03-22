@@ -180,7 +180,39 @@ node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs ./pdfs/ \
 
 转换后需编辑 Markdown frontmatter，补充 `doc_id`、`version`、`effective_date`。
 
-### Step 8: 启动 Gateway
+### Step 8: 安装并启动 Admin Portal
+
+Admin Portal 是独立的 Web 管理后台，提供文档上传（PDF/Word/文本）、文档管理和审计日志功能。
+
+```bash
+cd /opt/hr-assistant/admin-portal
+
+# 安装依赖
+npm install
+
+# 前台运行（首次调试）
+OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.openclaw/.env | cut -d= -f2) \
+  node server.mjs
+
+# 后台运行（生产用）
+OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.openclaw/.env | cut -d= -f2) \
+  nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
+
+# 查看日志
+tail -f /tmp/openclaw-hr-admin.log
+```
+
+默认端口 **18790**（可通过 `ADMIN_PORTAL_PORT` 环境变量修改）。
+
+Admin Portal 页面：
+
+| 页面     | URL                                | 功能                                        |
+| -------- | ---------------------------------- | ------------------------------------------- |
+| 文档上传 | `http://<server>:18790/#upload`    | 拖拽上传 PDF/Word/文本，自动转换为 Markdown |
+| 文档管理 | `http://<server>:18790/#documents` | 查看、搜索、删除知识库文档                  |
+| 审计日志 | `http://<server>:18790/#audit-log` | 操作记录查看、筛选、CSV 导出                |
+
+### Step 9: 启动 Gateway
 
 ```bash
 cd /opt/hr-assistant
@@ -190,13 +222,13 @@ node dist/index.js gateway run --bind loopback --port 18789
 
 # 后台运行（生产用）
 nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
-  > /tmp/openclaw-gateway.log 2>&1 &
+  > /tmp/openclaw-hr-gateway.log 2>&1 &
 
 # 查看日志
-tail -f /tmp/openclaw-gateway.log
+tail -f /tmp/openclaw-hr-gateway.log
 ```
 
-### Step 9: 验证部署
+### Step 10: 验证部署
 
 ```bash
 # 1. 健康检查
@@ -211,12 +243,14 @@ node dist/index.js skills list
 
 然后在飞书中测试：
 
-| 测试       | 操作                                   | 预期结果                |
-| ---------- | -------------------------------------- | ----------------------- |
-| 政策问答   | 给 HR小助手 发 "年假怎么算"            | 返回年假政策 + 文档引用 |
-| 未命中     | 给 HR小助手 发 "量子力学是什么"        | 返回非 HR 相关提示      |
-| 管理员     | 给 HR管理后台 发 "列出所有文档"        | 返回知识库文档列表      |
-| Web Portal | 浏览器访问 `http://<server>:18789/web` | 管理后台可用            |
+| 测试         | 操作                                   | 预期结果                     |
+| ------------ | -------------------------------------- | ---------------------------- |
+| 政策问答     | 给 HR小助手 发 "年假怎么算"            | 返回年假政策 + 文档引用      |
+| 未命中       | 给 HR小助手 发 "量子力学是什么"        | 返回非 HR 相关提示           |
+| 管理员       | 给 HR管理后台 发 "列出所有文档"        | 返回知识库文档列表           |
+| Web Portal   | 浏览器访问 `http://<server>:18789/web` | 聊天式管理后台可用           |
+| Admin Portal | 浏览器访问 `http://<server>:18790`     | 文档上传/管理/审计日志页面   |
+| 文档上传     | Admin Portal 拖拽上传 PDF              | 转换成功，文档出现在文档列表 |
 
 ---
 
@@ -225,7 +259,7 @@ node dist/index.js skills list
 ### 使用 systemd 管理服务
 
 ```bash
-sudo cat > /etc/systemd/system/openclaw-hr.service << 'EOF'
+sudo cat > /etc/systemd/system/openclaw-hr-gateway.service << 'EOF'
 [Unit]
 Description=OpenClaw HR Assistant Gateway
 After=network.target
@@ -246,6 +280,28 @@ EnvironmentFile=/home/openclaw/.openclaw/.env
 WantedBy=multi-user.target
 EOF
 
+sudo cat > /etc/systemd/system/openclaw-hr-admin.service << 'EOF'
+[Unit]
+Description=OpenClaw HR Admin Portal
+After=network.target
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+WorkingDirectory=/opt/hr-assistant/admin-portal
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=ADMIN_PORTAL_PORT=18790
+Environment=OPENCLAW_STATE_DIR=/home/openclaw/.openclaw
+EnvironmentFile=/home/openclaw/.openclaw/.env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # 创建专用用户
 sudo useradd -r -m -s /bin/bash openclaw
 sudo cp -r ~/.openclaw /home/openclaw/.openclaw
@@ -253,19 +309,21 @@ sudo chown -R openclaw:openclaw /home/openclaw/.openclaw
 
 # 启动并设置开机自启
 sudo systemctl daemon-reload
-sudo systemctl enable --now openclaw-hr
-sudo systemctl status openclaw-hr
+sudo systemctl enable --now openclaw-hr-gateway openclaw-hr-admin
+sudo systemctl status openclaw-hr-gateway openclaw-hr-admin
 
 # 查看日志
-sudo journalctl -u openclaw-hr -f
+sudo journalctl -u openclaw-hr-gateway -f
+sudo journalctl -u openclaw-hr-admin -f
 ```
 
-### Nginx 反向代理（Web Portal 对外暴露时）
+### Nginx 反向代理
 
 ```nginx
+# OpenClaw Web Portal（聊天式管理）
 server {
     listen 443 ssl;
-    server_name hr-admin.yourcompany.com;
+    server_name hr-chat.yourcompany.com;
 
     ssl_certificate     /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
@@ -275,6 +333,24 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+
+# Admin Portal（文档管理 + 审计日志）
+server {
+    listen 443 ssl;
+    server_name hr-admin.yourcompany.com;
+
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    client_max_body_size 10m;   # 文件上传大小限制
+
+    location / {
+        proxy_pass http://127.0.0.1:18790;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
@@ -294,14 +370,18 @@ pnpm install
 pnpm build
 
 # 重启服务
-sudo systemctl restart openclaw-hr
+sudo systemctl restart openclaw-hr-gateway
+sudo systemctl restart openclaw-hr-admin
 # 或手动重启
 pkill -f "node dist/index.js gateway" || true
 nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
-  > /tmp/openclaw-gateway.log 2>&1 &
+  > /tmp/openclaw-hr-gateway.log 2>&1 &
+pkill -f "node server.mjs" || true
+cd admin-portal && nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
 ```
 
 如果仅更新了 skills（SKILL.md / references / assets），不需要重新 build，重启 gateway 即可。
+如果仅更新了 admin-portal，不需要 build，重启 admin-portal 服务即可。
 
 ---
 
@@ -315,6 +395,12 @@ nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
 │   ├── hr-assistant/                 # 全员 Agent skill
 │   ├── hr-policy-rag/                # 政策问答 skill + PDF 转换脚本
 │   └── hr-admin/                     # 管理员 skill
+├── admin-portal/                     # Admin Portal 独立 Web 服务
+│   ├── server.mjs                    # Express 服务端
+│   ├── lib/doc-converter.mjs         # 多格式文档转换器
+│   ├── public/                       # 前端页面 (HTML/CSS/JS)
+│   ├── package.json                  # 独立依赖 (mammoth, multer 等)
+│   └── node_modules/                 # npm install 后生成
 ├── config/
 │   ├── .env.hr-assistant.example     # 环境变量模板
 │   └── openclaw.hr-assistant.jsonc   # 配置模板
@@ -328,6 +414,8 @@ nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
 │   ├── hr-policy-rag -> /opt/hr-assistant/skills/hr-policy-rag
 │   └── hr-admin -> /opt/hr-assistant/skills/hr-admin
 └── memory/
+    ├── hr-admin/
+    │   └── audit-log.jsonl           # 操作审计日志（JSONL 格式）
     └── hr-policies/                  # 知识库文档（运行时数据）
         ├── leave/
         │   ├── annual-leave-policy.md
@@ -344,11 +432,14 @@ nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
 
 ## 故障排查
 
-| 问题                | 排查方法                                                                      |
-| ------------------- | ----------------------------------------------------------------------------- |
-| Gateway 启动失败    | `tail -n 100 /tmp/openclaw-gateway.log` 或 `journalctl -u openclaw-hr -n 100` |
-| 飞书连接不上        | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用        |
-| Skills 未识别       | `node dist/index.js skills list` 确认三个 skill 出现；检查软链接是否正确      |
-| 知识库搜不到文档    | 确认 `~/.openclaw/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter      |
-| LLM 无响应          | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                       |
-| Web Portal 无法访问 | 确认防火墙开放 18789 端口；检查 `openclaw.json` 中 `web.enabled: true`        |
+| 问题                  | 排查方法                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| Gateway 启动失败      | `tail -n 100 /tmp/openclaw-hr-gateway.log` 或 `journalctl -u openclaw-hr-gateway -n 100` |
+| 飞书连接不上          | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用                   |
+| Skills 未识别         | `node dist/index.js skills list` 确认三个 skill 出现；检查软链接是否正确                 |
+| 知识库搜不到文档      | 确认 `~/.openclaw/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter                 |
+| LLM 无响应            | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                                  |
+| Web Portal 无法访问   | 确认防火墙开放 18789 端口；检查 `openclaw.json` 中 `web.enabled: true`                   |
+| Admin Portal 无法访问 | 确认端口 18790 开放；`tail -n 100 /tmp/openclaw-hr-admin.log` 查看日志                   |
+| 文档上传失败          | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB                         |
+| 审计日志为空          | 确认 `~/.openclaw/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限                  |
