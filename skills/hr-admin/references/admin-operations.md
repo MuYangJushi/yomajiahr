@@ -33,8 +33,8 @@
 # 使用独立的多格式转换器
 node admin-portal/lib/doc-converter.mjs  # 作为库被 server.mjs 调用
 
-# 或使用原有 PDF 专用脚本
-node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs <pdf-path> \
+# 或使用管理员侧多格式脚本
+node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
   --out-dir memory/hr-policies/ \
   --category <category>
 ```
@@ -46,13 +46,14 @@ node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs <pdf-path> \
 - 如有"possible scanned image"警告，通知管理员该页面可能需要 OCR 处理
 - 建议管理员核对转换后的文本准确性
 
-### 步骤 3: 元数据补充
+### 步骤 3: 元数据自动分析
 
-转换后的 Markdown 文件需要补充以下 frontmatter 字段：
+转换后的 Markdown 文件由模型自动分析并补全以下 frontmatter 字段：
 
-- `doc_id`：文档编号（HR 管理员提供）
-- `version`：版本号（HR 管理员提供）
-- `effective_date`：生效日期（HR 管理员提供）
+- `doc_id`：优先提取文档内已有编号；缺失时按分类自动生成
+- `version`：优先提取文档内版本号；缺失时回退到默认值
+- `effective_date`：优先提取文档内生效日期；无法识别时留空
+- `category`：根据文档内容自动归类到知识库目录
 
 ### 步骤 4: 写入知识库
 

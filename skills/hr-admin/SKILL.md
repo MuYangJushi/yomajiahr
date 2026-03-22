@@ -28,16 +28,16 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 管理员通过 Admin Portal (`http://<server>:18790`) 上传：
 
 1. 拖拽或选择文件（支持 PDF、Word/docx、文本）
-2. 选择分类，填写文档编号、版本号、生效日期
-3. 点击"上传并转换"，系统自动转为 Markdown 写入知识库
-4. 页面显示上传结果和警告信息
+2. 点击"上传并转换"，系统自动分析分类、文档编号、版本号、生效日期
+3. 系统自动转为 Markdown 写入知识库
+4. 页面显示上传结果、自动识别出的元数据和警告信息
 
 **方式 B: 飞书 Bot / Web Portal 对话上传**
 
 管理员提供服务器上的文件路径，Agent 执行：
 
-1. 调用 `doc-converter.mjs` 将文档转为 Markdown
-2. 提示管理员补充元数据（文档编号、版本号、生效日期、分类）
+1. 调用 `doc-converter.mjs` 或 `scripts/doc-to-markdown.mjs` 将 PDF、Word、文本转换为 Markdown
+2. 自动分析元数据（文档编号、版本号、生效日期、分类）
 3. 使用 `memory_write` 将 Markdown 写入知识库 `memory/hr-policies/<category>/`
 4. 确认写入成功，返回文档摘要
 
@@ -45,14 +45,8 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 
 ```
 管理员: 转换 /tmp/overtime-policy.pdf 到知识库
-Agent:  文档已转换。请确认以下信息：
-        - 文档编号: （请输入，如 HR-WORK-003）
-        - 版本: （请输入，如 1.0）
-        - 生效日期: （请输入，如 2026-04-01）
-        - 分类: （请输入，如 attendance / leave / onboarding）
-管理员: HR-WORK-003, 1.0, 2026-04-01, attendance
-Agent:  已写入 memory/hr-policies/attendance/overtime-policy.md
-        文档编号: HR-WORK-003 | 版本: 1.0 | 生效日期: 2026-04-01
+Agent:  已自动识别元数据并写入 memory/hr-policies/attendance/overtime-policy.md
+        文档编号: HR-ATT-003 | 版本: 1.0 | 生效日期: 2026-04-01
         全员 Bot 现在可以查询到该文档。
 ```
 
@@ -158,3 +152,4 @@ Agent:  已删除。审计记录已生成。
 
 - 管理操作详细规范：[references/admin-operations.md](references/admin-operations.md)
 - Admin Portal 源码：`admin-portal/`（独立 Web 服务，端口 18790）
+- 多格式 CLI 转换脚本：`scripts/doc-to-markdown.mjs`

@@ -88,6 +88,20 @@ function convertText(buffer) {
   };
 }
 
+/**
+ * @param {Buffer} buffer
+ * @returns {{ text: string; warnings: string[]; pageCount: number }}
+ */
+function convertMarkdown(buffer) {
+  const raw = buffer.toString("utf-8");
+  const stripped = raw.replace(/^---\n[\s\S]*?\n---\n*/u, "").trim();
+  return {
+    text: stripped,
+    warnings: [],
+    pageCount: 0,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Format registry
 // ---------------------------------------------------------------------------
@@ -97,7 +111,7 @@ const CONVERTERS = {
   ".docx": { name: "Word (docx)", convert: convertDocx },
   ".doc": { name: "Word (doc)", convert: null }, // unsupported legacy format
   ".txt": { name: "Text", convert: convertText },
-  ".md": { name: "Markdown", convert: convertText },
+  ".md": { name: "Markdown", convert: convertMarkdown },
 };
 
 /**
@@ -164,7 +178,9 @@ export async function convertBuffer(buffer, originalName, options = {}) {
     .filter(Boolean)
     .join("\n");
 
-  const markdown = `${frontmatter}\n\n# ${fileBase}\n\n${text}\n`;
+  const normalizedText = text.trimStart();
+  const heading = normalizedText.startsWith("# ") ? "" : `# ${fileBase}\n\n`;
+  const markdown = `${frontmatter}\n\n${heading}${normalizedText}\n`;
 
   return { markdown, warnings, sourceFormat: entry.name };
 }

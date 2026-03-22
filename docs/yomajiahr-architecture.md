@@ -358,7 +358,7 @@ Admin Portal 是独立于 OpenClaw 的轻量 Web 服务，解决了 OpenClaw Web
 Admin Portal (http://<server>:18790)
   ├── /#upload        文档上传
   │   ├── 拖拽或选择文件（PDF / Word docx / 文本）
-  │   ├── 选择分类、填写元数据（文档编号、版本、生效日期）
+  │   ├── 自动分析元数据（分类、文档编号、版本、生效日期）
   │   └── 自动转换为 Markdown 写入知识库
   ├── /#documents     文档管理
   │   ├── 分类筛选、关键词搜索
@@ -522,7 +522,7 @@ Admin Portal (http://<server>:18790)
 
 6. **Admin Portal（独立管理后台）**
    - 独立 Express Web 服务（`admin-portal/`），端口 18790
-   - 文档上传页：拖拽上传 PDF/Word(docx)/文本，选分类，填元数据，自动转换写入知识库
+   - 文档上传页：拖拽上传 PDF/Word(docx)/文本，模型自动分析元数据并转换写入知识库
    - 文档管理页：分类筛选、搜索、查看内容、删除（二次确认）
    - 审计日志页：按操作类型/文档编号/日期筛选，分页浏览，CSV 导出
    - Token 认证（复用 `OPENCLAW_WEB_AUTH_TOKEN`）
@@ -530,7 +530,8 @@ Admin Portal (http://<server>:18790)
 7. **多格式文档转换器**
    - `admin-portal/lib/doc-converter.mjs`（通用转换库）
    - 支持 PDF（pdfjs-dist）、Word/docx（mammoth）、文本（直接读取）
-   - `skills/hr-policy-rag/scripts/pdf-to-markdown.mjs`（PDF 专用命令行工具，保留兼容）
+   - `skills/hr-admin/scripts/doc-to-markdown.mjs`（管理员侧多格式命令行工具）
+   - `skills/hr-admin/scripts/pdf-to-markdown.mjs`（兼容别名，内部转发到多格式脚本）
 
 8. **部署配置**
    - `.env.ymjhr.example` 环境变量模板
@@ -560,21 +561,22 @@ Admin Portal (http://<server>:18790)
 skills/skill-creator/scripts/init_skill.py hr-assistant --path skills --resources scripts,references
 
 # 政策问答 Sub-agent Skill
-skills/skill-creator/scripts/init_skill.py hr-policy-rag --path skills --resources scripts,references,assets
+skills/skill-creator/scripts/init_skill.py hr-policy-rag --path skills --resources references,assets
 
 # 管理员 Agent Skill
 skills/skill-creator/scripts/init_skill.py hr-admin --path skills --resources scripts,references
 ```
 
-### Step 2: 编写 PDF 批量转换脚本
+### Step 2: 编写管理员侧多格式批量转换脚本
 
-`skills/hr-policy-rag/scripts/pdf-to-markdown.mjs`
+`skills/hr-admin/scripts/doc-to-markdown.mjs`
 
-- 基于 `pdfjs-dist/legacy/build/pdf.mjs`（参考 `src/media/pdf-extract.ts`）
-- 输入: `node pdf-to-markdown.mjs <input-dir> --out-dir memory/hr-policies/ --category <分类名>`
-- 输出: 结构化 Markdown，含元数据头（文档编号、版本、生效日期）+ `## Page N` 分页
+- 基于 `admin-portal/lib/doc-converter.mjs`
+- 输入: `node doc-to-markdown.mjs <input-path> --out-dir memory/hr-policies/ --category <分类名>`
+- 输出: 结构化 Markdown，含元数据头（文档编号、版本、生效日期占位）
+- 支持 PDF、Word(docx)、文本(.txt/.md)
 - 支持批量模式 + 自动创建分类子目录
-- 低文本页面警告（疑似扫描件）
+- PDF 仍保留低文本页面警告（疑似扫描件）
 
 ### Step 3: 创建示例政策文档
 
@@ -617,7 +619,7 @@ assets/sample-policies/
 `skills/hr-admin/SKILL.md`
 
 - 知识库管理：
-  - 上传文档（接收 PDF → 调用 pdf-to-markdown 转换 → memory_write 写入索引）
+  - 上传文档（接收 PDF/Word/文本 → 通过 `admin-portal` 或管理员脚本转换为 Markdown → `memory_write` 写入索引）
   - 更新文档（更新版本号、生效日期、内容）
   - 删除/废止文档（memory_delete + 记录废止原因）
   - 查询文档列表（按分类、状态筛选）
@@ -688,7 +690,7 @@ skills/skill-creator/scripts/package_skill.py skills/hr-admin
 5. **问答测试**：问"年假怎么算？"→ 验证回答包含引用（文档名+版本+行号）
 6. **未命中测试**：问无关问题 → 验证返回"未找到相关信息"+ @mention HR
 7. **路由测试**：问非政策问题 → 验证返回"功能开发中"
-8. **Admin Portal 上传测试**：拖拽 PDF 到上传页 → 填写元数据 → 验证转换成功并出现在文档列表
+8. **Admin Portal 上传测试**：拖拽 PDF 到上传页 → 自动生成元数据 → 验证转换成功并出现在文档列表
 9. **Admin Portal 文档管理**：筛选分类、搜索文档编号、查看内容、删除文档 → 验证各功能正常
 10. **Admin Portal 审计日志**：验证上传/删除操作自动记录 → 按日期筛选 → CSV 导出正常
 11. **管理员 Bot 测试**：通过飞书 Bot 4 发送"列出所有文档"→ 验证返回文档列表

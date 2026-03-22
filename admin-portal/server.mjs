@@ -29,6 +29,7 @@ import { env } from "node:process";
 import express from "express";
 import multer from "multer";
 import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converter.mjs";
+import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -108,27 +109,33 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file provided" });
     }
 
-    const category = req.body.category || "general";
-    const docId = req.body.doc_id || "";
-    const version = req.body.version || "1.0";
-    const effectiveDate = req.body.effective_date || "";
-
-    // Ensure category directory exists
-    const categoryDir = join(POLICIES_DIR, category);
-    mkdirSync(categoryDir, { recursive: true });
-
     // Convert document
     const { markdown, warnings, sourceFormat } = await convertBuffer(
       req.file.buffer,
       req.file.originalname,
-      { category },
     );
+    const metadata = await inferDocumentMetadata({
+      markdown,
+      originalName: req.file.originalname,
+      sourceFormat,
+      policiesDir: POLICIES_DIR,
+      stateDir: STATE_DIR,
+    });
+
+    // Ensure category directory exists
+    const categoryDir = join(POLICIES_DIR, metadata.category);
+    mkdirSync(categoryDir, { recursive: true });
 
     // Inject metadata into frontmatter
-    const enriched = markdown
-      .replace('doc_id: ""', `doc_id: "${docId}"`)
-      .replace('version: ""', `version: "${version}"`)
-      .replace('effective_date: ""', `effective_date: "${effectiveDate}"`);
+    const enriched = overwriteFrontmatter(markdown, {
+      title: metadata.title,
+      source_file: req.file.originalname,
+      source_format: sourceFormat,
+      doc_id: metadata.doc_id,
+      version: metadata.version,
+      effective_date: metadata.effective_date,
+      category: metadata.category,
+    });
 
     // Write to knowledge base
     const mdName = basename(req.file.originalname, extname(req.file.originalname)) + ".md";
@@ -137,21 +144,26 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 
     // Audit log
     appendAuditLog("UPLOAD", mdName, {
-      doc_id: docId,
-      version,
-      category,
+      doc_id: metadata.doc_id,
+      version: metadata.version,
+      category: metadata.category,
       source_format: sourceFormat,
+      metadata_source: metadata.source,
     });
 
     res.json({
       success: true,
       file: mdName,
-      category,
-      doc_id: docId,
-      version,
+      title: metadata.title,
+      category: metadata.category,
+      doc_id: metadata.doc_id,
+      version: metadata.version,
+      effective_date: metadata.effective_date,
       source_format: sourceFormat,
-      warnings,
-      path: `memory/hr-policies/${category}/${mdName}`,
+      metadata_source: metadata.source,
+      metadata_notes: metadata.notes,
+      warnings: [...warnings, ...metadata.warnings],
+      path: `memory/hr-policies/${String(metadata.category)}/${mdName}`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -396,6 +408,43 @@ function parseFrontmatter(content) {
     }
   }
   return meta;
+}
+
+function overwriteFrontmatter(markdown, updates) {
+  const match = markdown.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) {
+    return markdown;
+  }
+  const meta = parseFrontmatter(markdown);
+  const nextMeta = {
+    ...meta,
+    ...Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined && value !== null),
+    ),
+  };
+  const orderedKeys = [
+    "title",
+    "source_file",
+    "source_format",
+    "doc_id",
+    "version",
+    "effective_date",
+    "category",
+    "converted_date",
+    "total_pages",
+  ];
+  const rendered = orderedKeys
+    .filter((key) => key in nextMeta && String(nextMeta[key]).trim() !== "")
+    .map((key) => `${key}: "${String(nextMeta[key]).replaceAll('"', '\\"')}"`);
+  if ("total_pages" in nextMeta && String(nextMeta.total_pages).trim() !== "") {
+    const idx = rendered.findIndex((line) => line.startsWith('total_pages: "'));
+    if (idx >= 0) {
+      const totalPages = String(nextMeta.total_pages);
+      rendered[idx] = `total_pages: ${totalPages}`;
+    }
+  }
+  const replacement = `---\n${rendered.join("\n")}\n---`;
+  return markdown.replace(/^---\n[\s\S]*?\n---/, replacement);
 }
 
 function appendAuditLog(action, file, details) {

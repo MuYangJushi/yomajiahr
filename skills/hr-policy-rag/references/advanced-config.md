@@ -64,21 +64,11 @@ total_pages: 3 # 原始 PDF 页数
 - 默认返回 top 3 相关文档
 - 文档编号精确匹配时仅返回该文档
 
-## PDF 转换工具
+## 知识库导入边界
 
-批量转换 PDF 到 Markdown：
+政策问答 Agent 只负责检索 `memory/hr-policies/` 中已经存在的 Markdown 知识库，不负责导入或写入文档。
 
-```bash
-node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs <input> --out-dir memory/hr-policies/ --category <分类>
-```
+如需导入新文档，请改走 `hr-admin` / `admin-portal`：
 
-参数：
-
-| 参数          | 说明           | 示例                  |
-| ------------- | -------------- | --------------------- |
-| `<input>`     | PDF 文件或目录 | `./pdfs/leave/`       |
-| `--out-dir`   | 输出目录       | `memory/hr-policies/` |
-| `--category`  | 分类子目录     | `leave`               |
-| `--min-chars` | 低文本警告阈值 | `20`（默认）          |
-
-转换后需手动补充 frontmatter 中的 `doc_id`、`version`、`effective_date` 字段。
+- 推荐：通过 `admin-portal` 上传 PDF、Word、文本并自动转换为 Markdown
+- 命令行：使用 `skills/hr-admin/scripts/pdf-to-markdown.mjs` 处理 PDF，再由管理员补充元数据并写入知识库

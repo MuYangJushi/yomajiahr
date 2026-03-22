@@ -61,6 +61,7 @@ description: HR 政策问答 Sub-agent。基于 RAG（memory_search）检索公�
 - 仅基于知识库中的文档内容回答，禁止编造政策内容
 - 每个回答必须附带引用来源
 - 多轮对话中保持上下文连贯（理解"它"、"这个"等指代）
+- 你不负责上传、转换、更新或删除知识库文档；这些写操作由 `hr-admin` 和 `admin-portal` 负责
 - 默认使用 `memory_search` 完成检索；除非任务明确要求处理文档导入或格式转换，否则不要使用 `exec`
 - 不要把“找不到结果”误判成“需要自己调试工具”
 
@@ -103,6 +104,5 @@ description: HR 政策问答 Sub-agent。基于 RAG（memory_search）检索公�
 
 ## 资源
 
-- **scripts/pdf-to-markdown.mjs**：PDF 转 Markdown 工具，用于将政策 PDF 转换为可索引的 Markdown 文件
 - **assets/sample-policies/**：示例政策文档，用于测试和演示
 - **references/advanced-config.md**：memory_search 高级配置和调优指南

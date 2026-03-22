@@ -39,30 +39,10 @@
           </div>
 
           <div class="form-row">
-            <label for="upload-category">分类</label>
-            <select id="upload-category">
-              <option value="leave">leave - 假期制度</option>
-              <option value="onboarding">onboarding - 入离职</option>
-              <option value="attendance">attendance - 考勤制度</option>
-              <option value="compensation">compensation - 薪酬福利</option>
-              <option value="training">training - 培训制度</option>
-              <option value="general" selected>general - 通用制度</option>
-            </select>
-          </div>
-
-          <div class="form-row">
-            <label for="upload-doc-id">文档编号</label>
-            <input type="text" id="upload-doc-id" placeholder="如 HR-LEAVE-001" />
-          </div>
-
-          <div class="form-row">
-            <label for="upload-version">版本</label>
-            <input type="text" id="upload-version" placeholder="如 1.0" value="1.0" />
-          </div>
-
-          <div class="form-row">
-            <label for="upload-date">生效日期</label>
-            <input type="date" id="upload-date" />
+            <label>元数据生成</label>
+            <div style="font-size: 13px; color: #667085; line-height: 1.6">
+              系统会自动分析文档内容并生成分类、文档编号、版本号和生效日期。管理员上传后无需手动填写。
+            </div>
           </div>
 
           <div class="upload-progress" id="upload-progress">

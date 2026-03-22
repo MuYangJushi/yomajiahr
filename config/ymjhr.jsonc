@@ -82,7 +82,7 @@
         "workspace": "~/.ymjhr/workspace-hr-policy-rag",
         "skills": ["hr-policy-rag"],
         "tools": {
-          "deny": ["exec"],
+          "deny": ["memory_write", "memory_delete", "exec"],
         },
       },
       {

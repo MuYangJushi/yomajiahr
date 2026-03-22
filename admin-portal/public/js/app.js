@@ -148,10 +148,6 @@ uploadBtn.addEventListener("click", async () => {
 
   const formData = new FormData();
   formData.append("file", selectedFile);
-  formData.append("category", document.getElementById("upload-category").value);
-  formData.append("doc_id", document.getElementById("upload-doc-id").value);
-  formData.append("version", document.getElementById("upload-version").value);
-  formData.append("effective_date", document.getElementById("upload-date").value);
 
   uploadBtn.disabled = true;
   uploadProgress.classList.add("active");
@@ -170,7 +166,13 @@ uploadBtn.addEventListener("click", async () => {
       uploadResult.className = "upload-result success";
       let html = `文档上传成功！<br>`;
       html += `文件: ${data.file} | 分类: ${data.category} | 来源格式: ${data.source_format}<br>`;
+      html += `标题: ${data.title || "-"}<br>`;
+      html += `文档编号: ${data.doc_id || "-"} | 版本: ${data.version || "-"} | 生效日期: ${data.effective_date || "-"}<br>`;
+      html += `元数据来源: ${data.metadata_source === "model" ? "模型自动分析" : "规则兜底"}<br>`;
       html += `存储路径: ${data.path}`;
+      if (data.metadata_notes) {
+        html += `<br>识别说明: ${data.metadata_notes}`;
+      }
       if (data.warnings && data.warnings.length > 0) {
         html += `<br><br><strong>警告:</strong><br>`;
         html += data.warnings.map((w) => `- ${w}`).join("<br>");

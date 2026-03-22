@@ -265,22 +265,22 @@ cp skills/hr-policy-rag/assets/sample-policies/onboarding/*.md ~/.ymjhr/memory/h
 后续实际 PDF 政策文档可通过以下方式导入：
 
 ```bash
-# 单个 PDF
-node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs policy.pdf \
+# 单个文档（支持 pdf / docx / txt / md）
+node skills/hr-admin/scripts/doc-to-markdown.mjs policy.pdf \
   --out-dir ~/.ymjhr/memory/hr-policies/ \
   --category leave
 
-# 批量 PDF（整个目录）
-node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs ./pdfs/ \
+# 批量文档（整个目录）
+node skills/hr-admin/scripts/doc-to-markdown.mjs ./docs/ \
   --out-dir ~/.ymjhr/memory/hr-policies/ \
   --category onboarding
 ```
 
-转换后需编辑 Markdown frontmatter，补充 `doc_id`、`version`、`effective_date`。
+命令行脚本也会自动把文档转成 Markdown，并尝试用当前默认模型分析 `doc_id`、`version`、`effective_date` 和分类；如果模型暂时不可用，会回退到规则兜底。
 
 ### Step 8: 安装并启动 Admin Portal
 
-Admin Portal 是独立的 Web 管理后台，提供文档上传（PDF/Word/文本）、文档管理和审计日志功能。
+Admin Portal 是独立的 Web 管理后台，提供文档上传（PDF/Word/文本）、文档管理和审计日志功能。上传时会自动分析分类、文档编号、版本号和生效日期，无需管理员手填。
 
 ```bash
 cd /opt/ymjhr/admin-portal
