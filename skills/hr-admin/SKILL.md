@@ -17,7 +17,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 | **飞书 Bot 4**          | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
 | **Yoma+HR Web Portal**  | 对话式操作                       | 与飞书 Bot 功能相同，Web 聊天界面                                                     |
 
-> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、可视化元数据填写和即时反馈。飞书 Bot 和 Web Portal 适合快捷的查询和删除操作。
+> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、自动分析元数据和即时反馈。飞书 Bot 和 Web Portal 适合快捷的查询和删除操作。
 
 ## 核心功能
 
@@ -82,7 +82,7 @@ Agent:  已自动识别元数据并写入 memory/hr-policies/attendance/overtime
 ```
 管理员: 废止 HR-LEAVE-001 旧版
 Agent:  即将删除以下文档：
-        - 文件: annual-leave-policy.md
+        - 文件: leave-policy-v2.md
         - 文档编号: HR-LEAVE-001
         - 版本: 2.1
         确认删除？（回复"确认"继续）
@@ -104,8 +104,8 @@ Agent:  已删除。审计记录已生成。
 知识库文档列表（leave 分类）：
 | 文件名 | 文档编号 | 版本 | 生效日期 |
 |--------|---------|------|---------|
-| annual-leave-policy.md | HR-LEAVE-001 | 2.1 | 2025-01-01 |
-| sick-leave-policy.md | HR-LEAVE-002 | 1.3 | 2024-07-01 |
+| leave-policy-v2.md | HR-LEAVE-001 | 2.1 | 2025-01-01 |
+| leave-policy-faq.md | HR-LEAVE-002 | 1.3 | 2024-07-01 |
 ```
 
 ### 5. 操作审计日志

@@ -68,8 +68,8 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
 审计日志存储在 `memory/hr-admin/audit-log.jsonl`，JSONL 格式追加写入（每行一条 JSON 记录）：
 
 ```json
-{"timestamp":"2026-03-22T14:30:00.000Z","action":"UPLOAD","file":"annual-leave-policy.md","details":{"doc_id":"HR-LEAVE-001","version":"2.1","category":"leave","source_format":"PDF"}}
-{"timestamp":"2026-03-22T15:00:00.000Z","action":"UPDATE","file":"annual-leave-policy.md","details":{"doc_id":"HR-LEAVE-001","version":"2.2","category":"leave"}}
+{"timestamp":"2026-03-22T14:30:00.000Z","action":"UPLOAD","file":"leave-policy-v2.md","details":{"doc_id":"HR-LEAVE-001","version":"2.1","category":"leave","source_format":"PDF"}}
+{"timestamp":"2026-03-22T15:00:00.000Z","action":"UPDATE","file":"leave-policy-v2.md","details":{"doc_id":"HR-LEAVE-001","version":"2.2","category":"leave"}}
 {"timestamp":"2026-03-22T16:00:00.000Z","action":"DELETE","file":"old-policy.md","details":{"doc_id":"HR-OLD-001","version":"1.0","category":"leave","reason":"版本替换"}}
 ```
 

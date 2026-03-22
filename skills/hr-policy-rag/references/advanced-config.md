@@ -5,10 +5,9 @@
 ```
 memory/hr-policies/
 ├── leave/              # 假期制度
-│   ├── annual-leave-policy.md
-│   └── sick-leave-policy.md
+│   └── *.md
 ├── onboarding/         # 入离职
-│   └── probation-policy.md
+│   └── *.md
 ├── attendance/         # 考勤制度
 ├── compensation/       # 薪酬福利（受限级）
 ├── training/           # 培训制度
@@ -71,4 +70,4 @@ total_pages: 3 # 原始 PDF 页数
 如需导入新文档，请改走 `hr-admin` / `admin-portal`：
 
 - 推荐：通过 `admin-portal` 上传 PDF、Word、文本并自动转换为 Markdown
-- 命令行：使用 `skills/hr-admin/scripts/pdf-to-markdown.mjs` 处理 PDF，再由管理员补充元数据并写入知识库
+- 命令行：使用 `skills/hr-admin/scripts/doc-to-markdown.mjs` 处理 PDF、Word、文本并自动分析元数据

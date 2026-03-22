@@ -253,27 +253,24 @@ ymjhr skills list
 
 应看到 `hr-assistant`、`hr-policy-rag`、`hr-admin` 三个 skill。
 
-### Step 7: 导入政策文档到知识库
+### Step 7: 准备空知识库并导入真实政策文档
 
-将示例政策文档复制到运行时知识库目录：
+运行时知识库初始保持为空，由管理员后续导入真实文档：
 
 ```bash
-cp skills/hr-policy-rag/assets/sample-policies/leave/*.md     ~/.ymjhr/memory/hr-policies/leave/
-cp skills/hr-policy-rag/assets/sample-policies/onboarding/*.md ~/.ymjhr/memory/hr-policies/onboarding/
+mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
 ```
 
-后续实际 PDF 政策文档可通过以下方式导入：
+实际政策文档可通过以下方式导入：
 
 ```bash
 # 单个文档（支持 pdf / docx / txt / md）
 node skills/hr-admin/scripts/doc-to-markdown.mjs policy.pdf \
-  --out-dir ~/.ymjhr/memory/hr-policies/ \
-  --category leave
+  --out-dir ~/.ymjhr/memory/hr-policies/
 
 # 批量文档（整个目录）
 node skills/hr-admin/scripts/doc-to-markdown.mjs ./docs/ \
-  --out-dir ~/.ymjhr/memory/hr-policies/ \
-  --category onboarding
+  --out-dir ~/.ymjhr/memory/hr-policies/
 ```
 
 命令行脚本也会自动把文档转成 Markdown，并尝试用当前默认模型分析 `doc_id`、`version`、`effective_date` 和分类；如果模型暂时不可用，会回退到规则兜底。
@@ -539,15 +536,14 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
     │   └── audit-log.jsonl              # 操作审计日志（JSONL 格式）
     └── hr-policies/                     # 知识库文档（运行时数据）
         ├── leave/
-        │   ├── annual-leave-policy.md
-        │   └── sick-leave-policy.md
         ├── onboarding/
-        │   └── probation-policy.md
         ├── attendance/
         ├── compensation/
         ├── training/
         └── general/
 ```
+
+这些分类目录在初始部署时可以为空，等管理员通过 `admin-portal` 或 `hr-admin` 导入真实文档后再出现具体文件。
 
 如果后续新增命名 agent，建议继续显式配置为：
 

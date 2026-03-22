@@ -44,14 +44,14 @@ description: HR 政策问答 Sub-agent。基于 RAG（memory_search）检索公�
 
 > 根据公司制度，入职满 1 年不满 10 年的员工，每年享有 5 天年假。年假可按半天为最小单位申请，需提前 3 个工作日在 OA 系统提交。
 >
-> [来源: annual-leave-policy.md, 文档编号: HR-LEAVE-001, 版本: 2.1, 第18-25行]
+> [来源: leave-policy-v2.md, 文档编号: HR-LEAVE-021, 版本: 3.0, 第18-25行]
 
 ### 多文档引用
 
 当回答涉及多份文档时，逐一列出引用：
 
-> [来源: annual-leave-policy.md, 文档编号: HR-LEAVE-001, 版本: 2.1, 第18-25行]
-> [来源: sick-leave-policy.md, 文档编号: HR-LEAVE-002, 版本: 1.3, 第30-35行]
+> [来源: leave-policy-v2.md, 文档编号: HR-LEAVE-021, 版本: 3.0, 第18-25行]
+> [来源: leave-policy-faq.md, 文档编号: HR-LEAVE-022, 版本: 1.1, 第30-35行]
 
 ## 行为规则
 
@@ -104,5 +104,5 @@ description: HR 政策问答 Sub-agent。基于 RAG（memory_search）检索公�
 
 ## 资源
 
-- **assets/sample-policies/**：示例政策文档，用于测试和演示
+- **memory/hr-policies/**：运行时知识库目录，由 `hr-admin` 和 `admin-portal` 导入真实文档
 - **references/advanced-config.md**：memory_search 高级配置和调优指南

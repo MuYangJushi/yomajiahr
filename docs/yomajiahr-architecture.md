@@ -561,7 +561,7 @@ Admin Portal (http://<server>:18790)
 skills/skill-creator/scripts/init_skill.py hr-assistant --path skills --resources scripts,references
 
 # 政策问答 Sub-agent Skill
-skills/skill-creator/scripts/init_skill.py hr-policy-rag --path skills --resources references,assets
+skills/skill-creator/scripts/init_skill.py hr-policy-rag --path skills --resources references
 
 # 管理员 Agent Skill
 skills/skill-creator/scripts/init_skill.py hr-admin --path skills --resources scripts,references
@@ -572,26 +572,27 @@ skills/skill-creator/scripts/init_skill.py hr-admin --path skills --resources sc
 `skills/hr-admin/scripts/doc-to-markdown.mjs`
 
 - 基于 `admin-portal/lib/doc-converter.mjs`
-- 输入: `node doc-to-markdown.mjs <input-path> --out-dir memory/hr-policies/ --category <分类名>`
-- 输出: 结构化 Markdown，含元数据头（文档编号、版本、生效日期占位）
+- 输入: `node doc-to-markdown.mjs <input-path> --out-dir memory/hr-policies/`
+- 输出: 结构化 Markdown，自动补全文档编号、版本、生效日期、分类等元数据
 - 支持 PDF、Word(docx)、文本(.txt/.md)
 - 支持批量模式 + 自动创建分类子目录
 - PDF 仍保留低文本页面警告（疑似扫描件）
 
-### Step 3: 创建示例政策文档
+### Step 3: 准备空知识库目录
 
-`skills/hr-policy-rag/assets/sample-policies/` 下 3 份中文示例：
+代码仓库不再内置示例政策文档。运行时知识库保持为空，由管理员后续通过 `admin-portal` 或 `hr-admin` 的命令行导入真实文档。
+
+建议预先创建以下目录：
 
 ```
-assets/sample-policies/
+memory/hr-policies/
 ├── leave/
-│   ├── annual-leave-policy.md    # 年假制度
-│   └── sick-leave-policy.md      # 病假制度
-└── onboarding/
-    └── probation-policy.md       # 试用期管理办法
+├── onboarding/
+├── attendance/
+├── compensation/
+├── training/
+└── general/
 ```
-
-每份含文档编号 + 版本号，用于测试引用链路。
 
 ### Step 4: 编写全员 Agent Skill
 
