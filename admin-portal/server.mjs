@@ -68,7 +68,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ext = extname(file.originalname).toLowerCase();
+    const ext = extname(normalizeUploadedFilename(file.originalname)).toLowerCase();
     if (isSupported(ext)) {
       cb(null, true);
     } else {
@@ -109,14 +109,13 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file provided" });
     }
 
+    const originalName = normalizeUploadedFilename(req.file.originalname);
+
     // Convert document
-    const { markdown, warnings, sourceFormat } = await convertBuffer(
-      req.file.buffer,
-      req.file.originalname,
-    );
+    const { markdown, warnings, sourceFormat } = await convertBuffer(req.file.buffer, originalName);
     const metadata = await inferDocumentMetadata({
       markdown,
-      originalName: req.file.originalname,
+      originalName,
       sourceFormat,
       policiesDir: POLICIES_DIR,
       stateDir: STATE_DIR,
@@ -129,7 +128,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     // Inject metadata into frontmatter
     const enriched = overwriteFrontmatter(markdown, {
       title: metadata.title,
-      source_file: req.file.originalname,
+      source_file: originalName,
       source_format: sourceFormat,
       doc_id: metadata.doc_id,
       version: metadata.version,
@@ -138,7 +137,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     });
 
     // Write to knowledge base
-    const mdName = basename(req.file.originalname, extname(req.file.originalname)) + ".md";
+    const mdName = basename(originalName, extname(originalName)) + ".md";
     const outPath = join(categoryDir, mdName);
     writeFileSync(outPath, enriched, "utf-8");
 
@@ -408,6 +407,35 @@ function parseFrontmatter(content) {
     }
   }
   return meta;
+}
+
+function normalizeUploadedFilename(rawName) {
+  const baseName = basename(String(rawName || "").replaceAll("\\", "/"));
+  if (!baseName) {
+    return "upload.bin";
+  }
+
+  const decoded = Buffer.from(baseName, "latin1").toString("utf8");
+  return scoreFilename(decoded) > scoreFilename(baseName) ? decoded : baseName;
+}
+
+function scoreFilename(name) {
+  let score = 0;
+  if (/[\u4E00-\u9FFF]/.test(name)) {
+    score += 4;
+  }
+  if (/[\u3040-\u30FF]/.test(name)) {
+    score += 3;
+  }
+  if (/[\uAC00-\uD7AF]/.test(name)) {
+    score += 3;
+  }
+  if (name.includes("\uFFFD")) {
+    score -= 10;
+  }
+  const mojibake = name.match(/[ÃÂÐÑØæçèéêëîïðñòóôöøùúûüýþÿœžš]/g);
+  score -= mojibake?.length || 0;
+  return score;
 }
 
 function overwriteFrontmatter(markdown, updates) {
