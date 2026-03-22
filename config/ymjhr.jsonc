@@ -54,8 +54,6 @@
   // ---------------------------------------------------------------------------
   "agents": {
     "defaults": {
-      // 将默认 agent workspace 显式固定到运行时状态目录，便于服务器排查和备份。
-      "workspace": "~/.ymjhr/workspace",
       "model": {
         // 当前默认使用 MiniMax 国内站；后续可在 fallbacks 中追加其他 provider/model。
         "primary": "minimax/MiniMax-M2.7",
@@ -72,19 +70,22 @@
       {
         "id": "hr-assistant",
         "name": "HR小助手",
+        "workspace": "~/.ymjhr/workspace-hr-assistant",
         "skills": ["hr-assistant"],
         "subagents": {
-          "allowAgents": ["hr-policy-rag", "hr-onboard", "hr-schedule"],
+          "allowAgents": ["hr-policy-rag"],
         },
       },
       {
         "id": "hr-policy-rag",
         "name": "政策问答",
+        "workspace": "~/.ymjhr/workspace-hr-policy-rag",
         "skills": ["hr-policy-rag"],
       },
       {
         "id": "hr-admin",
         "name": "HR管理后台",
+        "workspace": "~/.ymjhr/workspace-hr-admin",
         "skills": ["hr-admin"],
       },
     ],

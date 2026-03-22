@@ -54,6 +54,24 @@ git clone https://github.com/<your-username>/<your-repo>.git /opt/ymjhr
 cd /opt/ymjhr
 ```
 
+如果你打算用专用运行用户（推荐生产环境这样做），建议尽早创建 `ymjhr` 用户，
+后续所有 `~/.ymjhr/*` 相关操作都在该用户下执行：
+
+```bash
+sudo useradd -r -m -s /bin/bash ymjhr
+sudo mkdir -p /home/ymjhr/.ymjhr
+sudo chown -R ymjhr:ymjhr /home/ymjhr/.ymjhr
+sudo -iu ymjhr
+```
+
+进入后可用下面三条确认当前上下文已经切到运行用户：
+
+```bash
+whoami
+echo $HOME
+pwd
+```
+
 ### Step 2: 安装依赖并构建
 
 ```bash
@@ -69,9 +87,16 @@ pnpm install
 
 # 构建
 pnpm build
+
+# 可选但推荐：构建 OpenClaw 内置 Control UI 资产
+pnpm ui:build
 ```
 
 构建产物在 `dist/` 目录。
+
+`pnpm build` 足以让 gateway 和独立 `admin-portal` 运行；如果你还希望内置
+Control UI 可用，或者不想在 gateway 启动日志里看到
+`Missing Control UI assets at dist/control-ui/index.html`，就额外执行 `pnpm ui:build`。
 
 ### Step 2.5: 注册 ymjhr CLI 命令
 
@@ -101,15 +126,25 @@ ymjhr --version
 # 创建 Yoma+HR 状态目录
 mkdir -p ~/.ymjhr
 
-# 创建默认 agent workspace（会放 AGENTS.md / MEMORY.md 等 bootstrap 文件）
-mkdir -p ~/.ymjhr/workspace
+# 创建已配置 agent 的 workspace（会放 AGENTS.md / MEMORY.md 等 bootstrap 文件）
+mkdir -p ~/.ymjhr/workspace-hr-assistant
+mkdir -p ~/.ymjhr/workspace-hr-policy-rag
+mkdir -p ~/.ymjhr/workspace-hr-admin
 
 # 创建知识库目录结构
 mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
 ```
 
-当前模板会将默认 agent 的 workspace 显式写到 `~/.ymjhr/workspace`，这样
+当前模板会将已配置 agent 的 workspace 全部显式写到
+`~/.ymjhr/workspace-<agentId>`，这样
 workspace、sessions、memory 都集中在 `~/.ymjhr/` 下，便于统一备份和排障。
+
+如果你是通过 `sudo -iu ymjhr` 切进专用运行用户后执行这些命令，
+这里的 `~/.ymjhr` 实际就是 `/home/ymjhr/.ymjhr`。
+
+当前 Phase 1 运行配置只启用了 `hr-policy-rag` 这个 sub-agent；文档里提到的
+`hr-onboard` 和 `hr-schedule` 仍属于后续扩展规划，等对应 agent 真正落地后，
+再把它们加入 `agents.list` 和 `hr-assistant.subagents.allowAgents`。
 
 ### Step 4: 配置环境变量
 
@@ -178,7 +213,7 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 "
 ```
 
-或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。默认 agent workspace 已显式配置为 `~/.ymjhr/workspace`。
+或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。当前模板已将各 agent 的 workspace 显式配置为 `~/.ymjhr/workspace-<agentId>`。
 
 如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新 provider，则在 `models.providers` 下继续追加对应配置块即可。
 
@@ -301,12 +336,18 @@ tail -f /tmp/ymjhr-gateway.log
 # 1. 健康检查
 curl http://127.0.0.1:18789/healthz
 
-# 2. Channel 连接状态
+# 2. 端口监听
+ss -ltnp | grep -E '18789|18790'
+
+# 3. Channel 连接状态
 ymjhr channels status --probe
 
-# 3. Skills 列表
+# 4. Skills 列表
 ymjhr skills list
 ```
+
+如果你刚刚重启过 `ymjhr-gateway`，建议先等 5 到 10 秒再做健康检查；启动早期日志里短暂出现
+`force: no listeners on port 18789` 属于热启动窗口，单独出现不代表失败。
 
 然后在飞书中测试：
 
@@ -375,8 +416,10 @@ sudo useradd -r -m -s /bin/bash ymjhr
 sudo cp -r ~/.ymjhr /home/ymjhr/.ymjhr
 sudo chown -R ymjhr:ymjhr /home/ymjhr/.ymjhr
 
-# 在 ymjhr 用户下注册 CLI 命令
-sudo -u ymjhr bash -c 'cd /opt/ymjhr && npm link'
+# 注册 CLI 命令
+# 如果 Node.js 来自系统包（/usr/bin/node），这里通常需要 sudo npm link
+cd /opt/ymjhr
+sudo npm link
 
 # 启动并设置开机自启
 sudo systemctl daemon-reload
@@ -439,7 +482,8 @@ cd /opt/ymjhr
 git pull origin main
 pnpm install
 pnpm build
-npm link    # 确保 ymjhr CLI 指向最新构建
+pnpm ui:build  # 推荐：同步更新内置 Control UI 资产
+sudo npm link  # 确保 ymjhr CLI 指向最新构建（系统包 Node.js 场景）
 
 # 重启服务
 sudo systemctl restart ymjhr-gateway
@@ -454,6 +498,7 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 
 如果仅更新了 skills（SKILL.md / references / assets），不需要重新 build，重启 gateway 即可。
 如果仅更新了 admin-portal，不需要 build，重启 admin-portal 服务即可。
+如果只改了 OpenClaw 内置 Control UI 前端，再额外执行 `pnpm ui:build` 并重启 gateway。
 
 ---
 
@@ -481,12 +526,14 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 ~/.ymjhr/                               # Yoma+HR 运行时状态目录
 ├── .env                                 # 环境变量（密钥，不入库）
 ├── ymjhr.json                          # 运行时配置
-├── workspace/                           # 默认 agent workspace
+├── workspace-hr-assistant/              # hr-assistant workspace
 │   ├── AGENTS.md
 │   ├── MEMORY.md
 │   ├── SOUL.md
 │   ├── TOOLS.md
 │   └── ...
+├── workspace-hr-policy-rag/             # hr-policy-rag workspace
+├── workspace-hr-admin/                  # hr-admin workspace
 └── memory/
     ├── hr-admin/
     │   └── audit-log.jsonl              # 操作审计日志（JSONL 格式）
@@ -502,7 +549,7 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
         └── general/
 ```
 
-如果后续新增命名 agent，未单独指定 `workspace` 时，它们默认会落到：
+如果后续新增命名 agent，建议继续显式配置为：
 
 ```text
 ~/.ymjhr/workspace-<agentId>
@@ -512,14 +559,15 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 
 ## 故障排查
 
-| 问题                  | 排查方法                                                                     |
-| --------------------- | ---------------------------------------------------------------------------- |
-| Gateway 启动失败      | `tail -n 100 /tmp/ymjhr-gateway.log` 或 `journalctl -u ymjhr-gateway -n 100` |
-| 飞书连接不上          | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用       |
-| Skills 未识别         | `ymjhr skills list` 确认三个 skill 出现；检查软链接是否正确                  |
-| 知识库搜不到文档      | 确认 `~/.ymjhr/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter        |
-| LLM 无响应            | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                      |
-| Web Portal 无法访问   | 确认防火墙开放 18789 端口；检查 `ymjhr.json` 中 `web.enabled: true`          |
-| Admin Portal 无法访问 | 确认端口 18790 开放；`tail -n 100 /tmp/ymjhr-admin.log` 查看日志             |
-| 文档上传失败          | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB             |
-| 审计日志为空          | 确认 `~/.ymjhr/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限         |
+| 问题                             | 排查方法                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| Gateway 启动失败                 | `tail -n 100 /tmp/ymjhr-gateway.log` 或 `journalctl -u ymjhr-gateway -n 100` |
+| 飞书连接不上                     | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用       |
+| Skills 未识别                    | `ymjhr skills list` 确认三个 skill 出现；检查软链接是否正确                  |
+| 知识库搜不到文档                 | 确认 `~/.ymjhr/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter        |
+| LLM 无响应                       | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                      |
+| Web Portal 无法访问              | 确认防火墙开放 18789 端口；检查 `ymjhr.json` 中 `web.enabled: true`          |
+| Admin Portal 无法访问            | 确认端口 18790 开放；`tail -n 100 /tmp/ymjhr-admin.log` 查看日志             |
+| Gateway 提示缺少 Control UI 资产 | 在 `/opt/ymjhr` 执行 `pnpm ui:build`，然后重启 `ymjhr-gateway`               |
+| 文档上传失败                     | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB             |
+| 审计日志为空                     | 确认 `~/.ymjhr/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限         |
