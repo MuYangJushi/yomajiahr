@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenClaw HR 智能助手 — 系统设计方案</title>
+    <title>Yoma+HR 智能助手 — 系统设计方案</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
@@ -47,7 +47,6 @@
         -webkit-font-smoothing: antialiased;
       }
 
-      /* ── Hero ── */
       .hero {
         position: relative;
         padding: 100px 40px 80px;
@@ -119,9 +118,6 @@
         margin-top: 48px;
         animation: fadeUp 0.6s 0.3s ease both;
       }
-      .hero-metric {
-        text-align: left;
-      }
       .hero-metric-val {
         font-family: "JetBrains Mono", monospace;
         font-size: 28px;
@@ -145,14 +141,12 @@
         }
       }
 
-      /* ── Layout ── */
       .content {
         max-width: 900px;
         margin: 0 auto;
         padding: 0 40px;
       }
 
-      /* ── Section ── */
       section {
         padding: 72px 0 0;
       }
@@ -178,7 +172,6 @@
         margin-bottom: 36px;
       }
 
-      /* ── Architecture diagram ── */
       .arch-diagram {
         background: var(--ink);
         border-radius: var(--radius);
@@ -194,7 +187,6 @@
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 12px;
-        position: relative;
       }
       .arch-layer-title {
         font-size: 10px;
@@ -234,7 +226,6 @@
         letter-spacing: 4px;
       }
 
-      /* ── Agent Cards ── */
       .agents-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -299,8 +290,7 @@
       .agent-capabilities li {
         font-size: 13px;
         color: var(--ink-light);
-        padding: 5px 0;
-        padding-left: 18px;
+        padding: 5px 0 5px 18px;
         position: relative;
         line-height: 1.6;
       }
@@ -316,7 +306,6 @@
         opacity: 0.5;
       }
 
-      /* ── Flow ── */
       .flow-container {
         background: var(--surface-card);
         border: 1px solid var(--border);
@@ -372,7 +361,6 @@
         color: var(--ink-light);
       }
 
-      /* ── Table ── */
       .tool-table {
         width: 100%;
         border-collapse: collapse;
@@ -400,6 +388,7 @@
         border-top: 1px solid var(--border);
         color: var(--ink-light);
         line-height: 1.6;
+        vertical-align: top;
       }
       .tool-table td:first-child {
         font-weight: 500;
@@ -413,7 +402,6 @@
         border-radius: 4px;
       }
 
-      /* ── Security ── */
       .security-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -445,7 +433,6 @@
         line-height: 1.7;
       }
 
-      /* ── Roadmap ── */
       .roadmap {
         position: relative;
         padding-left: 32px;
@@ -523,7 +510,6 @@
         font-weight: 500;
       }
 
-      /* ── Tech Stack ── */
       .stack-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -553,7 +539,6 @@
         margin-top: 4px;
       }
 
-      /* ── Callout ── */
       .callout {
         background: var(--accent-soft);
         border-left: 3px solid var(--accent);
@@ -570,7 +555,6 @@
         color: var(--ink);
       }
 
-      /* ── Prompt design ── */
       .prompt-principles {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
@@ -593,7 +577,6 @@
         line-height: 1.7;
       }
 
-      /* ── Footer ── */
       footer {
         margin-top: 80px;
         padding: 40px;
@@ -605,7 +588,6 @@
         color: var(--ink-muted);
       }
 
-      /* ── Responsive ── */
       @media (max-width: 768px) {
         .hero {
           padding: 60px 24px 50px;
@@ -617,15 +599,9 @@
         .content {
           padding: 0 24px;
         }
-        .agents-grid {
-          grid-template-columns: 1fr;
-        }
-        .security-grid {
-          grid-template-columns: 1fr;
-        }
-        .stack-grid {
-          grid-template-columns: 1fr;
-        }
+        .agents-grid,
+        .security-grid,
+        .stack-grid,
         .prompt-principles {
           grid-template-columns: 1fr;
         }
@@ -636,7 +612,6 @@
     </style>
   </head>
   <body>
-    <!-- ════════════ HERO ════════════ -->
     <div class="hero">
       <div class="hero-inner">
         <div class="hero-badge">System Design v2.0</div>
@@ -663,7 +638,6 @@
     </div>
 
     <div class="content">
-      <!-- ════════════ 系统架构 ════════════ -->
       <section>
         <div class="section-label">01 — 系统架构</div>
         <div class="section-title">三层解耦，灵活扩展</div>
@@ -671,7 +645,6 @@
           前端交互层负责多端接入，OpenClaw 核心层承载 Agent
           编排与工具调用，数据层对接企业已有系统。各层独立部署，互不耦合。
         </p>
-
         <div class="arch-diagram">
           <div class="arch-layer">
             <div class="arch-layer-title">前端交互层</div>
@@ -706,7 +679,6 @@
             </div>
           </div>
         </div>
-
         <div class="callout" style="margin-top: 24px">
           <p>
             <strong>优化点：</strong
@@ -715,7 +687,6 @@
         </div>
       </section>
 
-      <!-- ════════════ 核心 Agent ════════════ -->
       <section>
         <div class="section-label">02 — 核心功能模块</div>
         <div class="section-title">五大 Agent，覆盖 HR 全链路</div>
@@ -723,7 +694,6 @@
           每个 Agent 具有独立的 System Prompt、工具权限和错误恢复策略。通过路由 Agent
           实现意图识别与任务分发。
         </p>
-
         <div class="agents-grid">
           <div class="agent-card featured">
             <div class="agent-icon recruit">🧑‍💼</div>
@@ -739,7 +709,6 @@
               <li>关键节点（发 Offer、薪资谈判）强制触发人工审批</li>
             </ul>
           </div>
-
           <div class="agent-card">
             <div class="agent-icon onboard">📋</div>
             <div class="agent-name">入职/离职流程 Agent</div>
@@ -751,7 +720,6 @@
               <li>试用期到期自动提醒，配合绩效数据生成转正建议</li>
             </ul>
           </div>
-
           <div class="agent-card">
             <div class="agent-icon policy">📄</div>
             <div class="agent-name">政策问答 Agent</div>
@@ -763,7 +731,6 @@
               <li>未命中知识库时自动转人工，避免模型幻觉</li>
             </ul>
           </div>
-
           <div class="agent-card">
             <div class="agent-icon data">📊</div>
             <div class="agent-name">数据分析 Agent</div>
@@ -775,7 +742,6 @@
               <li>自动生成可视化图表 + 文字解读 + 行动建议</li>
             </ul>
           </div>
-
           <div class="agent-card">
             <div class="agent-icon schedule">🗓️</div>
             <div class="agent-name">排班 & 考勤助手</div>
@@ -790,7 +756,6 @@
         </div>
       </section>
 
-      <!-- ════════════ Agent 编排 ════════════ -->
       <section>
         <div class="section-label">03 — Agent 编排策略</div>
         <div class="section-title">路由分发 + 多级回退机制</div>
@@ -798,7 +763,6 @@
           路由 Agent 作为统一入口，基于意图识别将请求分发至专业
           Agent。新增置信度阈值与回退策略，避免误路由。
         </p>
-
         <div class="flow-container">
           <div class="flow-step">
             <div class="flow-num">1</div>
@@ -816,11 +780,11 @@
                 时触发澄清追问，避免误路由。
               </p>
               <div class="flow-branches">
-                <span class="flow-branch">招聘相关 → 招聘 Agent</span>
-                <span class="flow-branch">政策查询 → RAG Agent</span>
-                <span class="flow-branch">数据分析 → 分析 Agent</span>
-                <span class="flow-branch">流程操作 → 流程 Agent</span>
-                <span class="flow-branch">排班考勤 → 考勤 Agent</span>
+                <span class="flow-branch">招聘相关 → 招聘 Agent</span
+                ><span class="flow-branch">政策查询 → RAG Agent</span
+                ><span class="flow-branch">数据分析 → 分析 Agent</span
+                ><span class="flow-branch">流程操作 → 流程 Agent</span
+                ><span class="flow-branch">排班考勤 → 考勤 Agent</span>
               </div>
             </div>
           </div>
@@ -841,7 +805,6 @@
         </div>
       </section>
 
-      <!-- ════════════ 工具集成 ════════════ -->
       <section>
         <div class="section-label">04 — MCP 工具集成</div>
         <div class="section-title">标准化工具层，即插即用</div>
@@ -849,7 +812,6 @@
           通过 MCP 协议统一封装外部系统接口，每个工具定义明确的输入输出 Schema，Agent
           可自主决定何时调用。
         </p>
-
         <table class="tool-table">
           <thead>
             <tr>
@@ -891,24 +853,21 @@
             </tr>
           </tbody>
         </table>
-
         <div class="callout" style="margin-top: 24px">
           <p>
             <strong>优化点：</strong>新增
             <code>approval_engine</code>
-            工具，将审批流从「人工确认节点」升级为标准化审批引擎，支持多级审批、并行会签、超时自动升级。每个工具新增权限要求字段，配合权限网关实现最小权限原则。
+            工具，将审批流从“人工确认节点”升级为标准化审批引擎，支持多级审批、并行会签、超时自动升级。每个工具新增权限要求字段，配合权限网关实现最小权限原则。
           </p>
         </div>
       </section>
 
-      <!-- ════════════ Prompt 设计 ════════════ -->
       <section>
         <div class="section-label">05 — Prompt 工程</div>
         <div class="section-title">三大核心原则</div>
         <p class="section-desc">
           每个 Agent 的 System Prompt 遵循一致的设计原则，确保行为可控、输出可预期。
         </p>
-
         <div class="prompt-principles">
           <div class="prompt-card">
             <h4>🎯 角色边界隔离</h4>
@@ -934,14 +893,12 @@
         </div>
       </section>
 
-      <!-- ════════════ 安全设计 ════════════ -->
       <section>
         <div class="section-label">06 — 数据安全</div>
         <div class="section-title">四层纵深防御</div>
         <p class="section-desc">
           HR 数据高度敏感，安全设计贯穿基础设施、数据传输、模型调用、操作审计四个层面。
         </p>
-
         <div class="security-grid">
           <div class="security-item">
             <h4><span class="dot"></span>基础设施隔离</h4>
@@ -970,14 +927,12 @@
         </div>
       </section>
 
-      <!-- ════════════ 落地路径 ════════════ -->
       <section>
         <div class="section-label">07 — 落地路径</div>
         <div class="section-title">三阶段渐进式落地</div>
         <p class="section-desc">
           先从风险最低、价值最明显的场景切入，逐步扩展到核心流程和数据智能。
         </p>
-
         <div class="roadmap">
           <div class="roadmap-phase">
             <div class="roadmap-phase-time">第一阶段 · 1–2 个月</div>
@@ -987,9 +942,9 @@
               份核心政策文档即可上线，快速验证技术可行性与用户接受度。
             </p>
             <div class="roadmap-deliverables">
-              <span class="roadmap-tag">知识库搭建</span>
-              <span class="roadmap-tag">问答准确率 > 90%</span>
-              <span class="roadmap-tag">用户反馈闭环</span>
+              <span class="roadmap-tag">知识库搭建</span
+              ><span class="roadmap-tag">问答准确率 &gt; 90%</span
+              ><span class="roadmap-tag">用户反馈闭环</span>
             </div>
           </div>
           <div class="roadmap-phase">
@@ -1000,10 +955,9 @@
               对接，建立人机协作审批流。
             </p>
             <div class="roadmap-deliverables">
-              <span class="roadmap-tag">简历筛选</span>
-              <span class="roadmap-tag">面试安排</span>
-              <span class="roadmap-tag">Onboarding 自动化</span>
-              <span class="roadmap-tag">审批引擎上线</span>
+              <span class="roadmap-tag">简历筛选</span><span class="roadmap-tag">面试安排</span
+              ><span class="roadmap-tag">Onboarding 自动化</span
+              ><span class="roadmap-tag">审批引擎上线</span>
             </div>
           </div>
           <div class="roadmap-phase">
@@ -1011,25 +965,22 @@
             <h4>数据智能：分析 + 预测性洞察</h4>
             <p>
               数据积累到一定量级后，上线数据分析 Agent
-              与排班考勤助手。引入预测模型（离职风险预测、招聘需求预估）实现从「响应式」到「前瞻式」HR
+              与排班考勤助手。引入预测模型（离职风险预测、招聘需求预估）实现从“响应式”到“前瞻式”HR
               的跃迁。
             </p>
             <div class="roadmap-deliverables">
-              <span class="roadmap-tag">离职风险预测</span>
-              <span class="roadmap-tag">人效仪表盘</span>
-              <span class="roadmap-tag">智能排班</span>
-              <span class="roadmap-tag">招聘漏斗看板</span>
+              <span class="roadmap-tag">离职风险预测</span
+              ><span class="roadmap-tag">人效仪表盘</span><span class="roadmap-tag">智能排班</span
+              ><span class="roadmap-tag">招聘漏斗看板</span>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ════════════ 技术选型 ════════════ -->
       <section>
         <div class="section-label">08 — 技术选型</div>
         <div class="section-title">推荐技术栈</div>
         <p class="section-desc">以成熟、社区活跃、易于招聘的技术栈为优先选择。</p>
-
         <div class="stack-grid">
           <div class="stack-item">
             <div class="stack-item-label">AI 引擎</div>
@@ -1064,9 +1015,6 @@
         </div>
       </section>
     </div>
-
-    <footer>
-      <p>OpenClaw HR 智能助手 · 系统设计方案 v2.0</p>
-    </footer>
+    <footer><p>Yoma+HR 智能助手 · 系统设计方案 v2.0</p></footer>
   </body>
 </html>

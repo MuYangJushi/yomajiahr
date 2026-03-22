@@ -1,8 +1,8 @@
-# OpenClaw HR 智能助手 — 多 Agent 架构设计文档
+# Yoma+HR 智能助手 — 多 Agent 架构设计文档
 
 ## 一、背景与目标
 
-基于 OpenClaw 构建企业 HR 智能助手，覆盖政策问答、招聘、入离职、数据分析、排班考勤五大业务模块。需要在「用户体验」「权限隔离」「运维成本」「可扩展性」之间取得平衡。
+基于 OpenClaw 构建企业 HR 智能助手（Yoma+HR），覆盖政策问答、招聘、入离职、数据分析、排班考勤五大业务模块。需要在「用户体验」「权限隔离」「运维成本」「可扩展性」之间取得平衡。
 
 本文档记录了三种候选架构方案的评估过程，以及最终采用 B+C 混合方案的决策理由。
 
@@ -500,7 +500,7 @@ Admin Portal (http://<server>:18790)
 1. **飞书 Channel 配置**
    - WebSocket 模式
    - Bot 1（全员）+ Bot 4（HR 管理员）两个飞书应用
-   - 环境变量模板 `.env.hr-assistant.example`
+   - 环境变量模板 `.env.ymjhr.example`
 
 2. **Web Portal 配置**
    - OpenClaw Web Provider，token 认证
@@ -535,7 +535,7 @@ Admin Portal (http://<server>:18790)
    - `skills/hr-policy-rag/scripts/pdf-to-markdown.mjs`（PDF 专用命令行工具，保留兼容）
 
 8. **部署配置**
-   - `.env.hr-assistant.example` 环境变量模板
+   - `.env.ymjhr.example` 环境变量模板
    - 飞书 channel 配置（2 个 Bot）
    - Web channel 配置
    - Sub-agent 配置
@@ -648,7 +648,7 @@ assets/sample-policies/
 
 ### Step 9: 飞书 + Web + 部署配置
 
-- 在项目根目录创建 `.env.hr-assistant.example`
+- 在项目根目录创建 `.env.ymjhr.example`
 - 配置 `openclaw.json` 的 `channels.feishu` 节点（Bot 1 + Bot 4）
 - 配置 `openclaw.json` 的 `channels.web` 节点（管理员 Web Portal）
 - 配置 `agents` 的 Sub-agent 参数
@@ -677,7 +677,7 @@ skills/skill-creator/scripts/package_skill.py skills/hr-admin
 | `admin-portal/server.mjs`                | Admin Portal 服务端               |
 | `admin-portal/lib/doc-converter.mjs`     | 多格式文档转换器（PDF/Word/Text） |
 | `admin-portal/public/`                   | Admin Portal 前端页面             |
-| `openclaw_hr_assistant_fixed.html`       | v2.0 系统设计方案（需求来源）     |
+| `yomajiahr_fixed.html`                   | v2.0 系统设计方案（需求来源）     |
 
 ---
 

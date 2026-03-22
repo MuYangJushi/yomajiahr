@@ -1,4 +1,4 @@
-# 基于 OpenClaw 的企业 HR 智能助手 — 整体设计思路
+# Yoma+HR — 基于 OpenClaw 的企业 HR 智能助手整体设计思路
 
 ---
 

@@ -1,6 +1,8 @@
-# HR 智能助手 — 部署指南
+# Yoma+HR 智能助手 — 部署指南
 
 本文档覆盖从代码仓库到云服务器运行的完整流程。
+
+> 品牌命名策略详见 [yomajiahr-branding.md](./yomajiahr-branding.md)。CLI 命令使用 `ymjhr`，环境变量名称保持上游 `OPENCLAW_*` 不变。
 
 ## 前置条件
 
@@ -48,8 +50,8 @@
 ```bash
 ssh user@your-server
 
-git clone https://github.com/<your-username>/<your-repo>.git /opt/hr-assistant
-cd /opt/hr-assistant
+git clone https://github.com/<your-username>/<your-repo>.git /opt/ymjhr
+cd /opt/ymjhr
 ```
 
 ### Step 2: 安装依赖并构建
@@ -71,26 +73,46 @@ pnpm build
 
 构建产物在 `dist/` 目录。
 
+### Step 2.5: 注册 ymjhr CLI 命令
+
+构建完成后，通过 `npm link` 将 `ymjhr` 注册到系统 PATH：
+
+```bash
+cd /opt/ymjhr
+npm link
+```
+
+验证命令可用：
+
+```bash
+ymjhr --version
+```
+
+> 如果服务器使用 `nvm` 管理 Node.js 版本，`npm link` 会将命令链接到当前活跃版本的 bin 目录。
+> 切换 Node.js 版本后需重新执行 `npm link`。
+
+后续所有 CLI 操作均使用 `ymjhr` 命令（等同于原 `openclaw` 命令，子命令和参数完全一致）。
+
 ### Step 3: 创建运行时目录
 
 ```bash
-# 创建 OpenClaw 状态目录
-mkdir -p ~/.openclaw
+# 创建 Yoma+HR 状态目录
+mkdir -p ~/.ymjhr
 
 # 创建知识库目录结构
-mkdir -p ~/.openclaw/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
+mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
 ```
 
 ### Step 4: 配置环境变量
 
 ```bash
-cp config/.env.hr-assistant.example ~/.openclaw/.env
+cp config/.env.ymjhr.example ~/.ymjhr/.env
 ```
 
-编辑 `~/.openclaw/.env`，填入真实值：
+编辑 `~/.ymjhr/.env`，填入真实值：
 
 ```bash
-nano ~/.openclaw/.env
+nano ~/.ymjhr/.env
 ```
 
 需要填写的关键值：
@@ -105,52 +127,51 @@ nano ~/.openclaw/.env
 | `FEISHU_ADMIN_BOT_APP_SECRET`           | HR管理后台 App Secret    | 飞书开放平台           |
 | `OPENCLAW_WEB_AUTH_TOKEN`               | Web Portal 认证令牌      | `openssl rand -hex 32` |
 
-### Step 5: 写入 OpenClaw 配置
+### Step 5: 写入配置
 
-将 `config/openclaw.hr-assistant.jsonc` 转为 JSON 写入配置目录：
+将 `config/ymjhr.jsonc` 转为 JSON 写入配置目录：
 
 ```bash
 # 去掉 JSONC 注释，生成标准 JSON
 node -e "
 const fs = require('fs');
-const text = fs.readFileSync('config/openclaw.hr-assistant.jsonc', 'utf-8');
+const text = fs.readFileSync('config/ymjhr.jsonc', 'utf-8');
 const cleaned = text.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const json = JSON.parse(cleaned);
 json.gateway = { mode: 'local' };
-fs.writeFileSync(process.env.HOME + '/.openclaw/openclaw.json', JSON.stringify(json, null, 2));
-console.log('Written to ~/.openclaw/openclaw.json');
+fs.writeFileSync(process.env.HOME + '/.ymjhr/ymjhr.json', JSON.stringify(json, null, 2));
+console.log('Written to ~/.ymjhr/ymjhr.json');
 "
 ```
 
-或者手动创建 `~/.openclaw/openclaw.json`（参考 `config/openclaw.hr-assistant.jsonc`，去掉注释，添加 `"gateway": { "mode": "local" }`）。
+或者手动创建 `~/.ymjhr/ymjhr.json`（参考 `config/ymjhr.jsonc`，去掉注释，添加 `"gateway": { "mode": "local" }`）。
 
 ### Step 6: 安装 Skills
 
-Skills 通过目录发现机制加载。OpenClaw 按以下优先级扫描 `SKILL.md`：
+Skills 通过目录发现机制加载。引擎按以下优先级扫描 `SKILL.md`：
 
 1. `<workspace>/skills/`（最高）
-2. `~/.openclaw/skills/`（托管目录）
+2. `~/.ymjhr/skills/`（托管目录）
 3. 内置 bundled skills（最低）
 
 由于我们从仓库运行，`skills/` 目录已在工作区中，**理论上不需要额外操作**。但为确保 gateway 以任意工作目录启动时都能找到 skills，建议同时链接到托管目录：
 
 ```bash
 # 方式 A: 软链接（推荐，保持同步）
-ln -s /opt/hr-assistant/skills/hr-assistant   ~/.openclaw/skills/hr-assistant
-ln -s /opt/hr-assistant/skills/hr-policy-rag  ~/.openclaw/skills/hr-policy-rag
-ln -s /opt/hr-assistant/skills/hr-admin       ~/.openclaw/skills/hr-admin
+ln -s /opt/ymjhr/skills/hr-assistant   ~/.ymjhr/skills/hr-assistant
+ln -s /opt/ymjhr/skills/hr-policy-rag  ~/.ymjhr/skills/hr-policy-rag
+ln -s /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/hr-admin
 
 # 方式 B: 直接复制（不需要保持同步时）
-cp -r /opt/hr-assistant/skills/hr-assistant   ~/.openclaw/skills/
-cp -r /opt/hr-assistant/skills/hr-policy-rag  ~/.openclaw/skills/
-cp -r /opt/hr-assistant/skills/hr-admin       ~/.openclaw/skills/
+cp -r /opt/ymjhr/skills/hr-assistant   ~/.ymjhr/skills/
+cp -r /opt/ymjhr/skills/hr-policy-rag  ~/.ymjhr/skills/
+cp -r /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/
 ```
 
 验证 skills 已被识别：
 
 ```bash
-cd /opt/hr-assistant
-node dist/index.js skills list
+ymjhr skills list
 ```
 
 应看到 `hr-assistant`、`hr-policy-rag`、`hr-admin` 三个 skill。
@@ -160,8 +181,8 @@ node dist/index.js skills list
 将示例政策文档复制到运行时知识库目录：
 
 ```bash
-cp skills/hr-policy-rag/assets/sample-policies/leave/*.md     ~/.openclaw/memory/hr-policies/leave/
-cp skills/hr-policy-rag/assets/sample-policies/onboarding/*.md ~/.openclaw/memory/hr-policies/onboarding/
+cp skills/hr-policy-rag/assets/sample-policies/leave/*.md     ~/.ymjhr/memory/hr-policies/leave/
+cp skills/hr-policy-rag/assets/sample-policies/onboarding/*.md ~/.ymjhr/memory/hr-policies/onboarding/
 ```
 
 后续实际 PDF 政策文档可通过以下方式导入：
@@ -169,12 +190,12 @@ cp skills/hr-policy-rag/assets/sample-policies/onboarding/*.md ~/.openclaw/memor
 ```bash
 # 单个 PDF
 node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs policy.pdf \
-  --out-dir ~/.openclaw/memory/hr-policies/ \
+  --out-dir ~/.ymjhr/memory/hr-policies/ \
   --category leave
 
 # 批量 PDF（整个目录）
 node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs ./pdfs/ \
-  --out-dir ~/.openclaw/memory/hr-policies/ \
+  --out-dir ~/.ymjhr/memory/hr-policies/ \
   --category onboarding
 ```
 
@@ -185,21 +206,21 @@ node skills/hr-policy-rag/scripts/pdf-to-markdown.mjs ./pdfs/ \
 Admin Portal 是独立的 Web 管理后台，提供文档上传（PDF/Word/文本）、文档管理和审计日志功能。
 
 ```bash
-cd /opt/hr-assistant/admin-portal
+cd /opt/ymjhr/admin-portal
 
 # 安装依赖
 npm install
 
 # 前台运行（首次调试）
-OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.openclaw/.env | cut -d= -f2) \
+OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.ymjhr/.env | cut -d= -f2) \
   node server.mjs
 
 # 后台运行（生产用）
-OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.openclaw/.env | cut -d= -f2) \
-  nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
+OPENCLAW_WEB_AUTH_TOKEN=$(grep OPENCLAW_WEB_AUTH_TOKEN ~/.ymjhr/.env | cut -d= -f2) \
+  nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 
 # 查看日志
-tail -f /tmp/openclaw-hr-admin.log
+tail -f /tmp/ymjhr-admin.log
 ```
 
 默认端口 **18790**（可通过 `ADMIN_PORTAL_PORT` 环境变量修改）。
@@ -215,17 +236,21 @@ Admin Portal 页面：
 ### Step 9: 启动 Gateway
 
 ```bash
-cd /opt/hr-assistant
+cd /opt/ymjhr
+
+# 设置状态目录和配置路径（指向 ymjhr 目录）
+export OPENCLAW_STATE_DIR=~/.ymjhr
+export OPENCLAW_CONFIG_PATH=~/.ymjhr/ymjhr.json
 
 # 前台运行（首次调试用，看实时日志）
-node dist/index.js gateway run --bind loopback --port 18789
+ymjhr gateway run --bind loopback --port 18789
 
 # 后台运行（生产用）
-nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
-  > /tmp/openclaw-hr-gateway.log 2>&1 &
+nohup ymjhr gateway run --bind loopback --port 18789 --force \
+  > /tmp/ymjhr-gateway.log 2>&1 &
 
 # 查看日志
-tail -f /tmp/openclaw-hr-gateway.log
+tail -f /tmp/ymjhr-gateway.log
 ```
 
 ### Step 10: 验证部署
@@ -235,10 +260,10 @@ tail -f /tmp/openclaw-hr-gateway.log
 curl http://127.0.0.1:18789/healthz
 
 # 2. Channel 连接状态
-node dist/index.js channels status --probe
+ymjhr channels status --probe
 
 # 3. Skills 列表
-node dist/index.js skills list
+ymjhr skills list
 ```
 
 然后在飞书中测试：
@@ -259,68 +284,72 @@ node dist/index.js skills list
 ### 使用 systemd 管理服务
 
 ```bash
-sudo cat > /etc/systemd/system/openclaw-hr-gateway.service << 'EOF'
+sudo cat > /etc/systemd/system/ymjhr-gateway.service << 'EOF'
 [Unit]
-Description=OpenClaw HR Assistant Gateway
+Description=Yoma+HR Gateway
 After=network.target
 
 [Service]
 Type=simple
-User=openclaw
-Group=openclaw
-WorkingDirectory=/opt/hr-assistant
-ExecStart=/usr/bin/node dist/index.js gateway run --bind loopback --port 18789 --force
+User=ymjhr
+Group=ymjhr
+WorkingDirectory=/opt/ymjhr
+ExecStart=/usr/bin/ymjhr gateway run --bind loopback --port 18789 --force
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
-Environment=OPENCLAW_STATE_DIR=/home/openclaw/.openclaw
-EnvironmentFile=/home/openclaw/.openclaw/.env
+Environment=OPENCLAW_STATE_DIR=/home/ymjhr/.ymjhr
+Environment=OPENCLAW_CONFIG_PATH=/home/ymjhr/.ymjhr/ymjhr.json
+EnvironmentFile=/home/ymjhr/.ymjhr/.env
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-sudo cat > /etc/systemd/system/openclaw-hr-admin.service << 'EOF'
+sudo cat > /etc/systemd/system/ymjhr-admin.service << 'EOF'
 [Unit]
-Description=OpenClaw HR Admin Portal
+Description=Yoma+HR Admin Portal
 After=network.target
 
 [Service]
 Type=simple
-User=openclaw
-Group=openclaw
-WorkingDirectory=/opt/hr-assistant/admin-portal
+User=ymjhr
+Group=ymjhr
+WorkingDirectory=/opt/ymjhr/admin-portal
 ExecStart=/usr/bin/node server.mjs
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
 Environment=ADMIN_PORTAL_PORT=18790
-Environment=OPENCLAW_STATE_DIR=/home/openclaw/.openclaw
-EnvironmentFile=/home/openclaw/.openclaw/.env
+Environment=OPENCLAW_STATE_DIR=/home/ymjhr/.ymjhr
+EnvironmentFile=/home/ymjhr/.ymjhr/.env
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # 创建专用用户
-sudo useradd -r -m -s /bin/bash openclaw
-sudo cp -r ~/.openclaw /home/openclaw/.openclaw
-sudo chown -R openclaw:openclaw /home/openclaw/.openclaw
+sudo useradd -r -m -s /bin/bash ymjhr
+sudo cp -r ~/.ymjhr /home/ymjhr/.ymjhr
+sudo chown -R ymjhr:ymjhr /home/ymjhr/.ymjhr
+
+# 在 ymjhr 用户下注册 CLI 命令
+sudo -u ymjhr bash -c 'cd /opt/ymjhr && npm link'
 
 # 启动并设置开机自启
 sudo systemctl daemon-reload
-sudo systemctl enable --now openclaw-hr-gateway openclaw-hr-admin
-sudo systemctl status openclaw-hr-gateway openclaw-hr-admin
+sudo systemctl enable --now ymjhr-gateway ymjhr-admin
+sudo systemctl status ymjhr-gateway ymjhr-admin
 
 # 查看日志
-sudo journalctl -u openclaw-hr-gateway -f
-sudo journalctl -u openclaw-hr-admin -f
+sudo journalctl -u ymjhr-gateway -f
+sudo journalctl -u ymjhr-admin -f
 ```
 
 ### Nginx 反向代理
 
 ```nginx
-# OpenClaw Web Portal（聊天式管理）
+# Yoma+HR Web Portal（聊天式管理）
 server {
     listen 443 ssl;
     server_name hr-chat.yourcompany.com;
@@ -338,7 +367,7 @@ server {
     }
 }
 
-# Admin Portal（文档管理 + 审计日志）
+# Yoma+HR Admin Portal（文档管理 + 审计日志）
 server {
     listen 443 ssl;
     server_name hr-admin.yourcompany.com;
@@ -364,20 +393,21 @@ server {
 代码更新后在服务器上执行：
 
 ```bash
-cd /opt/hr-assistant
+cd /opt/ymjhr
 git pull origin main
 pnpm install
 pnpm build
+npm link    # 确保 ymjhr CLI 指向最新构建
 
 # 重启服务
-sudo systemctl restart openclaw-hr-gateway
-sudo systemctl restart openclaw-hr-admin
+sudo systemctl restart ymjhr-gateway
+sudo systemctl restart ymjhr-admin
 # 或手动重启
-pkill -f "node dist/index.js gateway" || true
-nohup node dist/index.js gateway run --bind loopback --port 18789 --force \
-  > /tmp/openclaw-hr-gateway.log 2>&1 &
+pkill -f "ymjhr gateway" || true
+nohup ymjhr gateway run --bind loopback --port 18789 --force \
+  > /tmp/ymjhr-gateway.log 2>&1 &
 pkill -f "node server.mjs" || true
-cd admin-portal && nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
+cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 ```
 
 如果仅更新了 skills（SKILL.md / references / assets），不需要重新 build，重启 gateway 即可。
@@ -390,33 +420,33 @@ cd admin-portal && nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
 ```
 服务器文件布局:
 
-/opt/hr-assistant/                    # 代码仓库（git clone）
+/opt/ymjhr/                             # 代码仓库（git clone）
 ├── skills/
-│   ├── hr-assistant/                 # 全员 Agent skill
-│   ├── hr-policy-rag/                # 政策问答 skill + PDF 转换脚本
-│   └── hr-admin/                     # 管理员 skill
-├── admin-portal/                     # Admin Portal 独立 Web 服务
-│   ├── server.mjs                    # Express 服务端
-│   ├── lib/doc-converter.mjs         # 多格式文档转换器
-│   ├── public/                       # 前端页面 (HTML/CSS/JS)
-│   ├── package.json                  # 独立依赖 (mammoth, multer 等)
-│   └── node_modules/                 # npm install 后生成
+│   ├── hr-assistant/                    # 全员 Agent skill
+│   ├── hr-policy-rag/                   # 政策问答 skill + PDF 转换脚本
+│   └── hr-admin/                        # 管理员 skill
+├── admin-portal/                        # Admin Portal 独立 Web 服务
+│   ├── server.mjs                       # Express 服务端
+│   ├── lib/doc-converter.mjs            # 多格式文档转换器
+│   ├── public/                          # 前端页面 (HTML/CSS/JS)
+│   ├── package.json                     # 独立依赖 (mammoth, multer 等)
+│   └── node_modules/                    # npm install 后生成
 ├── config/
-│   ├── .env.hr-assistant.example     # 环境变量模板
-│   └── openclaw.hr-assistant.jsonc   # 配置模板
-└── dist/                             # 构建产物（pnpm build 后生成）
+│   ├── .env.ymjhr.example              # 环境变量模板
+│   └── ymjhr.jsonc                     # 配置模板
+└── dist/                                # 构建产物（pnpm build 后生成）
 
-~/.openclaw/                          # OpenClaw 运行时状态目录
-├── .env                              # 环境变量（密钥，不入库）
-├── openclaw.json                     # 运行时配置
-├── skills/                           # skills 软链接
-│   ├── hr-assistant -> /opt/hr-assistant/skills/hr-assistant
-│   ├── hr-policy-rag -> /opt/hr-assistant/skills/hr-policy-rag
-│   └── hr-admin -> /opt/hr-assistant/skills/hr-admin
+~/.ymjhr/                               # Yoma+HR 运行时状态目录
+├── .env                                 # 环境变量（密钥，不入库）
+├── ymjhr.json                          # 运行时配置
+├── skills/                              # skills 软链接
+│   ├── hr-assistant -> /opt/ymjhr/skills/hr-assistant
+│   ├── hr-policy-rag -> /opt/ymjhr/skills/hr-policy-rag
+│   └── hr-admin -> /opt/ymjhr/skills/hr-admin
 └── memory/
     ├── hr-admin/
-    │   └── audit-log.jsonl           # 操作审计日志（JSONL 格式）
-    └── hr-policies/                  # 知识库文档（运行时数据）
+    │   └── audit-log.jsonl              # 操作审计日志（JSONL 格式）
+    └── hr-policies/                     # 知识库文档（运行时数据）
         ├── leave/
         │   ├── annual-leave-policy.md
         │   └── sick-leave-policy.md
@@ -432,14 +462,14 @@ cd admin-portal && nohup node server.mjs > /tmp/openclaw-hr-admin.log 2>&1 &
 
 ## 故障排查
 
-| 问题                  | 排查方法                                                                                 |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| Gateway 启动失败      | `tail -n 100 /tmp/openclaw-hr-gateway.log` 或 `journalctl -u openclaw-hr-gateway -n 100` |
-| 飞书连接不上          | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用                   |
-| Skills 未识别         | `node dist/index.js skills list` 确认三个 skill 出现；检查软链接是否正确                 |
-| 知识库搜不到文档      | 确认 `~/.openclaw/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter                 |
-| LLM 无响应            | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                                  |
-| Web Portal 无法访问   | 确认防火墙开放 18789 端口；检查 `openclaw.json` 中 `web.enabled: true`                   |
-| Admin Portal 无法访问 | 确认端口 18790 开放；`tail -n 100 /tmp/openclaw-hr-admin.log` 查看日志                   |
-| 文档上传失败          | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB                         |
-| 审计日志为空          | 确认 `~/.openclaw/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限                  |
+| 问题                  | 排查方法                                                                     |
+| --------------------- | ---------------------------------------------------------------------------- |
+| Gateway 启动失败      | `tail -n 100 /tmp/ymjhr-gateway.log` 或 `journalctl -u ymjhr-gateway -n 100` |
+| 飞书连接不上          | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用       |
+| Skills 未识别         | `ymjhr skills list` 确认三个 skill 出现；检查软链接是否正确                  |
+| 知识库搜不到文档      | 确认 `~/.ymjhr/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter        |
+| LLM 无响应            | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                      |
+| Web Portal 无法访问   | 确认防火墙开放 18789 端口；检查 `ymjhr.json` 中 `web.enabled: true`          |
+| Admin Portal 无法访问 | 确认端口 18790 开放；`tail -n 100 /tmp/ymjhr-admin.log` 查看日志             |
+| 文档上传失败          | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB             |
+| 审计日志为空          | 确认 `~/.ymjhr/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限         |
