@@ -3,13 +3,13 @@
 /**
  * HR Admin Portal — standalone web service for document management and audit log.
  *
- * Runs alongside the OpenClaw gateway. Provides:
+ * Runs alongside the Yoma+HR gateway. Provides:
  *   - File upload (PDF/Word/Text) with auto-conversion to Markdown
  *   - Document list / search / delete
  *   - Audit log viewer with filtering and CSV export
  *
  * Usage:
- *   node server.mjs                         # defaults: port 18790, ~/.openclaw
+ *   node server.mjs                         # defaults: port 18790, ~/.ymjhr
  *   PORT=3000 node server.mjs               # custom port
  *   OPENCLAW_STATE_DIR=/data node server.mjs # custom state dir
  */
@@ -35,7 +35,7 @@ import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converte
 // ---------------------------------------------------------------------------
 
 const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
-const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".openclaw");
+const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".ymjhr");
 const POLICIES_DIR = join(STATE_DIR, "memory", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "memory", "hr-admin", "audit-log.jsonl");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";

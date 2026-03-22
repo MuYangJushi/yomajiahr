@@ -1,5 +1,5 @@
-// OpenClaw HR 智能助手 — 配置文件
-// 使用方法: 合并到 ~/.openclaw/openclaw.json 或作为独立配置加载
+// Yoma+HR 智能助手 — 配置文件
+// 使用方法: 写入 ~/.ymjhr/ymjhr.json（通过 OPENCLAW_CONFIG_PATH 指定）
 {
   // ---------------------------------------------------------------------------
   // Channels

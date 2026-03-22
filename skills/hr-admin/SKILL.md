@@ -5,7 +5,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 
 # HR 管理员 Agent
 
-管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书 Bot、OpenClaw Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
+管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书 Bot、Yoma+HR Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
 
 ## 管理入口
 
@@ -15,7 +15,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
 | **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-portal/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
 | **飞书 Bot 4**          | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
-| **OpenClaw Web Portal** | 对话式操作                       | 与飞书 Bot 功能相同，Web 聊天界面                                                     |
+| **Yoma+HR Web Portal**  | 对话式操作                       | 与飞书 Bot 功能相同，Web 聊天界面                                                     |
 
 > **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、可视化元数据填写和即时反馈。飞书 Bot 和 Web Portal 适合快捷的查询和删除操作。
 

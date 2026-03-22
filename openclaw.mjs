@@ -26,7 +26,7 @@ const ensureSupportedNodeVersion = () => {
   }
 
   process.stderr.write(
-    `openclaw: Node.js v${MIN_NODE_VERSION}+ is required (current: v${process.versions.node}).\n` +
+    `ymjhr: Node.js v${MIN_NODE_VERSION}+ is required (current: v${process.versions.node}).\n` +
       "If you use nvm, run:\n" +
       `  nvm install ${MIN_NODE_MAJOR}\n` +
       `  nvm use ${MIN_NODE_MAJOR}\n` +
@@ -110,7 +110,7 @@ const exists = async (specifier) => {
 };
 
 const buildMissingEntryErrorMessage = async () => {
-  const lines = ["openclaw: missing dist/entry.(m)js (build output)."];
+  const lines = ["ymjhr: missing dist/entry.(m)js (build output)."];
   if (!(await exists("./src/entry.ts"))) {
     return lines.join("\n");
   }
