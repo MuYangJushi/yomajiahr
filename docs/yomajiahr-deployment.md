@@ -182,6 +182,13 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 
 如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新 provider，则在 `models.providers` 下继续追加对应配置块即可。
 
+当前模板还包含两条显式 Feishu account 路由：
+
+- `feishu / hr-assistant` -> `hr-assistant`
+- `feishu / hr-admin` -> `hr-admin`
+
+这样管理员 Bot 不会误落到默认的 `hr-assistant`。
+
 ### Step 6: 安装 Skills
 
 Skills 通过目录发现机制加载。引擎按以下优先级扫描 `SKILL.md`：
