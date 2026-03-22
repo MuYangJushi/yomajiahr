@@ -81,6 +81,9 @@
         "name": "政策问答",
         "workspace": "~/.ymjhr/workspace-hr-policy-rag",
         "skills": ["hr-policy-rag"],
+        "tools": {
+          "deny": ["exec"],
+        },
       },
       {
         "id": "hr-admin",
