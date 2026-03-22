@@ -123,6 +123,8 @@
         "api": "anthropic-messages",
         "authHeader": true,
         "apiKey": "${MINIMAX_API_KEY}",
+        // 保留空数组以通过 schema 校验，实际模型目录仍由 MiniMax 插件补全。
+        "models": [],
       },
     },
   },
