@@ -1,0 +1,19 @@
+[Unit]
+Description=Yoma+HR Admin Portal
+After=network.target
+
+[Service]
+Type=simple
+User=ymjhr
+Group=ymjhr
+WorkingDirectory=/opt/ymjhr/admin-portal
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=ADMIN_PORTAL_PORT=18790
+Environment=OPENCLAW_STATE_DIR=/home/ymjhr/.ymjhr
+EnvironmentFile=/home/ymjhr/.ymjhr/.env
+
+[Install]
+WantedBy=multi-user.target

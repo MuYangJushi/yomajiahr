@@ -122,6 +122,16 @@ ymjhr --version
 
 ### Step 3: 创建运行时目录
 
+**推荐方式：使用初始化脚本**
+
+```bash
+./scripts/init-workspace.sh
+```
+
+脚本会自动创建目录结构、复制 workspace bootstrap 文件（AGENTS.md、SOUL.md、IDENTITY.md）并生成 `.env` 模板。
+
+**手动方式：**
+
 ```bash
 # 创建 Yoma+HR 状态目录
 mkdir -p ~/.ymjhr
@@ -362,17 +372,25 @@ tail -f /tmp/ymjhr-gateway.log
 ### Step 10: 验证部署
 
 ```bash
-# 1. 健康检查
+# 1. Gateway 健康检查
 curl http://127.0.0.1:18789/healthz
 
-# 2. 端口监听
+# 2. Admin Portal 健康检查
+curl http://127.0.0.1:18790/api/health
+
+# 3. 端口监听
 ss -ltnp | grep -E '18789|18790'
 
-# 3. Channel 连接状态
+# 4. Channel 连接状态
 ymjhr channels status --probe
 
-# 4. Skills 列表
+# 5. Skills 列表
 ymjhr skills list
+
+# 6. 验证知识库 embedding 路径解析正确
+#    hr-policy-rag 的 workspace 在 ~/.ymjhr/workspace-hr-policy-rag，
+#    extraPaths 配置为 ../memory/hr-policies，因此实际指向 ~/.ymjhr/memory/hr-policies
+ls ~/.ymjhr/memory/hr-policies/
 ```
 
 如果你刚刚重启过 `ymjhr-gateway`，建议先等 5 到 10 秒再做健康检查；启动早期日志里短暂出现
@@ -394,6 +412,15 @@ ymjhr skills list
 ## 生产环境加固
 
 ### 使用 systemd 管理服务
+
+模板文件在 `config/ymjhr-gateway.service` 和 `config/ymjhr-admin.service`，可直接复制或按需修改后安装：
+
+```bash
+sudo cp config/ymjhr-gateway.service /etc/systemd/system/
+sudo cp config/ymjhr-admin.service /etc/systemd/system/
+```
+
+或者内联创建：
 
 ```bash
 sudo cat > /etc/systemd/system/ymjhr-gateway.service << 'EOF'

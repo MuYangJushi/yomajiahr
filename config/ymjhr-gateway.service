@@ -1,0 +1,19 @@
+[Unit]
+Description=Yoma+HR Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=ymjhr
+Group=ymjhr
+WorkingDirectory=/opt/ymjhr
+ExecStart=/usr/bin/ymjhr gateway run --bind loopback --port 18789 --force
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=OPENCLAW_STATE_DIR=/home/ymjhr/.ymjhr
+Environment=OPENCLAW_CONFIG_PATH=/home/ymjhr/.ymjhr/ymjhr.json
+EnvironmentFile=/home/ymjhr/.ymjhr/.env
+
+[Install]
+WantedBy=multi-user.target

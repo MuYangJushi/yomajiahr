@@ -30,6 +30,7 @@ import express from "express";
 import multer from "multer";
 import { CATEGORIES } from "./lib/categories.mjs";
 import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converter.mjs";
+import { overwriteFrontmatter, parseFrontmatter } from "./lib/frontmatter.mjs";
 import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 
 // ---------------------------------------------------------------------------
@@ -44,8 +45,9 @@ const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
 const BIND_HOST = env.ADMIN_PORTAL_BIND || "";
 
 if (!AUTH_TOKEN) {
-  console.warn(
-    "[WARN] OPENCLAW_WEB_AUTH_TOKEN is not set — Admin Portal will only accept requests from localhost.",
+  log(
+    "WARN",
+    "OPENCLAW_WEB_AUTH_TOKEN is not set — Admin Portal will only accept requests from localhost.",
   );
 }
 
@@ -62,9 +64,19 @@ for (const dir of [
 // Express app
 // ---------------------------------------------------------------------------
 
+function log(level, msg) {
+  console.log(`[${new Date().toISOString()}] [${level}] ${msg}`);
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static(join(import.meta.dirname, "public")));
+
+// Request logging for API calls
+app.use("/api", (req, _res, next) => {
+  log("INFO", `${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // Multer for file uploads (10MB limit)
 const upload = multer({
@@ -79,6 +91,40 @@ const upload = multer({
     }
   },
 });
+
+// ---------------------------------------------------------------------------
+// Simple rate limiter (no external dependency)
+// ---------------------------------------------------------------------------
+
+function rateLimit({ windowMs = 60_000, max = 10, message = "Too many requests" } = {}) {
+  const hits = new Map();
+  // Periodically clean up expired entries
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (now - entry.start > windowMs) {
+        hits.delete(key);
+      }
+    }
+  }, windowMs).unref();
+
+  return (req, res, next) => {
+    const key = req.ip || req.connection?.remoteAddress || "unknown";
+    const now = Date.now();
+    let entry = hits.get(key);
+    if (!entry || now - entry.start > windowMs) {
+      entry = { start: now, count: 0 };
+      hits.set(key, entry);
+    }
+    entry.count++;
+    if (entry.count > max) {
+      return res.status(429).json({ error: message });
+    }
+    next();
+  };
+}
+
+const uploadLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "上传过于频繁，请稍后再试" });
 
 // ---------------------------------------------------------------------------
 // Health check (no auth required — for load balancer / systemd probes)
@@ -121,7 +167,7 @@ app.use("/api", authMiddleware);
 // API: Upload
 // ---------------------------------------------------------------------------
 
-app.post("/api/upload", upload.single("file"), async (req, res) => {
+app.post("/api/upload", uploadLimiter, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided" });
@@ -406,27 +452,6 @@ app.get("/api/info", (_req, res) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return {};
-  }
-  const meta = {};
-  for (const line of match[1].split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx > 0) {
-      const key = line.slice(0, idx).trim();
-      let val = line.slice(idx + 1).trim();
-      // Strip surrounding quotes
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.slice(1, -1);
-      }
-      meta[key] = val;
-    }
-  }
-  return meta;
-}
-
 function normalizeUploadedFilename(rawName) {
   const baseName = basename(String(rawName || "").replaceAll("\\", "/"));
   if (!baseName) {
@@ -454,43 +479,6 @@ function scoreFilename(name) {
   const mojibake = name.match(/[ÃÂÐÑØæçèéêëîïðñòóôöøùúûüýþÿœžš]/g);
   score -= mojibake?.length || 0;
   return score;
-}
-
-function overwriteFrontmatter(markdown, updates) {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return markdown;
-  }
-  const meta = parseFrontmatter(markdown);
-  const nextMeta = {
-    ...meta,
-    ...Object.fromEntries(
-      Object.entries(updates).filter(([, value]) => value !== undefined && value !== null),
-    ),
-  };
-  const orderedKeys = [
-    "title",
-    "source_file",
-    "source_format",
-    "doc_id",
-    "version",
-    "effective_date",
-    "category",
-    "converted_date",
-    "total_pages",
-  ];
-  const rendered = orderedKeys
-    .filter((key) => key in nextMeta && String(nextMeta[key]).trim() !== "")
-    .map((key) => `${key}: "${String(nextMeta[key]).replaceAll('"', '\\"')}"`);
-  if ("total_pages" in nextMeta && String(nextMeta.total_pages).trim() !== "") {
-    const idx = rendered.findIndex((line) => line.startsWith('total_pages: "'));
-    if (idx >= 0) {
-      const totalPages = String(nextMeta.total_pages);
-      rendered[idx] = `total_pages: ${totalPages}`;
-    }
-  }
-  const replacement = `---\n${rendered.join("\n")}\n---`;
-  return markdown.replace(/^---\n[\s\S]*?\n---/, replacement);
 }
 
 // Simple write queue to prevent concurrent appendFileSync from interleaving JSONL lines
@@ -553,12 +541,12 @@ app.get(/^\/(upload|documents|audit-log)?$/, (_req, res) => {
 const bindHost = BIND_HOST || (AUTH_TOKEN ? "0.0.0.0" : "127.0.0.1");
 
 app.listen(PORT, bindHost, () => {
-  const ts = () => new Date().toISOString();
-  console.log(`[${ts()}] HR Admin Portal running at http://${bindHost}:${PORT}`);
-  console.log(`[${ts()}]   Knowledge base: ${POLICIES_DIR}`);
-  console.log(`[${ts()}]   Audit log: ${AUDIT_LOG_PATH}`);
-  console.log(
-    `[${ts()}]   Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
+  log("INFO", `HR Admin Portal running at http://${bindHost}:${PORT}`);
+  log("INFO", `  Knowledge base: ${POLICIES_DIR}`);
+  log("INFO", `  Audit log: ${AUDIT_LOG_PATH}`);
+  log(
+    "INFO",
+    `  Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
   );
-  console.log(`[${ts()}]   Supported formats: ${supportedFormats().join(", ")}`);
+  log("INFO", `  Supported formats: ${supportedFormats().join(", ")}`);
 });

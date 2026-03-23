@@ -25,6 +25,7 @@ import {
   isSupported,
   supportedFormats,
 } from "../../../admin-portal/lib/doc-converter.mjs";
+import { overwriteFrontmatter } from "../../../admin-portal/lib/frontmatter.mjs";
 import { inferDocumentMetadata } from "../../../admin-portal/lib/metadata-inference.mjs";
 
 const { values, positionals } = parseArgs({
@@ -103,57 +104,6 @@ function collectSupportedFiles(pathInput) {
 
 const inputFiles = collectSupportedFiles(inputPath);
 console.log(`Found ${inputFiles.length} supported file(s) to convert.\n`);
-
-function overwriteFrontmatter(markdown, updates) {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return markdown;
-  }
-
-  const meta = Object.create(null);
-  for (const line of match[1].split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx <= 0) {
-      continue;
-    }
-    const key = line.slice(0, idx).trim();
-    let val = line.slice(idx + 1).trim();
-    if (val.startsWith('"') && val.endsWith('"')) {
-      val = val.slice(1, -1);
-    }
-    meta[key] = val;
-  }
-
-  const nextMeta = {
-    ...meta,
-    ...Object.fromEntries(
-      Object.entries(updates).filter(([, value]) => value !== undefined && value !== null),
-    ),
-  };
-
-  const orderedKeys = [
-    "title",
-    "source_file",
-    "source_format",
-    "doc_id",
-    "version",
-    "effective_date",
-    "category",
-    "converted_date",
-    "total_pages",
-  ];
-
-  const rendered = orderedKeys
-    .filter((key) => key in nextMeta && String(nextMeta[key]).trim() !== "")
-    .map((key) =>
-      key === "total_pages"
-        ? `${key}: ${nextMeta[key]}`
-        : `${key}: "${String(nextMeta[key]).replaceAll('"', '\\"')}"`,
-    );
-
-  const replacement = `---\n${rendered.join("\n")}\n---`;
-  return markdown.replace(/^---\n[\s\S]*?\n---/, replacement);
-}
 
 let successCount = 0;
 let warningCount = 0;
