@@ -45,11 +45,19 @@ async function convertPdf(buffer, fileName, minCharsPerPage = 20) {
 
     if (pageText.length < minCharsPerPage) {
       warnings.push(
-        `Page ${pageNum}: only ${pageText.length} chars extracted (possible scanned image)`,
+        `第 ${pageNum} 页仅提取到 ${pageText.length} 个字符（可能是扫描件图片，建议上传可编辑版本）`,
       );
     }
 
     pages.push(`## Page ${pageNum}\n\n${pageText || "(no text extracted)"}`);
+  }
+
+  // Add a summary warning if most pages look like scanned images
+  const scannedCount = warnings.length;
+  if (scannedCount > 0 && scannedCount >= pdf.numPages * 0.5) {
+    warnings.unshift(
+      `此文档大部分页面（${scannedCount}/${pdf.numPages}）疑似扫描件，内容提取可能不完整。建议上传可编辑版本（Word 或文字版 PDF）。`,
+    );
   }
 
   return {

@@ -28,6 +28,7 @@ import { basename, extname, join } from "node:path";
 import { env } from "node:process";
 import express from "express";
 import multer from "multer";
+import { CATEGORIES } from "./lib/categories.mjs";
 import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converter.mjs";
 import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 
@@ -40,16 +41,18 @@ const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".ymjhr");
 const POLICIES_DIR = join(STATE_DIR, "memory", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "memory", "hr-admin", "audit-log.jsonl");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
+const BIND_HOST = env.ADMIN_PORTAL_BIND || "";
+
+if (!AUTH_TOKEN) {
+  console.warn(
+    "[WARN] OPENCLAW_WEB_AUTH_TOKEN is not set — Admin Portal will only accept requests from localhost.",
+  );
+}
 
 // Ensure directories exist
 for (const dir of [
   POLICIES_DIR,
-  join(POLICIES_DIR, "leave"),
-  join(POLICIES_DIR, "onboarding"),
-  join(POLICIES_DIR, "attendance"),
-  join(POLICIES_DIR, "compensation"),
-  join(POLICIES_DIR, "training"),
-  join(POLICIES_DIR, "general"),
+  ...CATEGORIES.map((cat) => join(POLICIES_DIR, cat)),
   join(STATE_DIR, "memory", "hr-admin"),
 ]) {
   mkdirSync(dir, { recursive: true });
@@ -78,13 +81,28 @@ const upload = multer({
 });
 
 // ---------------------------------------------------------------------------
+// Health check (no auth required — for load balancer / systemd probes)
+// ---------------------------------------------------------------------------
+
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", service: "hr-admin-portal" });
+});
+
+// ---------------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------------
 
 function authMiddleware(req, res, next) {
-  // Static files are public (login page needs to load)
   if (!AUTH_TOKEN) {
-    return next();
+    // No token configured — only allow localhost connections
+    const ip = req.ip || req.connection?.remoteAddress || "";
+    const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+    if (isLocal) {
+      return next();
+    }
+    return res
+      .status(403)
+      .json({ error: "Auth token not configured. Only localhost access allowed." });
   }
 
   const token = req.headers.authorization?.replace("Bearer ", "") || req.query.token;
@@ -475,6 +493,9 @@ function overwriteFrontmatter(markdown, updates) {
   return markdown.replace(/^---\n[\s\S]*?\n---/, replacement);
 }
 
+// Simple write queue to prevent concurrent appendFileSync from interleaving JSONL lines
+let auditWriteQueue = Promise.resolve();
+
 function appendAuditLog(action, file, details) {
   const entry = {
     timestamp: new Date().toISOString(),
@@ -482,7 +503,10 @@ function appendAuditLog(action, file, details) {
     file,
     details,
   };
-  appendFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + "\n", "utf-8");
+  const line = JSON.stringify(entry) + "\n";
+  auditWriteQueue = auditWriteQueue
+    .then(() => appendFileSync(AUDIT_LOG_PATH, line, "utf-8"))
+    .catch(() => {});
 }
 
 function readAuditLog() {
@@ -525,12 +549,16 @@ app.get(/^\/(upload|documents|audit-log)?$/, (_req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 
-app.listen(PORT, () => {
-  console.log(`HR Admin Portal running at http://localhost:${PORT}`);
-  console.log(`  Knowledge base: ${POLICIES_DIR}`);
-  console.log(`  Audit log: ${AUDIT_LOG_PATH}`);
+// Bind to localhost-only when no auth token is configured
+const bindHost = BIND_HOST || (AUTH_TOKEN ? "0.0.0.0" : "127.0.0.1");
+
+app.listen(PORT, bindHost, () => {
+  const ts = () => new Date().toISOString();
+  console.log(`[${ts()}] HR Admin Portal running at http://${bindHost}:${PORT}`);
+  console.log(`[${ts()}]   Knowledge base: ${POLICIES_DIR}`);
+  console.log(`[${ts()}]   Audit log: ${AUDIT_LOG_PATH}`);
   console.log(
-    `  Auth: ${AUTH_TOKEN ? "enabled (token)" : "disabled (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
+    `[${ts()}]   Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
   );
-  console.log(`  Supported formats: ${supportedFormats().join(", ")}`);
+  console.log(`[${ts()}]   Supported formats: ${supportedFormats().join(", ")}`);
 });

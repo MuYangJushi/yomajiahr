@@ -11,24 +11,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { env } from "node:process";
-
-const KNOWN_CATEGORIES = [
-  "leave",
-  "onboarding",
-  "attendance",
-  "compensation",
-  "training",
-  "general",
-];
-
-const CATEGORY_DOC_ID_PREFIX = {
-  leave: "HR-LEAVE",
-  onboarding: "HR-ONBOARD",
-  attendance: "HR-ATT",
-  compensation: "HR-COMP",
-  training: "HR-TRAIN",
-  general: "HR-GEN",
-};
+import { CATEGORIES as KNOWN_CATEGORIES, CATEGORY_DOC_ID_PREFIX } from "./categories.mjs";
 
 const DOC_ID_CATEGORY_MAP = new Map(
   Object.entries(CATEGORY_DOC_ID_PREFIX).map(([category, prefix]) => [prefix, category]),
@@ -202,13 +185,59 @@ function resolveProviderApiKey(providerId, providerConfig) {
   return "";
 }
 
+function stripJsonComments(text) {
+  // Remove single-line comments (// ...) and block comments (/* ... */)
+  // while preserving strings that contain // or /*
+  let result = "";
+  let i = 0;
+  let inString = false;
+  let stringChar = "";
+  while (i < text.length) {
+    if (inString) {
+      if (text[i] === "\\" && i + 1 < text.length) {
+        result += text[i] + text[i + 1];
+        i += 2;
+        continue;
+      }
+      if (text[i] === stringChar) {
+        inString = false;
+      }
+      result += text[i];
+      i++;
+    } else if (text[i] === '"') {
+      inString = true;
+      stringChar = '"';
+      result += text[i];
+      i++;
+    } else if (text[i] === "/" && i + 1 < text.length && text[i + 1] === "/") {
+      // Single-line comment — skip to end of line
+      while (i < text.length && text[i] !== "\n") {
+        i++;
+      }
+    } else if (text[i] === "/" && i + 1 < text.length && text[i + 1] === "*") {
+      // Block comment — skip to */
+      i += 2;
+      while (i + 1 < text.length && !(text[i] === "*" && text[i + 1] === "/")) {
+        i++;
+      }
+      i += 2; // skip */
+    } else {
+      result += text[i];
+      i++;
+    }
+  }
+  // Also strip trailing commas before } or ]
+  return result.replace(/,\s*([}\]])/g, "$1");
+}
+
 function resolveModelConfig({ stateDir }) {
   const configPath = env.OPENCLAW_CONFIG_PATH || join(stateDir, "ymjhr.json");
   if (!existsSync(configPath)) {
     return null;
   }
   try {
-    const cfg = JSON.parse(readFileSync(configPath, "utf-8"));
+    const raw = readFileSync(configPath, "utf-8");
+    const cfg = JSON.parse(stripJsonComments(raw));
     const primaryModel =
       cfg?.agents?.defaults?.model?.primary || cfg?.agents?.defaults?.models?.primary || "";
     if (!primaryModel || typeof primaryModel !== "string" || !primaryModel.includes("/")) {

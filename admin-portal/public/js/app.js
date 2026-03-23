@@ -64,6 +64,24 @@ navLinks.forEach((a) => {
   });
 });
 
+// Load categories from server and populate filter dropdowns
+async function loadCategories() {
+  try {
+    const res = await apiFetch("/api/categories");
+    const data = await res.json();
+    const select = document.getElementById("doc-filter-category");
+    for (const cat of data.categories || []) {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      select.appendChild(opt);
+    }
+  } catch {
+    // Fallback: filter still works with whatever categories documents return
+  }
+}
+void loadCategories();
+
 // Handle initial hash
 const initialPage = location.hash.replace("#", "") || "upload";
 switchPage(initialPage);
@@ -333,21 +351,7 @@ async function loadAuditLog() {
     params.set("page", auditPage);
     params.set("page_size", 50);
 
-    const token = getAuthToken();
-    if (token) {
-      params.set("token", token);
-    }
-
-    const res = await fetch(`/api/audit-log?${params}`);
-    if (res.status === 401) {
-      const t = prompt("请输入管理员令牌 (OPENCLAW_WEB_AUTH_TOKEN):");
-      if (t) {
-        localStorage.setItem("hr_admin_token", t);
-        void loadAuditLog();
-      }
-      return;
-    }
-
+    const res = await apiFetch(`/api/audit-log?${params}`);
     const data = await res.json();
     renderAuditLog(data);
   } catch (err) {
@@ -425,8 +429,8 @@ document.getElementById("audit-filter-apply").addEventListener("click", () => {
   void loadAuditLog();
 });
 
-// Export CSV
-document.getElementById("export-audit").addEventListener("click", () => {
+// Export CSV — use fetch + Blob to avoid exposing token in URL
+document.getElementById("export-audit").addEventListener("click", async () => {
   const params = new URLSearchParams();
   const action = document.getElementById("audit-filter-action").value;
   const docId = document.getElementById("audit-filter-doc-id").value;
@@ -446,12 +450,21 @@ document.getElementById("export-audit").addEventListener("click", () => {
     params.set("to", to);
   }
 
-  const token = getAuthToken();
-  if (token) {
-    params.set("token", token);
+  try {
+    const res = await apiFetch(`/api/audit-log/export?${params}`);
+    if (!res.ok) {
+      throw new Error("导出失败");
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("导出失败: " + err.message);
   }
-
-  window.open(`/api/audit-log/export?${params}`, "_blank");
 });
 
 // ---------------------------------------------------------------------------
