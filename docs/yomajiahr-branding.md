@@ -16,44 +16,26 @@
 
 ---
 
-## CLI 命令改名
+## CLI 命令别名
 
-### 改动文件
+### 实现方式
 
-**1. `src/cli/cli-name.ts`**
+仅通过 `package.json` 的 `bin` 字段提供 `ymjhr` 命令别名，不修改 OpenClaw 源码：
 
-```diff
-- export const DEFAULT_CLI_NAME = "openclaw";
-- const KNOWN_CLI_NAMES = new Set([DEFAULT_CLI_NAME]);
-- const CLI_PREFIX_RE = /^(?:((?:pnpm|npm|bunx|npx)\s+))?(openclaw)\b/;
-+ export const DEFAULT_CLI_NAME = "ymjhr";
-+ const KNOWN_CLI_NAMES = new Set([DEFAULT_CLI_NAME, "openclaw"]);
-+ const CLI_PREFIX_RE = /^(?:((?:pnpm|npm|bunx|npx)\s+))?(openclaw|ymjhr)\b/;
+```json
+"bin": {
+  "ymjhr": "openclaw.mjs",
+  "openclaw": "openclaw.mjs"
+}
 ```
 
-**2. `package.json`**（bin 字段）
-
-```diff
-  "bin": {
-+   "ymjhr": "openclaw.mjs",
-    "openclaw": "openclaw.mjs"
-  },
-```
-
-**3. `openclaw.mjs`**（错误提示文案）
-
-```diff
-- `openclaw: Node.js v${MIN_NODE_VERSION}+ is required ...`
-+ `ymjhr: Node.js v${MIN_NODE_VERSION}+ is required ...`
-
-- const lines = ["openclaw: missing dist/entry.(m)js (build output)."];
-+ const lines = ["ymjhr: missing dist/entry.(m)js (build output)."];
-```
+CLI 内部自我识别为 `openclaw`（上游默认行为），但用户可以用 `ymjhr` 命令调用。
 
 ### 效果
 
 - `ymjhr gateway run ...` — 产品命令（推荐使用）
 - `openclaw gateway run ...` — 上游命令，仍然兼容
+- CLI 帮助和错误消息中显示 `openclaw`（上游默认行为）
 - 所有子命令和参数保持不变
 
 ### 部署时注册 CLI 命令

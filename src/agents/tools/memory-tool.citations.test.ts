@@ -86,27 +86,6 @@ describe("memory search citations", () => {
     const details = result.details as { results: Array<{ snippet: string }> };
     expect(details.results[0]?.snippet).not.toMatch(/Source:/);
   });
-
-  it("uses the explicit agentId for subagent sessions", async () => {
-    setMemoryBackend("builtin");
-    const cfg = asOpenClawConfig({
-      agents: {
-        list: [
-          { id: "hr-assistant", default: true, memorySearch: { enabled: false } },
-          { id: "hr-policy-rag", memorySearch: { enabled: true } },
-        ],
-      },
-    });
-    const tool = createMemorySearchToolOrThrow({
-      config: cfg,
-      agentSessionKey: "agent:hr-assistant:main:subagent:test",
-      agentId: "hr-policy-rag",
-    });
-
-    const result = await tool.execute("subagent_explicit_agent", { query: "notes" });
-    const details = result.details as { results: Array<{ snippet: string }> };
-    expect(details.results[0]?.snippet).toBeTruthy();
-  });
 });
 
 describe("memory tools", () => {

@@ -59,30 +59,15 @@
         "primary": "minimax/MiniMax-M2.7",
         // "fallbacks": ["openai/gpt-5.1", "anthropic/claude-sonnet-4-5"],
       },
-      "subagents": {
-        "maxSpawnDepth": 2, // orchestrator → sub-agent → worker
-        "maxChildrenPerAgent": 5,
-        "maxConcurrent": 8,
-        "runTimeoutSeconds": 300, // 5 min timeout
-      },
     },
     "list": [
       {
         "id": "hr-assistant",
         "name": "HR小助手",
         "workspace": "~/.ymjhr/workspace-hr-assistant",
-        "skills": ["hr-assistant"],
-        "subagents": {
-          "allowAgents": ["hr-policy-rag"],
-        },
-      },
-      {
-        "id": "hr-policy-rag",
-        "name": "政策问答",
-        "workspace": "~/.ymjhr/workspace-hr-policy-rag",
-        "skills": ["hr-policy-rag"],
+        "skills": ["hr-policy-qa", "hr-general"],
+        // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
         "memorySearch": {
-          // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
           "provider": "openai",
           "model": "text-embedding-v4",
           "fallback": "none",
@@ -140,18 +125,6 @@
         "apiKey": "${MINIMAX_API_KEY}",
         // 保留空数组以通过 schema 校验，实际模型目录仍由 MiniMax 插件补全。
         "models": [],
-      },
-    },
-  },
-
-  // ---------------------------------------------------------------------------
-  // Tool policies (sub-agent 工具权限)
-  // ---------------------------------------------------------------------------
-  "tools": {
-    "subagents": {
-      "tools": {
-        "alsoAllow": ["memory_search", "memory_get"],
-        "deny": ["gateway", "cron", "sessions_send"],
       },
     },
   },

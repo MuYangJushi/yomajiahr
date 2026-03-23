@@ -138,7 +138,6 @@ mkdir -p ~/.ymjhr
 
 # 创建已配置 agent 的 workspace（会放 AGENTS.md / MEMORY.md 等 bootstrap 文件）
 mkdir -p ~/.ymjhr/workspace-hr-assistant
-mkdir -p ~/.ymjhr/workspace-hr-policy-rag
 mkdir -p ~/.ymjhr/workspace-hr-admin
 
 # 创建知识库目录结构
@@ -149,13 +148,13 @@ mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,t
 `~/.ymjhr/workspace-<agentId>`，这样
 workspace、sessions、memory 都集中在 `~/.ymjhr/` 下，便于统一备份和排障。
 
-其中 `hr-policy-rag` 的 `memory_search` 需要通过
+其中 `hr-assistant` 的 `memory_search` 需要通过
 `agents.list[].memorySearch.extraPaths` 显式指向知识库目录。当前模板使用相对
 workspace 的 `../memory/hr-policies`，这样会稳定解析到
 `~/.ymjhr/memory/hr-policies`；不要在这里写 `~/.ymjhr/...`，因为该字段不会展开 `~`，
-会被误当成相对路径，最终表现为知识库“空命中”。
+会被误当成相对路径，最终表现为知识库”空命中”。
 
-当前模板还将 `hr-policy-rag.memorySearch.provider` 显式固定为
+当前模板还将 `hr-assistant.memorySearch.provider` 显式固定为
 `openai`，但实际指向阿里百炼的 OpenAI-compatible embedding 接口：
 
 - `model`: `text-embedding-v4`
@@ -166,9 +165,7 @@ workspace 的 `../memory/hr-policies`，这样会稳定解析到
 如果你是通过 `sudo -iu ymjhr` 切进专用运行用户后执行这些命令，
 这里的 `~/.ymjhr` 实际就是 `/home/ymjhr/.ymjhr`。
 
-当前 Phase 1 运行配置只启用了 `hr-policy-rag` 这个 sub-agent；文档里提到的
-`hr-onboard` 和 `hr-schedule` 仍属于后续扩展规划，等对应 agent 真正落地后，
-再把它们加入 `agents.list` 和 `hr-assistant.subagents.allowAgents`。
+当前 Phase 1 运行配置启用了 `hr-assistant`（员工入口）和 `hr-admin`（管理入口）两个独立 Agent，不使用 Sub-agent。入离职和排班考勤等后续功能将以新增 Skill 的方式扩展到 `hr-assistant`。
 
 ### Step 4: 配置环境变量
 
@@ -184,21 +181,21 @@ nano ~/.ymjhr/.env
 
 需要填写的关键值：
 
-| 变量                          | 说明                                                  | 获取方式               |
-| ----------------------------- | ----------------------------------------------------- | ---------------------- |
-| `MINIMAX_API_KEY`             | MiniMax 国内站模型调用密钥（当前推荐）                | MiniMax 平台           |
-| `MINIMAX_CODE_PLAN_KEY`       | MiniMax Coding Plan 用量查询密钥（可选，但建议填写）  | MiniMax 平台           |
-| `DASHSCOPE_API_KEY`           | `hr-policy-rag` 知识库 embedding 密钥（当前模板必填） | 阿里百炼 / DashScope   |
-| `ANTHROPIC_API_KEY`           | 其他 LLM provider 的 API 密钥（按需填写）             | 从对应平台获取         |
-| `OPENCLAW_GATEWAY_TOKEN`      | Gateway 访问令牌                                      | `openssl rand -hex 32` |
-| `FEISHU_HR_BOT_APP_ID`        | HR小助手 App ID                                       | 飞书开放平台           |
-| `FEISHU_HR_BOT_APP_SECRET`    | HR小助手 App Secret                                   | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_ID`     | HR管理后台 App ID                                     | 飞书开放平台           |
-| `FEISHU_ADMIN_BOT_APP_SECRET` | HR管理后台 App Secret                                 | 飞书开放平台           |
-| `OPENCLAW_WEB_AUTH_TOKEN`     | Web Portal 认证令牌                                   | `openssl rand -hex 32` |
+| 变量                          | 说明                                                 | 获取方式               |
+| ----------------------------- | ---------------------------------------------------- | ---------------------- |
+| `MINIMAX_API_KEY`             | MiniMax 国内站模型调用密钥（当前推荐）               | MiniMax 平台           |
+| `MINIMAX_CODE_PLAN_KEY`       | MiniMax Coding Plan 用量查询密钥（可选，但建议填写） | MiniMax 平台           |
+| `DASHSCOPE_API_KEY`           | `hr-assistant` 知识库 embedding 密钥（当前模板必填） | 阿里百炼 / DashScope   |
+| `ANTHROPIC_API_KEY`           | 其他 LLM provider 的 API 密钥（按需填写）            | 从对应平台获取         |
+| `OPENCLAW_GATEWAY_TOKEN`      | Gateway 访问令牌                                     | `openssl rand -hex 32` |
+| `FEISHU_HR_BOT_APP_ID`        | HR小助手 App ID                                      | 飞书开放平台           |
+| `FEISHU_HR_BOT_APP_SECRET`    | HR小助手 App Secret                                  | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_ID`     | HR管理后台 App ID                                    | 飞书开放平台           |
+| `FEISHU_ADMIN_BOT_APP_SECRET` | HR管理后台 App Secret                                | 飞书开放平台           |
+| `OPENCLAW_WEB_AUTH_TOKEN`     | Web Portal 认证令牌                                  | `openssl rand -hex 32` |
 
 当前 `config/ymjhr.jsonc` 已默认指向 MiniMax 国内 Anthropic 兼容入口
-`https://api.minimaxi.com/anthropic`，同时将 `hr-policy-rag` 的
+`https://api.minimaxi.com/anthropic`，同时将 `hr-assistant` 的
 `memorySearch.provider` 显式固定为阿里百炼的 OpenAI-compatible embedding 配置。
 因此当前模板至少需要补：
 
@@ -220,7 +217,7 @@ nano ~/.ymjhr/.env
 - `agents.list[].memorySearch.remote`
 - `~/.ymjhr/.env` 中对应 provider 的密钥
 
-不要把 `hr-policy-rag.memorySearch.provider` 留给 `auto`，否则当主模型是 MiniMax、
+不要把 `hr-assistant.memorySearch.provider` 留给 `auto`，否则当主模型是 MiniMax、
 但 embedding provider 未配置时，运行时会退回到 FTS-only；对于中文 HR 文档，
 这通常会导致检索命中率明显下降。
 
@@ -257,7 +254,7 @@ console.log('Written to ~/.ymjhr/ymjhr.json');
 
 或者手动创建 `~/.ymjhr/ymjhr.json`。当前模板已经兼容现有 schema，只需保留顶层 `"web"`、`"channels"`、`"agents"` 等节点，并添加 `"gateway": { "mode": "local" }`。当前模板已将各 agent 的 workspace 显式配置为 `~/.ymjhr/workspace-<agentId>`。
 
-如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新主模型 provider，则在 `models.providers` 下继续追加对应配置块即可。知识库 embedding 则单独维护在 `hr-policy-rag.memorySearch` 下，不和主对话模型绑定。
+如果你需要改默认模型或增加 fallback，直接编辑 `agents.defaults.model`；如果要接新主模型 provider，则在 `models.providers` 下继续追加对应配置块即可。知识库 embedding 则单独维护在 `hr-assistant.memorySearch` 下，不和主对话模型绑定。
 
 当前模板还包含两条显式 Feishu account 路由：
 
@@ -282,8 +279,8 @@ Skills 通过目录发现机制加载。引擎按以下优先级扫描 `SKILL.md
 ```bash
 # 可选：复制一份到托管目录
 mkdir -p ~/.ymjhr/skills
-cp -r /opt/ymjhr/skills/hr-assistant   ~/.ymjhr/skills/
-cp -r /opt/ymjhr/skills/hr-policy-rag  ~/.ymjhr/skills/
+cp -r /opt/ymjhr/skills/hr-policy-qa   ~/.ymjhr/skills/
+cp -r /opt/ymjhr/skills/hr-general     ~/.ymjhr/skills/
 cp -r /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/
 ```
 
@@ -293,7 +290,7 @@ cp -r /opt/ymjhr/skills/hr-admin       ~/.ymjhr/skills/
 ymjhr skills list
 ```
 
-应看到 `hr-assistant`、`hr-policy-rag`、`hr-admin` 三个 skill。
+应看到 `hr-policy-qa`、`hr-general`、`hr-admin` 三个 skill。
 
 ### Step 7: 准备空知识库并导入真实政策文档
 

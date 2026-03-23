@@ -19,7 +19,6 @@ echo
 echo "[1/4] Creating directory structure..."
 mkdir -p "$STATE_DIR"
 mkdir -p "$STATE_DIR/workspace-hr-assistant"
-mkdir -p "$STATE_DIR/workspace-hr-policy-rag"
 mkdir -p "$STATE_DIR/workspace-hr-admin"
 mkdir -p "$STATE_DIR/memory/hr-policies/leave"
 mkdir -p "$STATE_DIR/memory/hr-policies/onboarding"
@@ -31,7 +30,7 @@ mkdir -p "$STATE_DIR/memory/hr-admin"
 
 # 2. Copy workspace bootstrap files (AGENTS.md, SOUL.md, IDENTITY.md, CLAUDE.md)
 echo "[2/4] Copying workspace bootstrap files..."
-for agent in hr-assistant hr-policy-rag hr-admin; do
+for agent in hr-assistant hr-admin; do
   src="$REPO_DIR/workspace-$agent"
   dst="$STATE_DIR/workspace-$agent"
   if [ ! -d "$src" ]; then
@@ -73,7 +72,6 @@ echo
 echo "Workspace structure:"
 echo "  $STATE_DIR/"
 echo "  ├── workspace-hr-assistant/"
-echo "  ├── workspace-hr-policy-rag/"
 echo "  ├── workspace-hr-admin/"
 echo "  ├── memory/hr-policies/{leave,onboarding,...}/"
 echo "  ├── memory/hr-admin/"

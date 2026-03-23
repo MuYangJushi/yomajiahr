@@ -22,25 +22,15 @@ const MemoryGetSchema = Type.Object({
   lines: Type.Optional(Type.Number()),
 });
 
-function resolveMemoryToolContext(options: {
-  config?: OpenClawConfig;
-  agentSessionKey?: string;
-  agentId?: string;
-}) {
+function resolveMemoryToolContext(options: { config?: OpenClawConfig; agentSessionKey?: string }) {
   const cfg = options.config;
   if (!cfg) {
     return null;
   }
-  const explicitAgentId =
-    typeof options.agentId === "string" && options.agentId.trim()
-      ? options.agentId.trim()
-      : undefined;
-  const agentId =
-    explicitAgentId ??
-    resolveSessionAgentId({
-      sessionKey: options.agentSessionKey,
-      config: cfg,
-    });
+  const agentId = resolveSessionAgentId({
+    sessionKey: options.agentSessionKey,
+    config: cfg,
+  });
   if (!resolveMemorySearchConfig(cfg, agentId)) {
     return null;
   }
@@ -89,7 +79,6 @@ function createMemoryTool(params: {
 export function createMemorySearchTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  agentId?: string;
 }): AnyAgentTool | null {
   return createMemoryTool({
     options,
@@ -146,7 +135,6 @@ export function createMemorySearchTool(options: {
 export function createMemoryGetTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  agentId?: string;
 }): AnyAgentTool | null {
   return createMemoryTool({
     options,

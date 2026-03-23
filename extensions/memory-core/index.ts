@@ -11,12 +11,10 @@ export default definePluginEntry({
         const memorySearchTool = api.runtime.tools.createMemorySearchTool({
           config: ctx.config,
           agentSessionKey: ctx.sessionKey,
-          agentId: ctx.agentId,
         });
         const memoryGetTool = api.runtime.tools.createMemoryGetTool({
           config: ctx.config,
           agentSessionKey: ctx.sessionKey,
-          agentId: ctx.agentId,
         });
         if (!memorySearchTool || !memoryGetTool) {
           return null;

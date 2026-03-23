@@ -415,13 +415,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       cfgForAgent = cfg;
       isNewSession = !entry;
       const now = Date.now();
-      // Respect an explicit sessionId from the caller so operator-triggered
-      // fresh runs can break out of stale main-session history on demand.
-      const sessionId = resolvedSessionId ?? entry?.sessionId ?? randomUUID();
-      const explicitSessionRollover =
-        Boolean(resolvedSessionId) &&
-        Boolean(entry?.sessionId) &&
-        resolvedSessionId !== entry?.sessionId;
+      const sessionId = entry?.sessionId ?? randomUUID();
       const labelValue = request.label?.trim() || entry?.label;
       const sessionAgent = resolveAgentIdFromSessionKey(canonicalKey);
       spawnedByValue = canonicalizeSpawnedByForAgent(cfg, sessionAgent, entry?.spawnedBy);
@@ -447,7 +441,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       const nextEntryPatch: SessionEntry = {
         sessionId,
         updatedAt: now,
-        sessionFile: explicitSessionRollover ? undefined : entry?.sessionFile,
+        sessionFile: entry?.sessionFile,
         thinkingLevel: entry?.thinkingLevel,
         fastMode: entry?.fastMode,
         verboseLevel: entry?.verboseLevel,
