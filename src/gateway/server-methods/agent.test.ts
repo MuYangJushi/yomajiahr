@@ -737,6 +737,35 @@ describe("gateway agent handler", () => {
     expect(callArgs.runContext?.messageChannel).toBe("webchat");
   });
 
+  it("honors an explicit sessionId for an existing agent main session", async () => {
+    mockMainSessionEntry({
+      sessionId: "existing-session-id",
+      sessionFile: "/tmp/sessions/existing-session-id.jsonl",
+    });
+    const getCapturedEntry = captureUpdatedMainEntry();
+    mocks.agentCommand.mockResolvedValue({
+      payloads: [{ text: "ok" }],
+      meta: { durationMs: 100 },
+    });
+
+    await invokeAgent(
+      {
+        message: "fresh policy lookup",
+        sessionKey: "agent:main:main",
+        sessionId: "fresh-session-id",
+        idempotencyKey: "test-explicit-session-id",
+      },
+      { reqId: "explicit-session-id-1" },
+    );
+
+    await waitForAssertion(() => expect(mocks.agentCommand).toHaveBeenCalled());
+    const call = readLastAgentCommandCall();
+    expect(call?.sessionId).toBe("fresh-session-id");
+    const capturedEntry = getCapturedEntry();
+    expect(capturedEntry?.sessionId).toBe("fresh-session-id");
+    expect(capturedEntry?.sessionFile).toBeUndefined();
+  });
+
   it("handles missing cliSessionIds gracefully", async () => {
     mockMainSessionEntry({});
 
