@@ -517,17 +517,15 @@ sudo npm link  # 确保 ymjhr CLI 指向最新构建（系统包 Node.js 场景�
 # 重启服务
 sudo systemctl restart ymjhr-gateway
 sudo systemctl restart ymjhr-admin
-# 或手动重启
-pkill -f "ymjhr gateway" || true
-nohup ymjhr gateway run --bind loopback --port 18789 --force \
-  > /tmp/ymjhr-gateway.log 2>&1 &
-pkill -f "node server.mjs" || true
-cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 ```
 
 如果仅更新了 skills（SKILL.md / references / assets），不需要重新 build，重启 gateway 即可。
 如果仅更新了 admin-portal，不需要 build，重启 admin-portal 服务即可。
 如果只改了 OpenClaw 内置 Control UI 前端，再额外执行 `pnpm ui:build` 并重启 gateway。
+
+如果服务器已经通过 `systemd` 托管 `ymjhr-gateway` / `ymjhr-admin`，后续请统一使用
+`systemctl` 管理服务，不要再混用手工 `nohup ymjhr gateway run ...` 或
+`nohup node server.mjs ...`。混用后最常见的问题是端口冲突、日志分散到多处，以及很难判断当前到底是哪一套进程在提供服务。
 
 ---
 
@@ -585,6 +583,100 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 
 ---
 
+## systemd 运维速查
+
+以下内容默认服务器已经按本文前面的方式安装了 `ymjhr-gateway.service` 和
+`ymjhr-admin.service`。
+
+### 账号与权限边界
+
+- 推荐使用 `ubuntu` 等管理员账号登录服务器，再通过 `sudo` 管理服务。
+- 建议继续让 `ymjhr` 只作为运行账号，不直接授予 `sudo`。
+- `sudo systemctl start|stop|restart ymjhr-gateway` 是由 `ubuntu` 发起控制动作，但服务进程本身仍以 `ymjhr` 身份运行，因为 unit 文件中显式配置了 `User=ymjhr` 和 `Group=ymjhr`。
+- `ymjhr` 适合用于运行应用级检查命令，例如 `sudo -iu ymjhr ymjhr channels status --probe`。
+
+### 标准服务管理命令
+
+```bash
+sudo systemctl status ymjhr-gateway --no-pager
+sudo systemctl status ymjhr-admin --no-pager
+
+sudo systemctl start ymjhr-gateway
+sudo systemctl start ymjhr-admin
+
+sudo systemctl stop ymjhr-gateway
+sudo systemctl stop ymjhr-admin
+
+sudo systemctl restart ymjhr-gateway
+sudo systemctl restart ymjhr-admin
+
+sudo systemctl is-enabled ymjhr-gateway
+sudo systemctl is-enabled ymjhr-admin
+```
+
+### 标准日志查看方式
+
+如果服务由 `systemd` 托管，优先看 `journalctl`：
+
+```bash
+sudo journalctl -u ymjhr-gateway -n 100 --no-pager
+sudo journalctl -u ymjhr-admin -n 100 --no-pager
+
+sudo journalctl -u ymjhr-gateway -f
+sudo journalctl -u ymjhr-admin -f
+```
+
+补充说明：
+
+- `journalctl` 日志不是单独的应用文件，通常由 `systemd-journald` 存放在 `/var/log/journal/` 或 `/run/log/journal/`。
+- `ubuntu` 这类有 `sudo` 的管理员账号可以直接查看 `journalctl`。
+- `ymjhr` 通常可以查看自己生成的普通文件日志，但默认不一定有权限直接查看完整 systemd journal。
+
+### 其他常见日志位置
+
+- Gateway 手工 `nohup` 日志：`/tmp/ymjhr-gateway.log`
+- Admin Portal 手工 `nohup` 日志：`/tmp/ymjhr-admin.log`
+- 结构化文件日志默认路径：`/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+- Admin Portal 操作审计日志：`~/.ymjhr/memory/hr-admin/audit-log.jsonl`
+
+其中：
+
+- `/tmp/ymjhr-gateway.log` 和 `/tmp/ymjhr-admin.log` 只在手工 `nohup` 启动时出现或持续更新。
+- `/tmp/openclaw/openclaw-YYYY-MM-DD.log` 是 Gateway 自身的结构化文件日志，和 `journalctl` 不是一回事。
+- Admin Portal 页面 `/#audit-log` 查询的是 `audit-log.jsonl` 里的业务操作审计，不是 systemd 运行日志，也不是 Gateway 的完整报错日志。
+
+### 应用级健康检查
+
+```bash
+sudo -iu ymjhr ymjhr channels status --probe
+sudo -iu ymjhr ymjhr skills list
+curl http://127.0.0.1:18789/healthz
+ss -ltnp | grep -E '18789|18790'
+```
+
+### 验证当前到底是不是 systemd 在托管
+
+```bash
+sudo systemctl is-active ymjhr-gateway ymjhr-admin
+sudo systemctl status ymjhr-gateway ymjhr-admin --no-pager
+ps -eo user,pid,cmd | grep 'ymjhr gateway run' | grep -v grep
+ps -eo user,pid,cmd | grep 'server.mjs' | grep -v grep
+```
+
+判断规则：
+
+- `systemctl status` 显示 `active (running)`，说明当前由 `systemd` 托管。
+- `ps` 中对应进程的用户应为 `ymjhr`。
+- 如果 `systemd` 已在托管，就不要再单独执行 `ymjhr gateway run` 或 `nohup node server.mjs`。
+
+### 关于 `ymjhr` CLI 与 systemd 的关系
+
+- `ymjhr gateway run` 会直接启动前台进程，不应与已托管的 systemd 服务混用。
+- 如需启停 systemd 服务，请使用 `sudo systemctl ...`，不要用手工 `run` 代替。
+- 混用最常见的后果是端口被抢占、`--force` 杀掉现有监听、日志同时写入 `journalctl` 和 `/tmp/*.log`，后续排障会非常混乱。
+
+---
+
 ## 故障排查
 
 | 问题                             | 排查方法                                                                     |
@@ -599,3 +691,108 @@ cd admin-portal && nohup node server.mjs > /tmp/ymjhr-admin.log 2>&1 &
 | Gateway 提示缺少 Control UI 资产 | 在 `/opt/ymjhr` 执行 `pnpm ui:build`，然后重启 `ymjhr-gateway`               |
 | 文档上传失败                     | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB             |
 | 审计日志为空                     | 确认 `~/.ymjhr/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限         |
+
+## 异常排查顺序
+
+下面这套顺序适合绝大多数线上问题。建议先确认“服务是否在跑”，再确认“端口和日志”，最后再检查应用配置、渠道连接和业务数据。
+
+### 1. 服务起不来或刚重启后状态异常
+
+```bash
+sudo systemctl status ymjhr-gateway --no-pager
+sudo systemctl status ymjhr-admin --no-pager
+sudo journalctl -u ymjhr-gateway -n 100 --no-pager
+sudo journalctl -u ymjhr-admin -n 100 --no-pager
+```
+
+先看是否存在以下问题：
+
+- unit 配置错误
+- `ExecStart` 路径失效
+- Node.js / `ymjhr` 命令不可用
+- `.env`、`OPENCLAW_STATE_DIR`、`OPENCLAW_CONFIG_PATH` 路径错误
+- 配置 schema 校验失败
+
+如果这里已经报错，不要先去看前端页面或飞书消息，先把服务拉起来。
+
+### 2. 服务显示在跑，但端口没监听或页面打不开
+
+```bash
+ss -ltnp | grep -E '18789|18790'
+curl http://127.0.0.1:18789/healthz
+sudo journalctl -u ymjhr-gateway -n 100 --no-pager
+sudo journalctl -u ymjhr-admin -n 100 --no-pager
+```
+
+重点判断：
+
+- 18789 是否由 gateway 监听
+- 18790 是否由 admin-portal 监听
+- 服务是否反复重启
+- Nginx 或安全组是否挡住了外部访问
+
+### 3. gateway 在跑，但飞书机器人不回复
+
+```bash
+sudo -iu ymjhr ymjhr channels status --probe
+sudo journalctl -u ymjhr-gateway -n 200 --no-pager
+```
+
+重点检查：
+
+- 飞书 `App ID` / `App Secret` 是否正确
+- 对应应用是否已发布
+- WebSocket 模式是否启用
+- `bindings` 是否把账号正确绑定到 agent
+- LLM provider 的 API key 是否可用
+
+### 4. Admin Portal 能打开，但上传、删除、审计页面异常
+
+```bash
+sudo journalctl -u ymjhr-admin -n 200 --no-pager
+ls -l /home/ymjhr/.ymjhr/memory/hr-admin/audit-log.jsonl
+find /home/ymjhr/.ymjhr/memory/hr-policies -maxdepth 2 -type f | head
+```
+
+重点检查：
+
+- `~/.ymjhr/memory/hr-admin/` 是否可写
+- `~/.ymjhr/memory/hr-policies/` 是否存在且权限正确
+- 上传文件格式和大小是否符合约束
+- `OPENCLAW_WEB_AUTH_TOKEN` 是否与当前访问方式一致
+
+### 5. skills 或知识库表现异常
+
+```bash
+sudo -iu ymjhr ymjhr skills list
+find /home/ymjhr/.ymjhr/memory/hr-policies -type f | head -n 20
+```
+
+重点检查：
+
+- skills 是否被正确发现
+- 知识库 Markdown 是否真的落盘
+- frontmatter 是否完整
+- agent workspace 和 `memorySearch.extraPaths` 是否指向正确目录
+
+### 6. 想确认日志到底该看哪一套
+
+```bash
+sudo systemctl status ymjhr-gateway --no-pager
+sudo journalctl -u ymjhr-gateway -n 50 --no-pager
+ls -l /tmp/ymjhr-gateway.log /tmp/ymjhr-admin.log
+ls -lt /tmp/openclaw/ | head
+```
+
+判断规则：
+
+- `systemd` 在托管：优先看 `journalctl`
+- `/tmp/ymjhr-*.log` 有持续更新：说明还存在手工 `nohup` 启动痕迹
+- `/tmp/openclaw/openclaw-YYYY-MM-DD.log`：看结构化业务日志和更细粒度事件
+
+### 7. 排查时的通用原则
+
+- 先确认服务状态，再看端口，再看日志，再看业务配置。
+- 不要一边 `systemctl restart`，一边又手工 `ymjhr gateway run`。
+- 发现日志来源不一致时，先确认当前是否只有一套进程在跑。
+- 需要做应用级检查时，用 `sudo -iu ymjhr ...`；需要管服务时，用 `sudo systemctl ...`。
