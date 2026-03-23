@@ -3,7 +3,7 @@
 ## 知识库目录结构
 
 ```
-memory/hr-policies/
+../data/hr-policies/
 ├── leave/              # 假期制度
 │   └── *.md
 ├── onboarding/         # 入离职
@@ -65,7 +65,7 @@ total_pages: 3 # 原始 PDF 页数
 
 ## 知识库导入边界
 
-政策问答 Agent 只负责检索 `memory/hr-policies/` 中已经存在的 Markdown 知识库，不负责导入或写入文档。
+政策问答 Agent 只负责检索 `../data/hr-policies/` 中已经存在的 Markdown 知识库，不负责导入或写入文档。
 
 如需导入新文档，请改走 `hr-admin` / `admin-portal`：
 

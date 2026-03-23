@@ -7,7 +7,7 @@
 
 ## 知识库位置
 
-- 政策文档：`../memory/hr-policies/`（由 memorySearch.extraPaths 配置）
+- 政策文档：`../data/hr-policies/`（由 memorySearch.extraPaths 配置）
 - 分类目录：leave / onboarding / attendance / compensation / training / general
 
 ## 不可用工具

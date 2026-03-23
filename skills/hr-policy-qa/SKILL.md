@@ -18,7 +18,7 @@ description: HR 政策问答（基于知识库 RAG 检索）。当员工提问�
 
 ### 使用 memory_search
 
-- 搜索路径：`memory/hr-policies/` 及其子目录
+- 搜索路径：`../data/hr-policies/` 及其子目录
 - 优先精确匹配文档编号（如 HR-LEAVE-001）
 - 关键词命中多个文档时，按相关度排序，取 top 3
 - 第一选择永远是直接调用 `memory_search`，不要先用 `exec`、`read` 或其他工具

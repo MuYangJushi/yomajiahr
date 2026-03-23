@@ -38,14 +38,14 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 
 1. 调用 `doc-converter.mjs` 或 `scripts/doc-to-markdown.mjs` 将 PDF、Word、文本转换为 Markdown
 2. 自动分析元数据（文档编号、版本号、生效日期、分类）
-3. 使用 `memory_write` 将 Markdown 写入知识库 `memory/hr-policies/<category>/`
+3. 使用 `memory_write` 将 Markdown 写入知识库 `../data/hr-policies/<category>/`
 4. 确认写入成功，返回文档摘要
 
 对话示例：
 
 ```
 管理员: 转换 /tmp/overtime-policy.pdf 到知识库
-Agent:  已自动识别元数据并写入 memory/hr-policies/attendance/overtime-policy.md
+Agent:  已自动识别元数据并写入 ../data/hr-policies/attendance/overtime-policy.md
         文档编号: HR-ATT-003 | 版本: 1.0 | 生效日期: 2026-04-01
         全员 Bot 现在可以查询到该文档。
 ```
@@ -110,7 +110,7 @@ Agent:  已删除。审计记录已生成。
 
 ### 5. 操作审计日志
 
-所有写操作（上传、更新、删除）自动记录审计日志。审计日志存储为 JSONL 格式（`memory/hr-admin/audit-log.jsonl`），支持两种查看方式：
+所有写操作（上传、更新、删除）自动记录审计日志。审计日志存储为 JSONL 格式（`../data/hr-admin/audit-log.jsonl`），支持两种查看方式：
 
 **方式 A: Admin Portal 审计日志页面（推荐）**
 

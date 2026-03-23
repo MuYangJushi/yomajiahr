@@ -140,18 +140,27 @@ mkdir -p ~/.ymjhr
 mkdir -p ~/.ymjhr/workspace-hr-assistant
 mkdir -p ~/.ymjhr/workspace-hr-admin
 
-# 创建知识库目录结构
-mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
+# 创建 memory search 索引目录
+mkdir -p ~/.ymjhr/indexes
+
+# 创建业务数据目录结构
+mkdir -p ~/.ymjhr/data/hr-policies/{leave,onboarding,attendance,compensation,training,general}
+mkdir -p ~/.ymjhr/data/hr-admin
 ```
 
 当前模板会将已配置 agent 的 workspace 全部显式写到
 `~/.ymjhr/workspace-<agentId>`，这样
 workspace、sessions、memory 都集中在 `~/.ymjhr/` 下，便于统一备份和排障。
 
+当前模板还会把 `hr-assistant` 的 memory search SQLite 索引显式放到
+`~/.ymjhr/indexes/{agentId}.sqlite`，避免继续落回 OpenClaw 默认的
+`~/.openclaw/memory/<agentId>.sqlite`，这样状态目录、知识库和索引都在同一套
+`~/.ymjhr/` 目录树中，便于部署、备份和排障。
+
 其中 `hr-assistant` 的 `memory_search` 需要通过
 `agents.list[].memorySearch.extraPaths` 显式指向知识库目录。当前模板使用相对
-workspace 的 `../memory/hr-policies`，这样会稳定解析到
-`~/.ymjhr/memory/hr-policies`；不要在这里写 `~/.ymjhr/...`，因为该字段不会展开 `~`，
+workspace 的 `../data/hr-policies`，这样会稳定解析到
+`~/.ymjhr/data/hr-policies`；不要在这里写 `~/.ymjhr/...`，因为该字段不会展开 `~`，
 会被误当成相对路径，最终表现为知识库”空命中”。
 
 当前模板还将 `hr-assistant.memorySearch.provider` 显式固定为
@@ -161,6 +170,22 @@ workspace 的 `../memory/hr-policies`，这样会稳定解析到
 - `remote.baseUrl`: `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 这样知识库检索不会再依赖 auto-detect，也能避免在只配置 MiniMax 主模型时退回到效果很差的中文 FTS-only 路径。
+
+另外，当前模板已显式设置：
+
+- `memorySearch.enabled: true`
+- `memorySearch.sources: ["memory"]`
+- `memorySearch.experimental.sessionMemory: false`
+- `memorySearch.sync.watch: true`
+- `memorySearch.sync.onSessionStart: true`
+- `memorySearch.query.hybrid.enabled: true`
+
+这套配置的意图是：
+
+- 只检索共享 memory 和正式知识库，不把员工会话历史混进政策检索
+- 知识库文件变更后自动触发索引更新
+- Agent 启动时先做一次索引同步，降低首次命中旧索引的概率
+- 显式开启 hybrid 检索，兼顾关键词命中和语义相似度
 
 如果你是通过 `sudo -iu ymjhr` 切进专用运行用户后执行这些命令，
 这里的 `~/.ymjhr` 实际就是 `/home/ymjhr/.ymjhr`。
@@ -303,7 +328,8 @@ ymjhr skills list
 运行时知识库初始保持为空，由管理员后续导入真实文档：
 
 ```bash
-mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,training,general}
+mkdir -p ~/.ymjhr/data/hr-policies/{leave,onboarding,attendance,compensation,training,general}
+mkdir -p ~/.ymjhr/data/hr-admin
 ```
 
 实际政策文档可通过以下方式导入：
@@ -311,11 +337,11 @@ mkdir -p ~/.ymjhr/memory/hr-policies/{leave,onboarding,attendance,compensation,t
 ```bash
 # 单个文档（支持 pdf / docx / txt / md）
 node skills/hr-admin/scripts/doc-to-markdown.mjs policy.pdf \
-  --out-dir ~/.ymjhr/memory/hr-policies/
+  --out-dir ~/.ymjhr/data/hr-policies/
 
 # 批量文档（整个目录）
 node skills/hr-admin/scripts/doc-to-markdown.mjs ./docs/ \
-  --out-dir ~/.ymjhr/memory/hr-policies/
+  --out-dir ~/.ymjhr/data/hr-policies/
 ```
 
 命令行脚本也会自动把文档转成 Markdown，并尝试用当前默认模型分析 `doc_id`、`version`、`effective_date` 和分类；如果模型暂时不可用，会回退到规则兜底。
@@ -392,8 +418,8 @@ ymjhr skills list
 
 # 6. 验证知识库 embedding 路径解析正确
 #    hr-assistant 的 workspace 在 ~/.ymjhr/workspace-hr-assistant，
-#    extraPaths 配置为 ../memory/hr-policies，因此实际指向 ~/.ymjhr/memory/hr-policies
-ls ~/.ymjhr/memory/hr-policies/
+#    extraPaths 配置为 ../data/hr-policies，因此实际指向 ~/.ymjhr/data/hr-policies
+ls ~/.ymjhr/data/hr-policies/
 ```
 
 如果你刚刚重启过 `ymjhr-gateway`，建议先等 5 到 10 秒再做健康检查；启动早期日志里短暂出现
@@ -690,7 +716,7 @@ sudo journalctl -u ymjhr-admin -f
 - Gateway 手工 `nohup` 日志：`/tmp/ymjhr-gateway.log`
 - Admin Portal 手工 `nohup` 日志：`/tmp/ymjhr-admin.log`
 - 结构化文件日志默认路径：`/tmp/openclaw/openclaw-YYYY-MM-DD.log`
-- Admin Portal 操作审计日志：`~/.ymjhr/memory/hr-admin/audit-log.jsonl`
+- Admin Portal 操作审计日志：`~/.ymjhr/data/hr-admin/audit-log.jsonl`
 
 其中：
 
@@ -737,13 +763,13 @@ ps -eo user,pid,cmd | grep 'server.mjs' | grep -v grep
 | Gateway 启动失败                 | `tail -n 100 /tmp/ymjhr-gateway.log` 或 `journalctl -u ymjhr-gateway -n 100` |
 | 飞书连接不上                     | 检查 App ID/Secret 是否正确；确认应用已发布；检查 WebSocket 模式已启用       |
 | Skills 未识别                    | `ymjhr skills list` 确认三个 skill 出现；检查软链接是否正确                  |
-| 知识库搜不到文档                 | 确认 `~/.ymjhr/memory/hr-policies/` 下有 .md 文件且含正确 frontmatter        |
+| 知识库搜不到文档                 | 确认 `~/.ymjhr/data/hr-policies/` 下有 .md 文件且含正确 frontmatter          |
 | LLM 无响应                       | 检查 `.env` 中 API key 是否正确；`curl` 测试 API 可达性                      |
 | Web Portal 无法访问              | 确认防火墙开放 18789 端口；检查 `ymjhr.json` 中 `web.enabled: true`          |
 | Admin Portal 无法访问            | 确认端口 18790 开放；`tail -n 100 /tmp/ymjhr-admin.log` 查看日志             |
 | Gateway 提示缺少 Control UI 资产 | 在 `/opt/ymjhr` 执行 `pnpm ui:build`，然后重启 `ymjhr-gateway`               |
 | 文档上传失败                     | 检查文件格式是否支持（PDF/docx/txt/md）；检查文件大小不超过 10MB             |
-| 审计日志为空                     | 确认 `~/.ymjhr/memory/hr-admin/audit-log.jsonl` 文件存在且有写入权限         |
+| 审计日志为空                     | 确认 `~/.ymjhr/data/hr-admin/audit-log.jsonl` 文件存在且有写入权限           |
 
 ## 异常排查顺序
 
@@ -803,14 +829,14 @@ sudo journalctl -u ymjhr-gateway -n 200 --no-pager
 
 ```bash
 sudo journalctl -u ymjhr-admin -n 200 --no-pager
-ls -l /home/ymjhr/.ymjhr/memory/hr-admin/audit-log.jsonl
-find /home/ymjhr/.ymjhr/memory/hr-policies -maxdepth 2 -type f | head
+ls -l /home/ymjhr/.ymjhr/data/hr-admin/audit-log.jsonl
+find /home/ymjhr/.ymjhr/data/hr-policies -maxdepth 2 -type f | head
 ```
 
 重点检查：
 
-- `~/.ymjhr/memory/hr-admin/` 是否可写
-- `~/.ymjhr/memory/hr-policies/` 是否存在且权限正确
+- `~/.ymjhr/data/hr-admin/` 是否可写
+- `~/.ymjhr/data/hr-policies/` 是否存在且权限正确
 - 上传文件格式和大小是否符合约束
 - `OPENCLAW_WEB_AUTH_TOKEN` 是否与当前访问方式一致
 
@@ -818,7 +844,7 @@ find /home/ymjhr/.ymjhr/memory/hr-policies -maxdepth 2 -type f | head
 
 ```bash
 sudo -iu ymjhr ymjhr skills list
-find /home/ymjhr/.ymjhr/memory/hr-policies -type f | head -n 20
+find /home/ymjhr/.ymjhr/data/hr-policies -type f | head -n 20
 ```
 
 重点检查：

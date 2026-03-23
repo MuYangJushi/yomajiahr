@@ -20,13 +20,14 @@ echo "[1/6] Creating directory structure..."
 mkdir -p "$STATE_DIR"
 mkdir -p "$STATE_DIR/workspace-hr-assistant"
 mkdir -p "$STATE_DIR/workspace-hr-admin"
-mkdir -p "$STATE_DIR/memory/hr-policies/leave"
-mkdir -p "$STATE_DIR/memory/hr-policies/onboarding"
-mkdir -p "$STATE_DIR/memory/hr-policies/attendance"
-mkdir -p "$STATE_DIR/memory/hr-policies/compensation"
-mkdir -p "$STATE_DIR/memory/hr-policies/training"
-mkdir -p "$STATE_DIR/memory/hr-policies/general"
-mkdir -p "$STATE_DIR/memory/hr-admin"
+mkdir -p "$STATE_DIR/indexes"
+mkdir -p "$STATE_DIR/data/hr-policies/leave"
+mkdir -p "$STATE_DIR/data/hr-policies/onboarding"
+mkdir -p "$STATE_DIR/data/hr-policies/attendance"
+mkdir -p "$STATE_DIR/data/hr-policies/compensation"
+mkdir -p "$STATE_DIR/data/hr-policies/training"
+mkdir -p "$STATE_DIR/data/hr-policies/general"
+mkdir -p "$STATE_DIR/data/hr-admin"
 
 # 2. Clean up removed workspaces from previous architecture
 echo "[2/6] Cleaning up removed workspaces..."
@@ -36,6 +37,18 @@ for old_ws in workspace-hr-policy-rag; do
     echo "  Removed $STATE_DIR/$old_ws"
   fi
 done
+
+if [ -d "$STATE_DIR/memory/hr-policies" ] && [ ! -e "$STATE_DIR/data/hr-policies" ]; then
+  mkdir -p "$STATE_DIR/data"
+  mv "$STATE_DIR/memory/hr-policies" "$STATE_DIR/data/hr-policies"
+  echo "  Migrated $STATE_DIR/memory/hr-policies -> $STATE_DIR/data/hr-policies"
+fi
+
+if [ -d "$STATE_DIR/memory/hr-admin" ] && [ ! -e "$STATE_DIR/data/hr-admin" ]; then
+  mkdir -p "$STATE_DIR/data"
+  mv "$STATE_DIR/memory/hr-admin" "$STATE_DIR/data/hr-admin"
+  echo "  Migrated $STATE_DIR/memory/hr-admin -> $STATE_DIR/data/hr-admin"
+fi
 
 # 3. Copy workspace bootstrap files (AGENTS.md, SOUL.md, IDENTITY.md, CLAUDE.md)
 echo "[3/6] Copying workspace bootstrap files..."
@@ -105,10 +118,11 @@ echo "Workspace structure:"
 echo "  $STATE_DIR/"
 echo "  ├── ymjhr.json                (synced from config/ymjhr.jsonc)"
 echo "  ├── .env                      (API keys)"
+echo "  ├── indexes/                  (memory search SQLite indexes)"
 echo "  ├── workspace-hr-assistant/"
 echo "  ├── workspace-hr-admin/"
-echo "  ├── memory/hr-policies/{leave,onboarding,...}/"
-echo "  └── memory/hr-admin/"
+echo "  ├── data/hr-policies/{leave,onboarding,...}/"
+echo "  └── data/hr-admin/"
 echo
 echo "Next steps:"
 echo "  1. Edit $STATE_DIR/.env with your API keys"

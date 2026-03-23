@@ -35,7 +35,7 @@ node admin-portal/lib/doc-converter.mjs  # 作为库被 server.mjs 调用
 
 # 或使用管理员侧多格式脚本
 node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
-  --out-dir memory/hr-policies/ \
+  --out-dir ../data/hr-policies/ \
   --category <category>
 ```
 
@@ -65,7 +65,7 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
 
 ## 审计日志格式
 
-审计日志存储在 `memory/hr-admin/audit-log.jsonl`，JSONL 格式追加写入（每行一条 JSON 记录）：
+审计日志存储在 `../data/hr-admin/audit-log.jsonl`，JSONL 格式追加写入（每行一条 JSON 记录）：
 
 ```json
 {"timestamp":"2026-03-22T14:30:00.000Z","action":"UPLOAD","file":"leave-policy-v2.md","details":{"doc_id":"HR-LEAVE-001","version":"2.1","category":"leave","source_format":"PDF"}}
@@ -82,14 +82,14 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
 
 ### 预定义分类
 
-| 分类名       | 说明     | 目录                             |
-| ------------ | -------- | -------------------------------- |
-| leave        | 假期制度 | memory/hr-policies/leave/        |
-| onboarding   | 入离职   | memory/hr-policies/onboarding/   |
-| attendance   | 考勤制度 | memory/hr-policies/attendance/   |
-| compensation | 薪酬福利 | memory/hr-policies/compensation/ |
-| training     | 培训制度 | memory/hr-policies/training/     |
-| general      | 通用制度 | memory/hr-policies/general/      |
+| 分类名       | 说明     | 目录                              |
+| ------------ | -------- | --------------------------------- |
+| leave        | 假期制度 | ../data/hr-policies/leave/        |
+| onboarding   | 入离职   | ../data/hr-policies/onboarding/   |
+| attendance   | 考勤制度 | ../data/hr-policies/attendance/   |
+| compensation | 薪酬福利 | ../data/hr-policies/compensation/ |
+| training     | 培训制度 | ../data/hr-policies/training/     |
+| general      | 通用制度 | ../data/hr-policies/general/      |
 
 ### 新增分类
 

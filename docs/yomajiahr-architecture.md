@@ -67,7 +67,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 
 - Provider: 阿里百炼 DashScope（OpenAI-compatible）
 - Model: `text-embedding-v4`
-- 知识库路径: `../memory/hr-policies`（相对于 workspace）
+- 知识库路径: `../data/hr-policies`（相对于 workspace）
 
 ### hr-admin（管理入口）
 
@@ -90,7 +90,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 ```
                     ┌──────────────────────┐
                     │    政策知识库         │
-                    │ memory/hr-policies/  │
+                    │ data/hr-policies/    │
                     └──────┬───────┬───────┘
                            │       │
                     read   │       │ read + write + delete
@@ -114,7 +114,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 ## 五、知识库架构
 
 ```
-~/.ymjhr/memory/
+~/.ymjhr/data/
 ├── hr-policies/
 │   ├── leave/           # 假期制度
 │   ├── onboarding/      # 入离职流程

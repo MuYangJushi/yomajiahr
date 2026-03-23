@@ -39,8 +39,8 @@ import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 
 const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
 const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".ymjhr");
-const POLICIES_DIR = join(STATE_DIR, "memory", "hr-policies");
-const AUDIT_LOG_PATH = join(STATE_DIR, "memory", "hr-admin", "audit-log.jsonl");
+const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
+const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
 const BIND_HOST = env.ADMIN_PORTAL_BIND || "";
 
@@ -55,7 +55,7 @@ if (!AUTH_TOKEN) {
 for (const dir of [
   POLICIES_DIR,
   ...CATEGORIES.map((cat) => join(POLICIES_DIR, cat)),
-  join(STATE_DIR, "memory", "hr-admin"),
+  join(STATE_DIR, "data", "hr-admin"),
 ]) {
   mkdirSync(dir, { recursive: true });
 }
@@ -226,7 +226,7 @@ app.post("/api/upload", uploadLimiter, upload.single("file"), async (req, res) =
       metadata_source: metadata.source,
       metadata_notes: metadata.notes,
       warnings: [...warnings, ...metadata.warnings],
-      path: `memory/hr-policies/${String(metadata.category)}/${mdName}`,
+      path: `data/hr-policies/${String(metadata.category)}/${mdName}`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

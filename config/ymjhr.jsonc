@@ -68,6 +68,11 @@
         "skills": ["hr-policy-qa", "hr-general"],
         // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
         "memorySearch": {
+          "enabled": true,
+          "sources": ["memory"],
+          "experimental": {
+            "sessionMemory": false,
+          },
           "provider": "openai",
           "model": "text-embedding-v4",
           "fallback": "none",
@@ -75,7 +80,19 @@
             "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "apiKey": "${DASHSCOPE_API_KEY}",
           },
-          "extraPaths": ["../memory/hr-policies"],
+          "store": {
+            "path": "~/.ymjhr/indexes/{agentId}.sqlite",
+          },
+          "sync": {
+            "watch": true,
+            "onSessionStart": true,
+          },
+          "query": {
+            "hybrid": {
+              "enabled": true,
+            },
+          },
+          "extraPaths": ["../data/hr-policies"],
         },
         "tools": {
           "deny": ["memory_write", "memory_delete", "exec"],

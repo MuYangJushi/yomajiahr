@@ -5,8 +5,8 @@
  *
  * Usage:
  *   node doc-to-markdown.mjs <input>            [--out-dir <dir>] [--category <name>]
- *   node doc-to-markdown.mjs path/to/file.docx  --out-dir memory/hr-policies/ --category leave
- *   node doc-to-markdown.mjs path/to/docs/      --out-dir memory/hr-policies/ --category onboarding
+ *   node doc-to-markdown.mjs path/to/file.docx  --out-dir data/hr-policies/ --category leave
+ *   node doc-to-markdown.mjs path/to/docs/      --out-dir data/hr-policies/ --category onboarding
  *
  * Supported inputs:
  *   - PDF (.pdf)
@@ -53,9 +53,9 @@ Supported formats:
   ${supportedFormats().join("\n  ")}
 
 Examples:
-  node doc-to-markdown.mjs policy.pdf --out-dir memory/hr-policies/ --category leave
-  node doc-to-markdown.mjs handbook.docx --out-dir memory/hr-policies/ --category general
-  node doc-to-markdown.mjs ./docs/ --out-dir memory/hr-policies/ --category onboarding`);
+  node doc-to-markdown.mjs policy.pdf --out-dir data/hr-policies/ --category leave
+  node doc-to-markdown.mjs handbook.docx --out-dir data/hr-policies/ --category general
+  node doc-to-markdown.mjs ./docs/ --out-dir data/hr-policies/ --category onboarding`);
   process.exit(0);
 }
 

@@ -10,9 +10,9 @@
 
 ## 知识库位置
 
-- 政策文档：`../memory/hr-policies/`
+- 政策文档：`../data/hr-policies/`
 - 分类目录：leave / onboarding / attendance / compensation / training / general
-- 审计日志：`../memory/hr-admin/audit-log.jsonl`
+- 审计日志：`../data/hr-admin/audit-log.jsonl`
 
 ## 文档转换工具
 

@@ -36,8 +36,8 @@ Agent 层
 └── hr-analytics (数据分析 Agent)           ← Phase 3
 
 数据层
-├── ~/.ymjhr/memory/hr-policies/   知识库（Markdown + YAML frontmatter）
-└── ~/.ymjhr/memory/hr-admin/      审计日志（JSONL）
+├── ~/.ymjhr/data/hr-policies/     知识库（Markdown + YAML frontmatter）
+└── ~/.ymjhr/data/hr-admin/        审计日志（JSONL）
 ```
 
 ## 快速开始
