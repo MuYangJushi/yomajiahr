@@ -146,11 +146,15 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 │   ├── AGENTS.md       # Agent 职责和行为规范
 │   ├── SOUL.md         # 人格和语气定义
 │   ├── IDENTITY.md     # 身份标识
+│   ├── MEMORY.md       # 长期记忆
+│   ├── TOOLS.md        # 环境备忘（可用工具、知识库路径等）
 │   └── CLAUDE.md       # → AGENTS.md 的 symlink
 └── workspace-hr-admin/
     ├── AGENTS.md
     ├── SOUL.md
     ├── IDENTITY.md
+    ├── MEMORY.md
+    ├── TOOLS.md
     └── CLAUDE.md
 ```
 

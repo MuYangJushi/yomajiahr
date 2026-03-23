@@ -230,10 +230,16 @@ nano ~/.ymjhr/.env
 
 ### Step 5: 写入配置
 
-将 `config/ymjhr.jsonc` 转为 JSON 写入配置目录：
+`init-workspace.sh` 会自动将 `config/ymjhr.jsonc` 转为 JSON 写入运行时目录。每次 `git pull` 后重新运行脚本即可同步配置变更：
 
 ```bash
-# 使用 Node 解析 JSONC（支持注释和尾随逗号），写入运行时 JSON
+./scripts/init-workspace.sh
+```
+
+脚本内部使用 Node 解析 JSONC（支持注释和尾随逗号），并注入 `gateway.mode`：
+
+```bash
+# 等效手动命令（脚本已自动执行，一般无需手动运行）
 node -e "
 const fs = require('fs');
 const vm = require('vm');
@@ -385,7 +391,7 @@ ymjhr channels status --probe
 ymjhr skills list
 
 # 6. 验证知识库 embedding 路径解析正确
-#    hr-policy-rag 的 workspace 在 ~/.ymjhr/workspace-hr-policy-rag，
+#    hr-assistant 的 workspace 在 ~/.ymjhr/workspace-hr-assistant，
 #    extraPaths 配置为 ../memory/hr-policies，因此实际指向 ~/.ymjhr/memory/hr-policies
 ls ~/.ymjhr/memory/hr-policies/
 ```
@@ -560,9 +566,25 @@ sudo systemctl restart ymjhr-admin
 
 /opt/ymjhr/                             # 代码仓库（git clone）
 ├── skills/
-│   ├── hr-assistant/                    # 全员 Agent skill
-│   ├── hr-policy-rag/                   # 政策问答 skill + PDF 转换脚本
-│   └── hr-admin/                        # 管理员 skill
+│   ├── hr-policy-qa/                    # 政策问答 skill（hr-assistant 使用）
+│   ├── hr-general/                      # 通用 HR 对话 skill（hr-assistant 使用）
+│   └── hr-admin/                        # 管理员 skill（hr-admin 使用）
+├── workspace-hr-assistant/              # hr-assistant workspace 源文件
+│   ├── AGENTS.md
+│   ├── SOUL.md
+│   ├── IDENTITY.md
+│   ├── MEMORY.md
+│   ├── TOOLS.md
+│   └── CLAUDE.md -> AGENTS.md
+├── workspace-hr-admin/                  # hr-admin workspace 源文件
+│   ├── AGENTS.md
+│   ├── SOUL.md
+│   ├── IDENTITY.md
+│   ├── MEMORY.md
+│   ├── TOOLS.md
+│   └── CLAUDE.md -> AGENTS.md
+├── scripts/
+│   └── init-workspace.sh               # 初始化/同步运行时目录
 ├── admin-portal/                        # Admin Portal 独立 Web 服务
 │   ├── server.mjs                       # Express 服务端
 │   ├── lib/doc-converter.mjs            # 多格式文档转换器
@@ -571,20 +593,27 @@ sudo systemctl restart ymjhr-admin
 │   └── node_modules/                    # npm install 后生成
 ├── config/
 │   ├── .env.ymjhr.example              # 环境变量模板
-│   └── ymjhr.jsonc                     # 配置模板
+│   └── ymjhr.jsonc                     # 配置模板（由 init-workspace.sh 同步到运行时）
+├── docs/                                # 部署与架构文档
 └── dist/                                # 构建产物（pnpm build 后生成）
 
 ~/.ymjhr/                               # Yoma+HR 运行时状态目录
 ├── .env                                 # 环境变量（密钥，不入库）
-├── ymjhr.json                          # 运行时配置
-├── workspace-hr-assistant/              # hr-assistant workspace
+├── ymjhr.json                          # 运行时配置（由 init-workspace.sh 从 config/ymjhr.jsonc 同步）
+├── workspace-hr-assistant/              # hr-assistant workspace（由 init-workspace.sh 从源文件同步）
 │   ├── AGENTS.md
-│   ├── MEMORY.md
 │   ├── SOUL.md
+│   ├── IDENTITY.md
+│   ├── MEMORY.md
 │   ├── TOOLS.md
-│   └── ...
-├── workspace-hr-policy-rag/             # hr-policy-rag workspace
-├── workspace-hr-admin/                  # hr-admin workspace
+│   └── CLAUDE.md -> AGENTS.md
+├── workspace-hr-admin/                  # hr-admin workspace（由 init-workspace.sh 从源文件同步）
+│   ├── AGENTS.md
+│   ├── SOUL.md
+│   ├── IDENTITY.md
+│   ├── MEMORY.md
+│   ├── TOOLS.md
+│   └── CLAUDE.md -> AGENTS.md
 └── memory/
     ├── hr-admin/
     │   └── audit-log.jsonl              # 操作审计日志（JSONL 格式）

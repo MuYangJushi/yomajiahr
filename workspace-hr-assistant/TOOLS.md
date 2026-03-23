@@ -1,0 +1,28 @@
+# TOOLS.md - HR小助手环境备忘
+
+## 可用工具
+
+- `memory_search`：语义检索知识库，用于回答政策问题
+- `memory_get`：按路径读取知识库文档片段
+
+## 知识库位置
+
+- 政策文档：`../memory/hr-policies/`（由 memorySearch.extraPaths 配置）
+- 分类目录：leave / onboarding / attendance / compensation / training / general
+
+## 不可用工具
+
+以下工具已被系统级禁用（tools.deny），不要尝试调用：
+
+- `memory_write`、`memory_delete` — 写操作仅限管理员 Agent
+- `exec` — 本 Agent 无需执行命令
+
+## 渠道
+
+- 飞书 Bot「HR小助手」— 全员可用，WebSocket 长连接
+- Yoma+HR Web Portal — web 界面
+
+## 联系方式（引导用户时使用）
+
+- 人力资源部联系方式：请根据公司实际情况在此补充
+- HRBP 对接方式：请根据公司实际情况在此补充
