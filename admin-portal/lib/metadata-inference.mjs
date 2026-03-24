@@ -96,6 +96,13 @@ function extractHeading(markdown) {
 
 function classifyCategoryHeuristically(text, fileName) {
   const corpus = `${fileName}\n${text}`.toLowerCase();
+  // Handbook-style documents usually span multiple policy areas.
+  // Keep them in the generic bucket unless explicit metadata says otherwise.
+  if (
+    ["员工手册", "手册", "须知", "handbook", "manual"].some((needle) => corpus.includes(needle))
+  ) {
+    return "general";
+  }
   const tests = [
     ["leave", ["年假", "病假", "请假", "休假", "假期", "婚假", "产假", "丧假", "leave"]],
     [
