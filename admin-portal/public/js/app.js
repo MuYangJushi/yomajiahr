@@ -180,6 +180,10 @@ uploadBtn.addEventListener("click", async () => {
     progressFill.style.width = "100%";
     const data = await res.json();
 
+    if (!res.ok) {
+      throw new Error(data.error || `上传失败 (${res.status})`);
+    }
+
     if (data.success) {
       uploadResult.className = "upload-result success";
       let html = `文档上传成功！<br>`;

@@ -16,9 +16,11 @@
 
 ## 文档转换工具
 
+- 对话链路统一优先：`skills/hr-admin/scripts/doc-to-markdown.mjs`
 - Admin Portal 内置转换：`admin-portal/lib/doc-converter.mjs`
-- CLI 转换脚本：`scripts/doc-to-markdown.mjs`
 - 支持格式：PDF (.pdf) / Word (.docx) / 文本 (.txt, .md)
+- 如果消息中出现 `[media attached: /path/to/file]`，优先直接拿这个服务器路径调用脚本
+- 不要临时改用手搓 PDF / DOCX 解析，除非脚本不可用
 
 ## 渠道
 

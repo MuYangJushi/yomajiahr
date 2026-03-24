@@ -36,7 +36,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 
 管理员提供服务器上的文件路径，Agent 执行：
 
-1. 调用 `doc-converter.mjs` 或 `scripts/doc-to-markdown.mjs` 将 PDF、Word、文本转换为 Markdown
+1. 优先调用 `skills/hr-admin/scripts/doc-to-markdown.mjs` 将 PDF、Word、文本转换为 Markdown；仅 Admin Portal 自动上传链路才直接走内置 `doc-converter.mjs`
 2. 自动分析元数据（文档编号、版本号、生效日期、分类）
 3. 使用 `memory_write` 将 Markdown 写入知识库 `../data/hr-policies/<category>/`
 4. 确认写入成功，返回文档摘要
@@ -49,6 +49,12 @@ Agent:  已自动识别元数据并写入 ../data/hr-policies/attendance/overtim
         文档编号: HR-ATT-003 | 版本: 1.0 | 生效日期: 2026-04-01
         全员 Bot 现在可以查询到该文档。
 ```
+
+**对话上传优先约定：**
+
+- 只要管理员消息里出现服务器上的文档路径，或系统把附件注入成 `[media attached: /path/to/file]`
+- 一律优先用 `skills/hr-admin/scripts/doc-to-markdown.mjs <path> --out-dir ../data/hr-policies/`
+- 不要临时自行寻找其他 PDF / DOCX 解析方式，除非脚本不可用且你已向管理员说明
 
 **支持的文档格式：**
 
@@ -132,14 +138,14 @@ Agent:  已删除。审计记录已生成。
 
 ## 工具权限
 
-| 工具             | 权限 | 用途                            |
-| ---------------- | ---- | ------------------------------- |
-| `memory_write`   | 允许 | 写入/更新知识库文档             |
-| `memory_delete`  | 允许 | 删除知识库文档                  |
-| `memory_search`  | 允许 | 搜索知识库（验证写入结果）      |
-| `exec`           | 允许 | 运行 doc-converter.mjs 转换脚本 |
-| `gateway`        | 禁止 | 管理员 Agent 不操作网关         |
-| `sessions_spawn` | 禁止 | 管理员 Agent 无需 Sub-agent     |
+| 工具             | 权限 | 用途                                                   |
+| ---------------- | ---- | ------------------------------------------------------ |
+| `memory_write`   | 允许 | 写入/更新知识库文档                                    |
+| `memory_delete`  | 允许 | 删除知识库文档                                         |
+| `memory_search`  | 允许 | 搜索知识库（验证写入结果）                             |
+| `exec`           | 允许 | 优先运行 `skills/hr-admin/scripts/doc-to-markdown.mjs` |
+| `gateway`        | 禁止 | 管理员 Agent 不操作网关                                |
+| `sessions_spawn` | 禁止 | 管理员 Agent 无需 Sub-agent                            |
 
 ## 回复规范
 
@@ -152,4 +158,4 @@ Agent:  已删除。审计记录已生成。
 
 - 管理操作详细规范：[references/admin-operations.md](references/admin-operations.md)
 - Admin Portal 源码：`admin-portal/`（独立 Web 服务，端口 18790）
-- 多格式 CLI 转换脚本：`scripts/doc-to-markdown.mjs`
+- 多格式 CLI 转换脚本：`skills/hr-admin/scripts/doc-to-markdown.mjs`

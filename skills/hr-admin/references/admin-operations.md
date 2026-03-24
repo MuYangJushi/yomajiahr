@@ -29,17 +29,24 @@
 
 **方式 B: 命令行转换**
 
-```bash
-# 使用独立的多格式转换器
-node admin-portal/lib/doc-converter.mjs  # 作为库被 server.mjs 调用
+对话入口下，只要管理员提供的是服务器文件路径，或渠道把附件注入成 `[media attached: /path/to/file]`，都视为命令行转换场景，统一优先走 `skills/hr-admin/scripts/doc-to-markdown.mjs`。
 
-# 或使用管理员侧多格式脚本
+```bash
+# 管理员侧统一优先脚本
 node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
   --out-dir ../data/hr-policies/ \
   --category <category>
 ```
 
+`admin-portal/lib/doc-converter.mjs` 仅作为 Admin Portal 服务端内部实现，不作为 `hr-admin` 对话链路的首选调用目标。
+
 支持的格式：PDF (.pdf)、Word (.docx)、文本 (.txt, .md)。
+
+执行前建议先确认：
+
+- 输入路径是否真实存在
+- 如文件来自渠道附件，优先直接使用 `[media attached: ...]` 里展示的服务器路径
+- 如目标分类未知，可先转换再让管理员确认分类
 
 转换完成后检查警告：
 

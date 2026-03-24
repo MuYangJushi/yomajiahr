@@ -27,7 +27,7 @@ import {
 import { basename, extname, join } from "node:path";
 import { env } from "node:process";
 import express from "express";
-import multer from "multer";
+import multer, { MulterError } from "multer";
 import { CATEGORIES } from "./lib/categories.mjs";
 import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converter.mjs";
 import { overwriteFrontmatter, parseFrontmatter } from "./lib/frontmatter.mjs";
@@ -43,6 +43,8 @@ const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
 const BIND_HOST = env.ADMIN_PORTAL_BIND || "";
+const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
+const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 
 if (!AUTH_TOKEN) {
   log(
@@ -78,10 +80,10 @@ app.use("/api", (req, _res, next) => {
   next();
 });
 
-// Multer for file uploads (10MB limit)
+// Multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_FILE_BYTES },
   fileFilter: (_req, file, cb) => {
     const ext = extname(normalizeUploadedFilename(file.originalname)).toLowerCase();
     if (isSupported(ext)) {
@@ -231,6 +233,23 @@ app.post("/api/upload", uploadLimiter, upload.single("file"), async (req, res) =
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.use((err, _req, res, next) => {
+  if (!err) {
+    return next();
+  }
+  if (err instanceof MulterError && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      error: `文件过大，当前上传上限为 ${MAX_UPLOAD_FILE_MB}MB。请压缩 PDF 或拆分后重试。`,
+      code: err.code,
+      max_upload_mb: MAX_UPLOAD_FILE_MB,
+    });
+  }
+  if (err instanceof Error) {
+    return res.status(400).json({ error: err.message });
+  }
+  return next(err);
 });
 
 // ---------------------------------------------------------------------------
@@ -445,6 +464,7 @@ app.get("/api/info", (_req, res) => {
     supported_formats: supportedFormats(),
     policies_dir: POLICIES_DIR,
     auth_enabled: Boolean(AUTH_TOKEN),
+    max_upload_mb: MAX_UPLOAD_FILE_MB,
   });
 });
 
@@ -548,5 +568,6 @@ app.listen(PORT, bindHost, () => {
     "INFO",
     `  Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
   );
+  log("INFO", `  Max upload size: ${MAX_UPLOAD_FILE_MB}MB`);
   log("INFO", `  Supported formats: ${supportedFormats().join(", ")}`);
 });
