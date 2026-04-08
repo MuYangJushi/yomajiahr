@@ -1,5 +1,5 @@
 // Yoma+HR 智能助手 — 配置文件
-// 使用方法: 写入 ~/.ymjhr/ymjhr.json（通过 OPENCLAW_CONFIG_PATH 指定）
+// 使用方法: 写入 ~/.openclaw/openclaw.json（openclaw 默认路径）
 {
   "web": {
     "enabled": true,
@@ -64,7 +64,7 @@
       {
         "id": "hr-assistant",
         "name": "HR小助手",
-        "workspace": "~/.ymjhr/workspace-hr-assistant",
+        "workspace": "~/.openclaw/workspaces/hr-assistant",
         "skills": ["hr-policy-qa", "hr-general"],
         // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
         "memorySearch": {
@@ -80,9 +80,6 @@
             "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "apiKey": "${DASHSCOPE_API_KEY}",
           },
-          "store": {
-            "path": "~/.ymjhr/indexes/{agentId}.sqlite",
-          },
           "sync": {
             "watch": true,
             "onSessionStart": true,
@@ -92,7 +89,7 @@
               "enabled": true,
             },
           },
-          "extraPaths": ["../data/hr-policies"],
+          "extraPaths": ["../../data/hr-policies"],
         },
         "tools": {
           "deny": ["memory_write", "memory_delete", "exec"],
@@ -101,7 +98,7 @@
       {
         "id": "hr-admin",
         "name": "HR管理后台",
-        "workspace": "~/.ymjhr/workspace-hr-admin",
+        "workspace": "~/.openclaw/workspaces/hr-admin",
         "skills": ["hr-admin"],
       },
     ],

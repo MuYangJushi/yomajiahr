@@ -1,136 +1,54 @@
 # Yoma+HR 品牌命名指南
 
-本文档记录项目从上游 `openclaw` 命名体系到 `Yoma+HR` / `ymjhr` 产品品牌的所有命名变更。
+## 命名策略
 
----
+| 层级           | 名称       | 用途                           | 示例                                           |
+| -------------- | ---------- | ------------------------------ | ---------------------------------------------- |
+| **品牌显示名** | `Yoma+HR`  | 文档标题、UI 界面、描述性文字  | "Yoma+HR 智能助手"                             |
+| **引擎层**     | `openclaw` | CLI 命令、npm 包、环境变量名   | `openclaw gateway run`、`OPENCLAW_STATE_DIR`   |
+| **项目目录**   | `yomajiahr`| 代码仓库、部署路径             | `/opt/yomajiahr/`                              |
 
-## 命名策略：三层命名
+**核心原则**：直接使用原生 openclaw，不修改源码，不创建命令别名。所有定制通过配置文件、workspace 和 skills 实现。
 
-| 层级                   | 名称       | 用途                                     | 示例                                           |
-| ---------------------- | ---------- | ---------------------------------------- | ---------------------------------------------- |
-| **品牌显示名**         | `Yoma+HR`  | 文档标题、UI 界面、描述性文字            | "Yoma+HR 智能助手"                             |
-| **技术命令名**         | `ymjhr`    | CLI 命令、目录路径、systemd 服务名、日志 | `ymjhr gateway run`、`~/.ymjhr/`               |
-| **引擎层**（保持不变） | `openclaw` | 上游运行时，环境变量名                   | `OPENCLAW_STATE_DIR`、`OPENCLAW_GATEWAY_TOKEN` |
+## CLI 命令
 
-**核心原则**：环境变量的**名称**保持 `OPENCLAW_*` 不变，但它们的**值**使用 `ymjhr` 路径。
-
----
-
-## CLI 命令别名
-
-### 实现方式
-
-仅通过 `package.json` 的 `bin` 字段提供 `ymjhr` 命令别名，不修改 OpenClaw 源码：
-
-```json
-"bin": {
-  "ymjhr": "openclaw.mjs",
-  "openclaw": "openclaw.mjs"
-}
-```
-
-CLI 内部自我识别为 `openclaw`（上游默认行为），但用户可以用 `ymjhr` 命令调用。
-
-### 效果
-
-- `ymjhr gateway run ...` — 产品命令（推荐使用）
-- `openclaw gateway run ...` — 上游命令，仍然兼容
-- CLI 帮助和错误消息中显示 `openclaw`（上游默认行为）
-- 所有子命令和参数保持不变
-
-### 部署时注册 CLI 命令
-
-构建完成后，通过 `npm link` 将 `ymjhr` 注册到系统 PATH：
+直接使用 `openclaw` 命令（通过 `npm install -g openclaw` 安装）：
 
 ```bash
-cd /opt/yomajiahr
-pnpm install
-pnpm build
-npm link    # 注册 ymjhr 和 openclaw 到全局 PATH
+openclaw gateway run --bind loopback --port 18789
+openclaw channels status --probe
+openclaw skills list
 ```
 
-验证：
+## 运行时目录
 
-```bash
-ymjhr --version
-```
+使用 openclaw 默认目录 `~/.openclaw/`：
 
----
+| 路径 | 说明 |
+|------|------|
+| `~/.openclaw/openclaw.json` | 运行时配置 |
+| `~/.openclaw/.env` | API 密钥 |
+| `~/.openclaw/workspaces/hr-assistant/` | 员工 Agent workspace |
+| `~/.openclaw/workspaces/hr-admin/` | 管理 Agent workspace |
+| `~/.openclaw/skills/` | HR Skills |
+| `~/.openclaw/memory/` | 语义索引（openclaw 默认） |
+| `~/.openclaw/data/hr-policies/` | 知识库文档 |
+| `~/.openclaw/data/hr-admin/` | 审计日志 |
 
-## 部署层命名对照表
+## systemd 服务
 
-### systemd 服务
+| 服务 | 说明 |
+|------|------|
+| `openclaw-gateway.service` | Gateway 服务 |
+| `openclaw-admin.service` | Admin Portal 服务 |
 
-| 旧名                                        | 新名                               |
-| ------------------------------------------- | ---------------------------------- |
-| `openclaw-hr-gateway.service`               | `ymjhr-gateway.service`            |
-| `openclaw-hr-admin.service`                 | `ymjhr-admin.service`              |
-| `Description=OpenClaw HR Assistant Gateway` | `Description=Yoma+HR Gateway`      |
-| `Description=OpenClaw HR Admin Portal`      | `Description=Yoma+HR Admin Portal` |
-
-### 系统用户
-
-| 旧名                               | 新名                         |
-| ---------------------------------- | ---------------------------- |
-| `User=openclaw` / `Group=openclaw` | `User=ymjhr` / `Group=ymjhr` |
-| `useradd ... openclaw`             | `useradd ... ymjhr`          |
-
-### 运行时目录
-
-| 旧路径                      | 新路径                | 配置方式                      |
-| --------------------------- | --------------------- | ----------------------------- |
-| `~/.openclaw/`              | `~/.ymjhr/`           | `OPENCLAW_STATE_DIR=~/.ymjhr` |
-| `/home/openclaw/.openclaw/` | `/home/ymjhr/.ymjhr/` | systemd EnvironmentFile       |
-
-### 日志路径
-
-| 旧路径                         | 新路径                   |
-| ------------------------------ | ------------------------ |
-| `/tmp/openclaw-hr-gateway.log` | `/tmp/ymjhr-gateway.log` |
-| `/tmp/openclaw-hr-admin.log`   | `/tmp/ymjhr-admin.log`   |
-
-### CLI 命令
-
-| 旧命令                                       | 新命令                          |
-| -------------------------------------------- | ------------------------------- |
-| `node dist/index.js gateway run ...`         | `ymjhr gateway run ...`         |
-| `node dist/index.js channels status --probe` | `ymjhr channels status --probe` |
-| `node dist/index.js skills list`             | `ymjhr skills list`             |
-
-### 代码仓库部署路径
-
-| 旧路径               | 新路径            |
-| -------------------- | ----------------- |
-| `/opt/hr-assistant/` | `/opt/yomajiahr/` |
-
----
-
-## 配置文件重命名
-
-| 旧文件名                             | 新文件名                    |
-| ------------------------------------ | --------------------------- |
-| `config/openclaw.hr-assistant.jsonc` | `config/ymjhr.jsonc`        |
-| `config/.env.hr-assistant.example`   | `config/.env.ymjhr.example` |
-
----
-
-## 文档标题更新
-
-| 文件                                   | 旧标题                           | 新标题                       |
-| -------------------------------------- | -------------------------------- | ---------------------------- |
-| `docs/yomajiahr-architecture.md`       | OpenClaw HR 智能助手             | Yoma+HR 智能助手             |
-| `docs/design/yomajiahr_review.md`      | OpenClaw HR 智能助手方案评审意见 | Yoma+HR 智能助手方案评审意见 |
-| `docs/design/yomajiahr_fixed.html`     | OpenClaw HR 智能助手 v2.0        | Yoma+HR 智能助手 v2.0        |
-| `docs/design/yomajiahr_optimized.html` | OpenClaw HR 智能助手             | Yoma+HR 智能助手             |
-
----
+服务以 `ubuntu` 用户运行，不需要专用系统账号。
 
 ## 不改动的内容
 
-| 项目                          | 原因                             |
-| ----------------------------- | -------------------------------- |
-| `OPENCLAW_*` 环境变量名称     | 源码硬编码，改动成本高且影响升级 |
-| `openclaw` npm 包名           | 上游依赖                         |
-| `openclaw` CLI 命令           | 保留兼容，与 `ymjhr` 双命令共存  |
-| 飞书 Bot 中文名（HR小助手等） | 已经是独立品牌                   |
-| `openclaw.mjs` 入口文件名     | 上游文件，ymjhr bin 指向同一文件 |
+| 项目 | 原因 |
+|------|------|
+| `OPENCLAW_*` 环境变量名称 | openclaw 原生约定 |
+| `openclaw` CLI 命令 | 原生安装，不创建别名 |
+| `openclaw` npm 包名 | 上游依赖 |
+| 飞书 Bot 中文名（HR小助手等） | 面向用户的独立品牌 |

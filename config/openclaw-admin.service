@@ -4,16 +4,16 @@ After=network.target
 
 [Service]
 Type=simple
-User=ymjhr
-Group=ymjhr
-WorkingDirectory=/opt/ymjhr/admin-portal
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/yomajiahr/admin-portal
 ExecStart=/usr/bin/node server.mjs
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
 Environment=ADMIN_PORTAL_PORT=18790
-Environment=OPENCLAW_STATE_DIR=/home/ymjhr/.ymjhr
-EnvironmentFile=/home/ymjhr/.ymjhr/.env
+Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
+EnvironmentFile=/home/ubuntu/.openclaw/.env
 
 [Install]
 WantedBy=multi-user.target

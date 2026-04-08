@@ -114,7 +114,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 ## 五、知识库架构
 
 ```
-~/.ymjhr/data/
+~/.openclaw/data/
 ├── hr-policies/
 │   ├── leave/           # 假期制度
 │   ├── onboarding/      # 入离职流程
@@ -141,15 +141,15 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 每个 Agent 的 Workspace 包含身份和行为定义文件：
 
 ```
-~/.ymjhr/
-├── workspace-hr-assistant/
+~/.openclaw/
+├── workspaces/hr-assistant/
 │   ├── AGENTS.md       # Agent 职责和行为规范
 │   ├── SOUL.md         # 人格和语气定义
 │   ├── IDENTITY.md     # 身份标识
 │   ├── MEMORY.md       # 长期记忆
 │   ├── TOOLS.md        # 环境备忘（可用工具、知识库路径等）
 │   └── CLAUDE.md       # → AGENTS.md 的 symlink
-└── workspace-hr-admin/
+└── workspaces/hr-admin/
     ├── AGENTS.md
     ├── SOUL.md
     ├── IDENTITY.md
@@ -176,9 +176,11 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 
 ## 八、不修改 OpenClaw 源码
 
-Yoma+HR 不修改 OpenClaw 核心源码，确保可跟进上游更新：
+Yoma+HR 不包含 OpenClaw 源码，直接使用 `npm install -g openclaw` 安装的原生版本：
 
-- CLI 命名：通过 `package.json` 的 `bin.ymjhr` 提供命令别名
+- CLI：直接使用 `openclaw` 命令，不创建别名
 - 配置：通过 `OPENCLAW_CONFIG_PATH` 指向自定义配置文件
-- Skills：放在 `skills/` 目录，OpenClaw 自动加载
+- Skills：复制到 `~/.openclaw/skills/`，OpenClaw 自动发现
 - Workspace：通过 Agent 配置中的 `workspace` 字段指定
+- 运行时目录：使用 openclaw 默认的 `~/.openclaw/`
+- 服务账号：使用 `ubuntu` 用户，不需要专用系统账号
