@@ -9,7 +9,7 @@
  *   - Audit log viewer with filtering and CSV export
  *
  * Usage:
- *   node server.mjs                         # defaults: port 18790, ~/.ymjhr
+ *   node server.mjs                         # defaults: port 18790, ~/.openclaw
  *   PORT=3000 node server.mjs               # custom port
  *   OPENCLAW_STATE_DIR=/data node server.mjs # custom state dir
  */
@@ -38,7 +38,7 @@ import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 // ---------------------------------------------------------------------------
 
 const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
-const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".ymjhr");
+const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".openclaw");
 const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";

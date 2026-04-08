@@ -2,127 +2,120 @@
 
 基于 [OpenClaw](https://github.com/openclaw/openclaw) 构建的企业 HR 多 Agent 智能系统，通过飞书 Bot + Web 界面为全员提供 HR 自助服务。
 
+> 本仓库只包含 HR 定制配置（Agent workspace、Skills、配置文件和 Admin Portal），不包含 openclaw 源码。openclaw 通过 `npm install -g openclaw` 安装。
+
 ## 功能特性
 
 | 模块       | 说明                                   | 状态       |
 | ---------- | -------------------------------------- | ---------- |
-| 政策问答   | RAG 检索知识库，回答员工 HR 政策问题   | Phase 1 ✅ |
-| 知识库管理 | 管理员上传/更新/删除政策文档，审计日志 | Phase 1 ✅ |
+| 政策问答   | RAG 检索知识库，回答员工 HR 政策问题   | Phase 1    |
+| 知识库管理 | 管理员上传/更新/删除政策文档，审计日志 | Phase 1    |
 | 入离职管理 | 入职引导、离职流程、转正提醒           | Phase 2    |
-| 招聘助手   | 简历筛选、面试安排、招聘进度跟踪       | Phase 2    |
 | 排班考勤   | 请假申请、调班、打卡异常处理           | Phase 3    |
-| 数据分析   | HR 数据看板、人员统计、趋势分析        | Phase 3    |
 
-## 架构概览
-
-采用 **B+C 混合架构** — Sub-agent 统一入口 + 独立 Bot 权限隔离：
+## 架构
 
 ```
-前端入口
-├── 飞书 Bot 1: HR小助手（全员）
-├── 飞书 Bot 2: 招聘助手（招聘团队）      ← Phase 2
-├── 飞书 Bot 3: HR数据分析师（管理层）    ← Phase 3
-├── 飞书 Bot 4: HR管理后台（HR管理员）
-├── Web Portal (:18789)
-└── Admin Portal (:18790)
-
-Agent 层
-├── hr-assistant (orchestrator)
-│   ├── hr-policy-rag (政策问答 Sub-agent, 只读)
-│   ├── hr-onboard (入离职 Sub-agent)       ← Phase 2
-│   └── hr-schedule (排班考勤 Sub-agent)    ← Phase 3
-├── hr-admin (管理员 Agent, 知识库读写)
-├── hr-recruit (招聘 Agent)                 ← Phase 2
-└── hr-analytics (数据分析 Agent)           ← Phase 3
-
-数据层
-├── ~/.ymjhr/data/hr-policies/     知识库（Markdown + YAML frontmatter）
-└── ~/.ymjhr/data/hr-admin/        审计日志（JSONL）
+          飞书 Bot 1          飞书 Bot 4
+         (HR小助手)          (HR管理后台)
+              |                   |
+              v                   v
+        hr-assistant          hr-admin          Admin Portal
+        Skills:               Skill:            (:18790)
+        - hr-policy-qa        - hr-admin
+        - hr-general
+              |                   |
+              v                   v
+        memory_search         memory_write
+        (知识库只读)          (知识库读写)
+              |                   |
+              +-------+-----------+
+                      |
+               ~/.openclaw/data/hr-policies/
 ```
 
-## 快速开始
+- **hr-assistant**：员工入口，绑定飞书 Bot 1，只读知识库
+- **hr-admin**：管理入口，绑定飞书 Bot 4，读写知识库 + 审计日志
+- **Admin Portal**：独立 Web 服务（端口 18790），文档上传/管理/审计日志
 
-### 前置条件
+## 前置条件
 
-- Node.js 22+
-- pnpm 10+
-- 飞书开放平台自建应用（至少 2 个 Bot）
-- LLM API Key（Anthropic / OpenAI）
+- curl（用于自动安装 Node.js）
+- Node.js >= 22（没有也可以，`install.sh` 会自动安装）
 
-### 安装与启动
+## 一键部署
 
 ```bash
-# 1. 克隆并构建
-git clone https://github.com/MorrisYangJushi/yomajiahr.git
+git clone <repo-url> yomajiahr
 cd yomajiahr
-pnpm install && pnpm build
-
-# 2. 注册 CLI 命令
-npm link    # 注册 ymjhr 到全局 PATH
-
-# 3. 配置环境变量
-cp config/.env.ymjhr.example ~/.ymjhr/.env
-# 编辑 ~/.ymjhr/.env 填入 API Key、飞书 Bot 凭据等
-
-# 4. 生成配置文件
-# 参考 config/ymjhr.jsonc，去掉注释后写入 ~/.ymjhr/ymjhr.json
-
-# 5. 链接 Skills
-ln -s /path/to/yomajiahr/skills/hr-assistant   ~/.ymjhr/skills/hr-assistant
-ln -s /path/to/yomajiahr/skills/hr-policy-rag  ~/.ymjhr/skills/hr-policy-rag
-ln -s /path/to/yomajiahr/skills/hr-admin       ~/.ymjhr/skills/hr-admin
-
-# 6. 启动 Gateway
-ymjhr gateway run --bind loopback --port 18789
-
-# 7. 启动 Admin Portal
-cd admin-portal && npm install && node server.mjs
+./install.sh
 ```
 
-详细部署步骤请参考 [部署指南](docs/yomajiahr-deployment.md)。
+`install.sh` 会自动：
+1. 安装 openclaw（`npm install -g openclaw@latest`）
+2. 创建 `~/.openclaw/` 目录结构
+3. 复制 workspace 文件和 skills
+4. 编译配置文件（JSONC -> JSON）
+5. 复制 .env 模板
+6. 安装 admin-portal 依赖
 
-## 项目结构
+### 配置 API Keys
+
+编辑 `~/.openclaw/.env`，填入实际的 API 密钥：
+
+```bash
+vi ~/.openclaw/.env
+```
+
+### 启动服务
+
+```bash
+# 启动 gateway
+OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw gateway run --bind loopback --port 18789
+
+# 启动 admin portal（另一个终端）
+cd admin-portal && node server.mjs
+```
+
+### systemd 部署（Linux）
+
+```bash
+./install.sh --systemd
+sudo systemctl enable --now openclaw-gateway
+sudo systemctl enable --now openclaw-admin
+```
+
+## 目录结构
 
 ```
 yomajiahr/
-├── openclaw.mjs              # CLI 入口（ymjhr / openclaw 双命令）
-├── src/cli/cli-name.ts       # CLI 命名逻辑
-├── config/
-│   ├── ymjhr.jsonc           # Agent/Channel/Tool 策略配置模板
-│   └── .env.ymjhr.example    # 环境变量模板
-├── skills/
-│   ├── hr-assistant/         # 全员 orchestrator Agent
-│   ├── hr-policy-rag/        # 政策问答 Sub-agent（含示例政策文档）
-│   └── hr-admin/             # 管理员 Agent
-├── admin-portal/
-│   ├── server.mjs            # Admin Portal Express 服务
-│   ├── lib/doc-converter.mjs # 文档转换器（PDF/Word/Text → Markdown）
-│   └── public/               # 前端 SPA
-├── docs/
-│   ├── yomajiahr-architecture.md  # 架构设计
-│   ├── yomajiahr-deployment.md    # 部署指南
-│   ├── yomajiahr-branding.md      # 品牌命名指南
-│   └── design/                    # 设计文档
-└── src/                           # OpenClaw 引擎源码
+  install.sh              # 一键部署脚本
+  config/
+    openclaw.jsonc         # gateway 配置模板
+    .env.example           # 环境变量模板
+    openclaw-*.service     # systemd 服务文件
+  workspaces/
+    hr-assistant/          # 员工 Agent workspace 模板
+    hr-admin/              # 管理 Agent workspace 模板
+  skills/
+    hr-policy-qa/          # 政策问答 Skill
+    hr-admin/              # 知识库管理 Skill
+    hr-general/            # 通用对话 Skill
+  admin-portal/            # 独立 Admin Web 服务
+  docs/                    # 项目文档
 ```
 
-## 命名约定
+## 更新
 
-| 层级       | 名称       | 用途                                 |
-| ---------- | ---------- | ------------------------------------ |
-| 品牌显示名 | `Yoma+HR`  | 文档标题、UI 界面                    |
-| 技术命令名 | `ymjhr`    | CLI 命令、目录路径、systemd 服务     |
-| 引擎层     | `openclaw` | 环境变量名（`OPENCLAW_*`）、npm 包名 |
+```bash
+cd yomajiahr
+git pull
+./install.sh    # 重新部署配置和 skills
+```
 
-详见 [品牌命名指南](docs/yomajiahr-branding.md)。
+## 文档
 
-## 相关文档
-
-- [架构设计](docs/yomajiahr-architecture.md) — B+C 混合架构、Sub-agent handoff 协议
-- [部署指南](docs/yomajiahr-deployment.md) — 从零到生产的完整流程
-- [品牌命名指南](docs/yomajiahr-branding.md) — CLI/目录/服务命名对照表
-- [设计文档](docs/design/) — 原始需求与方案评审
-
-## License
-
-[MIT](LICENSE)
+- [架构说明](docs/architecture.md)
+- [部署指南](docs/deployment.md)
+- [品牌命名](docs/branding.md)
+- [重构计划](docs/restructure-plan.md)

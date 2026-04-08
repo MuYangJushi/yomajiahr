@@ -238,7 +238,7 @@ function stripJsonComments(text) {
 }
 
 function resolveModelConfig({ stateDir }) {
-  const configPath = env.OPENCLAW_CONFIG_PATH || join(stateDir, "ymjhr.json");
+  const configPath = env.OPENCLAW_CONFIG_PATH || join(stateDir, "openclaw.json");
   if (!existsSync(configPath)) {
     return null;
   }

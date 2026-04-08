@@ -63,7 +63,7 @@ const inputPath = resolve(positionals[0]);
 const outDir = resolve(values["out-dir"]);
 const category = values.category;
 const targetDir = category ? join(outDir, category) : outDir;
-const stateDir = env.OPENCLAW_STATE_DIR || join(env.HOME || "", ".ymjhr");
+const stateDir = env.OPENCLAW_STATE_DIR || join(env.HOME || "", ".openclaw");
 
 mkdirSync(targetDir, { recursive: true });
 
