@@ -60,7 +60,7 @@ fi
 if [ ! -d "$REPO_DIR/workspaces" ] || [ ! -d "$REPO_DIR/skills" ]; then
   echo "[0/8] Remote execution detected — cloning repo to $INSTALL_DIR..."
   if [ ! -d "$INSTALL_DIR/.git" ]; then
-    sudo git clone "$GITHUB_REPO_URL" "$INSTALL_DIR"
+    sudo git clone --depth=1 "$GITHUB_REPO_URL" "$INSTALL_DIR"
     sudo chown -R "$(id -u):$(id -g)" "$INSTALL_DIR"
   else
     echo "  $INSTALL_DIR already exists, skipping clone"
