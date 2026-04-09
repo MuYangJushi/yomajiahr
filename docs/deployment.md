@@ -4,6 +4,24 @@
 
 > 本项目不包含 openclaw 源码。openclaw 通过 `npm install -g openclaw` 安装，本仓库只包含 HR Agent 配置和 Admin Portal。
 
+## 一条命令部署（推荐）
+
+在全新 Ubuntu 24 服务器上，只需执行：
+
+```bash
+# 生产部署（安装 systemd 服务，开机自启）
+curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
+
+# 测试部署（不安装 systemd，手动启动）
+curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
+```
+
+脚本会自动完成：安装 curl/git → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 安装 openclaw → 创建目录结构 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+
+完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书 Bot（见飞书开放平台准备）→ 启动服务。
+
+---
+
 ## 前置条件
 
 ### 服务器要求

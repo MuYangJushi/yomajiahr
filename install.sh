@@ -3,8 +3,13 @@
 # Yoma+HR one-click deployment script.
 #
 # Usage:
+#   # Remote (from GitHub, fresh server):
+#   curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
+#
+#   # Local:
 #   ./install.sh                    # install with defaults (~/.openclaw)
 #   ./install.sh --systemd          # also install systemd services (Linux)
+#   ./install.sh --state-dir=/path  # custom state dir
 #
 set -euo pipefail
 
@@ -12,6 +17,8 @@ set -euo pipefail
 # Config
 # ---------------------------------------------------------------------------
 
+GITHUB_REPO_URL="https://github.com/MorrisYangJushi/yomajiahr.git"
+INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIN_NODE_MAJOR=22
@@ -31,6 +38,35 @@ echo "============================================="
 echo "Source repo:  $REPO_DIR"
 echo "State dir:    $STATE_DIR"
 echo
+
+# ---------------------------------------------------------------------------
+# Step 0: Prerequisites (curl, git) + remote execution detection
+# ---------------------------------------------------------------------------
+
+# Ensure curl and git are available on Linux/apt systems
+if [ "$(uname)" = "Linux" ] && command -v apt-get &>/dev/null; then
+  NEED_PKGS=""
+  command -v curl &>/dev/null || NEED_PKGS="$NEED_PKGS curl"
+  command -v git  &>/dev/null || NEED_PKGS="$NEED_PKGS git"
+  if [ -n "$NEED_PKGS" ]; then
+    echo "[0/8] Installing prerequisites:$NEED_PKGS..."
+    sudo apt-get update -qq
+    sudo apt-get install -y $NEED_PKGS
+  fi
+fi
+
+# Detect remote execution (curl | bash): repo files won't be present at REPO_DIR.
+# Clone the repo and re-exec from the cloned location.
+if [ ! -d "$REPO_DIR/workspaces" ] || [ ! -d "$REPO_DIR/skills" ]; then
+  echo "[0/8] Remote execution detected — cloning repo to $INSTALL_DIR..."
+  if [ ! -d "$INSTALL_DIR/.git" ]; then
+    sudo git clone "$GITHUB_REPO_URL" "$INSTALL_DIR"
+    sudo chown -R "$(id -u):$(id -g)" "$INSTALL_DIR"
+  else
+    echo "  $INSTALL_DIR already exists, skipping clone"
+  fi
+  exec "$INSTALL_DIR/install.sh" "$@"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 1: Install Node.js (if needed)
@@ -93,7 +129,12 @@ if command -v openclaw &>/dev/null; then
   echo "  openclaw already installed: $(openclaw --version 2>/dev/null || echo 'unknown version')"
   echo "  Upgrading to latest..."
 fi
-npm install -g openclaw@latest
+# Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
+if [ -w "$(npm config get prefix)/lib" ] 2>/dev/null; then
+  npm install -g openclaw@latest
+else
+  sudo npm install -g openclaw@latest
+fi
 echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 
 # ---------------------------------------------------------------------------
@@ -213,8 +254,31 @@ if [ "$INSTALL_SYSTEMD" = true ]; then
     echo "[WARN] --systemd is only supported on Linux (skipping)"
   else
     echo "[systemd] Installing service files..."
-    sudo cp "$REPO_DIR/config/openclaw-gateway.service" /etc/systemd/system/
-    sudo cp "$REPO_DIR/config/openclaw-admin.service" /etc/systemd/system/
+
+    OPENCLAW_BIN="$(command -v openclaw || echo '/usr/local/bin/openclaw')"
+    NODE_BIN="$(command -v node || echo '/usr/bin/node')"
+    CURRENT_USER="$(whoami)"
+
+    _install_service() {
+      local src="$1" dst="$2"
+      sed \
+        -e "s|/opt/yomajiahr|$REPO_DIR|g" \
+        -e "s|/home/ubuntu/.openclaw|$STATE_DIR|g" \
+        -e "s|/usr/bin/env openclaw|$OPENCLAW_BIN|g" \
+        -e "s|/usr/bin/node|$NODE_BIN|g" \
+        -e "s|User=ubuntu|User=$CURRENT_USER|g" \
+        -e "s|Group=ubuntu|Group=$CURRENT_USER|g" \
+        "$src" | sudo tee "$dst" > /dev/null
+    }
+
+    _install_service \
+      "$REPO_DIR/config/openclaw-gateway.service" \
+      /etc/systemd/system/openclaw-gateway.service
+
+    _install_service \
+      "$REPO_DIR/config/openclaw-admin.service" \
+      /etc/systemd/system/openclaw-admin.service
+
     sudo systemctl daemon-reload
     echo "  Service files installed. Enable with:"
     echo "    sudo systemctl enable --now openclaw-gateway"
