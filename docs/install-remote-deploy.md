@@ -100,6 +100,37 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 
 ---
 
+## 日常更新：仅更新配置文件
+
+修改 `config/openclaw.jsonc` 后，无需重跑完整部署，只需上传并重新编译：
+
+```bash
+# 1. 从本地上传 jsonc 到服务器
+scp config/openclaw.jsonc yomajia:/tmp/openclaw.jsonc
+ssh yomajia "sudo mv /tmp/openclaw.jsonc /opt/yomajiahr/config/openclaw.jsonc"
+
+# 2. 在服务器上重新编译 JSONC → JSON
+ssh yomajia 
+node -e "
+const fs = require('fs');
+const vm = require('vm');
+const text = fs.readFileSync('/opt/yomajiahr/config/openclaw.jsonc', 'utf-8');
+const sanitized = text
+  .replace(/^\uFEFF/, '')
+  .replace(/^\s*\/\/.*\$/gm, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+const json = vm.runInNewContext('(' + sanitized + ')', {});
+json.gateway = { mode: 'local' };
+fs.writeFileSync('/home/ubuntu/.openclaw/openclaw.json', JSON.stringify(json, null, 2) + '\n');
+console.log('Done');
+"
+
+# 3. 重启服务使配置生效
+ssh yomajia "sudo systemctl restart openclaw-gateway"
+```
+
+---
+
 ## 部署后仍需手动完成
 
 | 步骤 | 操作 |

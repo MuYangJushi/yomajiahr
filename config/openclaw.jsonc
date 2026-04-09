@@ -18,33 +18,27 @@
         // Bot 1: HR小助手 — 全员可用
         "hr-assistant": {
           "appId": "${FEISHU_HR_BOT_APP_ID}",
-          "appSecret": { "source": "env", "id": "FEISHU_HR_BOT_APP_SECRET" },
-          "botName": "HR小助手",
-          "enabled": true,
+          "appSecret": "${FEISHU_HR_BOT_APP_SECRET}",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
         },
-        // Bot 4: HR管理后台 — 仅 HR 管理员
+        // Bot 4: HR管理后台 — 仅 HR 管理员（allowlist 限制，防止普通员工触达）
         "hr-admin": {
           "appId": "${FEISHU_ADMIN_BOT_APP_ID}",
-          "appSecret": { "source": "env", "id": "FEISHU_ADMIN_BOT_APP_SECRET" },
-          "botName": "HR管理后台",
-          "enabled": true,
+          "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}",
+          "dmPolicy": "allowlist",
+          "groupPolicy": "disabled",
         },
         // Phase 2+: 取消注释以启用
         // "hr-recruit": {
         //   "appId": "${FEISHU_RECRUIT_BOT_APP_ID}",
-        //   "appSecret": { "source": "env", "id": "FEISHU_RECRUIT_BOT_APP_SECRET" },
-        //   "botName": "招聘助手",
-        //   "enabled": true
+        //   "appSecret": "${FEISHU_RECRUIT_BOT_APP_SECRET}",
         // },
         // "hr-analytics": {
         //   "appId": "${FEISHU_ANALYTICS_BOT_APP_ID}",
-        //   "appSecret": { "source": "env", "id": "FEISHU_ANALYTICS_BOT_APP_SECRET" },
-        //   "botName": "HR数据分析师",
-        //   "enabled": true
+        //   "appSecret": "${FEISHU_ANALYTICS_BOT_APP_SECRET}",
         // }
       },
-      "dmPolicy": "open",
-      "groupPolicy": "open",
       "streaming": true,
     },
   },
@@ -67,6 +61,13 @@
         "workspace": "~/.openclaw/workspaces/hr-assistant",
         "skills": ["hr-policy-qa", "hr-general"],
         // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）
+        "session": {
+        "dmScope": "per-account-channel-peer",
+        "reset": {
+          "mode": "daily",
+          "atHour": 6,
+          },
+        },
         "memorySearch": {
           "enabled": true,
           "sources": ["memory"],
@@ -100,6 +101,37 @@
         "name": "HR管理后台",
         "workspace": "~/.openclaw/workspaces/hr-admin",
         "skills": ["hr-admin"],
+        "session": {
+          "dmScope": "per-account-channel-peer",
+          "reset": {
+            "mode": "daily",
+            "atHour": 6,
+          },
+        },
+        "memorySearch": {
+          "enabled": true,
+          "sources": ["memory"],
+          "experimental": {
+            "sessionMemory": false,
+          },
+          "provider": "openai",
+          "model": "text-embedding-v4",
+          "fallback": "none",
+          "remote": {
+            "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "apiKey": "${DASHSCOPE_API_KEY}",
+          },
+          "sync": {
+            "watch": true,
+            "onSessionStart": true,
+          },
+          "query": {
+            "hybrid": {
+              "enabled": true,
+            },
+          },
+          "extraPaths": ["../../data/hr-policies"],
+        },
       },
     ],
   },

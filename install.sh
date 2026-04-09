@@ -130,15 +130,17 @@ npm config set registry https://registry.npmmirror.com
 # ---------------------------------------------------------------------------
 
 echo "[2/8] Installing openclaw..."
-if command -v openclaw &>/dev/null; then
-  echo "  openclaw already installed: $(openclaw --version 2>/dev/null || echo 'unknown version')"
-  echo "  Upgrading to latest..."
+# Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
+NPM_PREFIX="$(npm config get prefix)"
+if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
+  echo "  Removing existing openclaw installation..."
+  sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
 fi
 # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
-if [ -w "$(npm config get prefix)/lib" ] 2>/dev/null; then
-  npm install -g openclaw@latest
+if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
+  npm install -g openclaw@latest --ignore-scripts
 else
-  sudo npm install -g openclaw@latest
+  sudo npm install -g openclaw@latest --ignore-scripts
 fi
 echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 
@@ -244,7 +246,7 @@ fi
 echo "[8/8] Installing admin-portal dependencies..."
 if [ -f "$REPO_DIR/admin-portal/package.json" ]; then
   cd "$REPO_DIR/admin-portal"
-  npm install --omit=dev
+  sudo npm install --omit=dev
   echo "  admin-portal dependencies installed"
 else
   echo "  [WARN] admin-portal/package.json not found (skipping)"
@@ -285,9 +287,7 @@ if [ "$INSTALL_SYSTEMD" = true ]; then
       /etc/systemd/system/openclaw-admin.service
 
     sudo systemctl daemon-reload
-    echo "  Service files installed. Enable with:"
-    echo "    sudo systemctl enable --now openclaw-gateway"
-    echo "    sudo systemctl enable --now openclaw-admin"
+    echo "  Service files installed."
   fi
 fi
 
@@ -311,8 +311,14 @@ echo "  .env                        (API keys)"
 echo
 echo "Next steps:"
 echo "  1. Edit $STATE_DIR/.env with your API keys"
-echo "  2. Start gateway:"
-echo "     OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
-echo "  3. Start admin portal:"
-echo "     cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+if [ "$INSTALL_SYSTEMD" = true ]; then
+  echo "  2. Enable and start services (after filling in .env):"
+  echo "     sudo systemctl enable --now openclaw-gateway"
+  echo "     sudo systemctl enable --now openclaw-admin"
+else
+  echo "  2. Start gateway:"
+  echo "     OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
+  echo "  3. Start admin portal:"
+  echo "     cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+fi
 echo
