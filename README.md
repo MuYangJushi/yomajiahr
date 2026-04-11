@@ -1,4 +1,5 @@
 # Yoma+HR 智能助手
+> 📚 项目计划、Sprint 看板、知识库在独立仓库:[yomajiahr-kb](https://github.com/MuYangJushi/yomajiahr-kb)
 
 基于 [OpenClaw](https://github.com/openclaw/openclaw) 构建的企业 HR 多 Agent 智能系统，通过飞书 Bot + Web 界面为全员提供 HR 自助服务。
 
