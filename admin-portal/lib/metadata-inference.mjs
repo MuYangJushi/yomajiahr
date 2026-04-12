@@ -104,12 +104,20 @@ function classifyCategoryHeuristically(text, fileName) {
     return "general";
   }
   const tests = [
-    ["leave", ["年假", "病假", "请假", "休假", "假期", "婚假", "产假", "丧假", "leave"]],
     [
-      "onboarding",
-      ["入职", "离职", "转正", "试用期", "报到", "交接", "offer", "onboard", "probation"],
+      "attendance",
+      ["考勤", "打卡", "加班", "排班", "调班", "attendance", "overtime",
+       "年假", "病假", "请假", "休假", "假期", "婚假", "产假", "丧假", "leave"],
     ],
-    ["attendance", ["考勤", "打卡", "加班", "排班", "调班", "attendance", "overtime"]],
+    [
+      "staffing",
+      ["入职", "离职", "转正", "试用期", "报到", "交接", "招聘", "录用",
+       "offer", "onboard", "probation", "staffing"],
+    ],
+    [
+      "performance",
+      ["绩效", "考核", "KPI", "OKR", "评级", "评分", "晋升", "降级", "performance", "appraisal"],
+    ],
     ["compensation", ["薪酬", "工资", "奖金", "补贴", "福利", "社保", "公积金", "compensation"]],
     ["training", ["培训", "学习", "课程", "认证", "考试", "training"]],
   ];

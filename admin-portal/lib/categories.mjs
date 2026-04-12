@@ -5,19 +5,19 @@
  */
 
 export const CATEGORIES = [
-  "leave",
-  "onboarding",
   "attendance",
+  "staffing",
   "compensation",
   "training",
+  "performance",
   "general",
 ];
 
 export const CATEGORY_DOC_ID_PREFIX = {
-  leave: "HR-LEAVE",
-  onboarding: "HR-ONBOARD",
   attendance: "HR-ATT",
+  staffing: "HR-STAFF",
   compensation: "HR-COMP",
   training: "HR-TRAIN",
+  performance: "HR-PERF",
   general: "HR-GEN",
 };

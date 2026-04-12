@@ -89,14 +89,14 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
 
 ### 预定义分类
 
-| 分类名       | 说明     | 目录                              |
-| ------------ | -------- | --------------------------------- |
-| leave        | 假期制度 | ../data/hr-policies/leave/        |
-| onboarding   | 入离职   | ../data/hr-policies/onboarding/   |
-| attendance   | 考勤制度 | ../data/hr-policies/attendance/   |
-| compensation | 薪酬福利 | ../data/hr-policies/compensation/ |
-| training     | 培训制度 | ../data/hr-policies/training/     |
-| general      | 通用制度 | ../data/hr-policies/general/      |
+| 分类名       | 说明           | 目录                                 |
+| ------------ | -------------- | ------------------------------------ |
+| attendance   | 考勤与请假制度 | ../data/hr-policies/attendance/      |
+| staffing     | 人员配置/入离职 | ../data/hr-policies/staffing/       |
+| compensation | 薪酬福利       | ../data/hr-policies/compensation/   |
+| training     | 培训制度       | ../data/hr-policies/training/       |
+| performance  | 绩效管理       | ../data/hr-policies/performance/    |
+| general      | 通用制度       | ../data/hr-policies/general/        |
 
 ### 新增分类
 

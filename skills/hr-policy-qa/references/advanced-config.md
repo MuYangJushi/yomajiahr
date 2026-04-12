@@ -4,13 +4,13 @@
 
 ```
 ../data/hr-policies/
-├── leave/              # 假期制度
+├── attendance/         # 考勤与请假制度
 │   └── *.md
-├── onboarding/         # 入离职
+├── staffing/           # 人员配置/入离职
 │   └── *.md
-├── attendance/         # 考勤制度
 ├── compensation/       # 薪酬福利（受限级）
 ├── training/           # 培训制度
+├── performance/        # 绩效管理
 └── general/            # 通用制度
 ```
 
@@ -22,25 +22,24 @@
 ---
 title: "文档标题"
 source_file: "原始文件名.pdf"
-doc_id: "HR-LEAVE-001" # 文档编号，格式: HR-{类别}-{序号}
+doc_id: "HR-ATT-001" # 文档编号，格式: HR-{类别}-{序号}
 version: "2.1" # 版本号
 effective_date: "2025-01-01" # 生效日期
-category: "leave" # 分类名
+category: "attendance" # 分类名
 total_pages: 3 # 原始 PDF 页数
 ---
 ```
 
 ## 文档编号规范
 
-| 前缀       | 分类     | 示例           |
-| ---------- | -------- | -------------- |
-| HR-LEAVE   | 假期制度 | HR-LEAVE-001   |
-| HR-ONBOARD | 入离职   | HR-ONBOARD-001 |
-| HR-ATT     | 考勤制度 | HR-ATT-001     |
-| HR-COMP    | 薪酬福利 | HR-COMP-001    |
-| HR-TRAIN   | 培训制度 | HR-TRAIN-001   |
-| HR-WORK    | 工作制度 | HR-WORK-001    |
-| HR-GEN     | 通用制度 | HR-GEN-001     |
+| 前缀      | 分类           | 示例          |
+| --------- | -------------- | ------------- |
+| HR-ATT    | 考勤与请假制度 | HR-ATT-001    |
+| HR-STAFF  | 人员配置/入离职 | HR-STAFF-001 |
+| HR-COMP   | 薪酬福利       | HR-COMP-001   |
+| HR-TRAIN  | 培训制度       | HR-TRAIN-001  |
+| HR-PERF   | 绩效管理       | HR-PERF-001   |
+| HR-GEN    | 通用制度       | HR-GEN-001    |
 
 ## 搜索策略
 

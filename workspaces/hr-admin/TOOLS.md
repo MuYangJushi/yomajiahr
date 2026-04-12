@@ -11,7 +11,7 @@
 ## 知识库位置
 
 - 政策文档：`../data/hr-policies/`
-- 分类目录：leave / onboarding / attendance / compensation / training / general
+- 分类目录：attendance / staffing / compensation / training / performance / general
 - 审计日志：`../data/hr-admin/audit-log.jsonl`
 
 ## 文档转换工具
@@ -31,5 +31,5 @@
 ## 文档编号规范
 
 - 格式：`HR-{CATEGORY}-{SEQ}`
-- 示例：HR-LEAVE-001、HR-ATT-003、HR-COMP-010
-- 分类缩写：LEAVE / ATT / COMP / TRAIN / ONBOARD / GEN
+- 示例：HR-ATT-001、HR-STAFF-001、HR-PERF-001、HR-COMP-010
+- 分类缩写：ATT / STAFF / COMP / TRAIN / PERF / GEN
