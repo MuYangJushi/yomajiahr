@@ -32,6 +32,7 @@ import { CATEGORIES } from "./lib/categories.mjs";
 import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converter.mjs";
 import { overwriteFrontmatter, parseFrontmatter } from "./lib/frontmatter.mjs";
 import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
+import { chunkDocument, writeChunks, removeChunks } from "./lib/doc-chunker.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -41,6 +42,7 @@ const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
 const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".openclaw");
 const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
+const CHUNKS_DIR = join(STATE_DIR, "data", "hr-chunks");
 const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
 const BIND_HOST = env.ADMIN_PORTAL_BIND || "";
 const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
@@ -57,6 +59,8 @@ if (!AUTH_TOKEN) {
 for (const dir of [
   POLICIES_DIR,
   ...CATEGORIES.map((cat) => join(POLICIES_DIR, cat)),
+  CHUNKS_DIR,
+  ...CATEGORIES.map((cat) => join(CHUNKS_DIR, cat)),
   join(STATE_DIR, "data", "hr-admin"),
 ]) {
   mkdirSync(dir, { recursive: true });
@@ -207,6 +211,10 @@ app.post("/api/upload", uploadLimiter, upload.single("file"), async (req, res) =
     const outPath = join(categoryDir, mdName);
     writeFileSync(outPath, enriched, "utf-8");
 
+    // Pre-chunk for OpenClaw indexing
+    const { chunks, warnings: chunkWarnings } = chunkDocument(enriched);
+    const chunkPaths = writeChunks(chunks, CHUNKS_DIR);
+
     // Audit log
     appendAuditLog("UPLOAD", mdName, {
       doc_id: metadata.doc_id,
@@ -227,7 +235,8 @@ app.post("/api/upload", uploadLimiter, upload.single("file"), async (req, res) =
       source_format: sourceFormat,
       metadata_source: metadata.source,
       metadata_notes: metadata.notes,
-      warnings: [...warnings, ...metadata.warnings],
+      chunk_count: chunkPaths.length,
+      warnings: [...warnings, ...metadata.warnings, ...chunkWarnings],
       path: `data/hr-policies/${String(metadata.category)}/${mdName}`,
     });
   } catch (err) {
@@ -316,10 +325,12 @@ app.delete("/api/documents/:category/:file", (req, res) => {
     const meta = parseFrontmatter(content);
 
     unlinkSync(filePath);
+    const chunksRemoved = removeChunks(meta.doc_id || "", CHUNKS_DIR);
     appendAuditLog("DELETE", req.params.file, {
       doc_id: meta.doc_id || "",
       version: meta.version || "",
       category: req.params.category,
+      chunks_removed: chunksRemoved,
       reason: req.body?.reason || "",
     });
 

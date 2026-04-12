@@ -81,7 +81,7 @@
             "enabled": true,
           },
         },
-        "extraPaths": ["../../data/hr-policies"],
+        "extraPaths": ["../../data/hr-chunks"],
       },
     },
     "list": [

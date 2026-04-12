@@ -27,10 +27,12 @@ import {
 } from "../../../admin-portal/lib/doc-converter.mjs";
 import { overwriteFrontmatter } from "../../../admin-portal/lib/frontmatter.mjs";
 import { inferDocumentMetadata } from "../../../admin-portal/lib/metadata-inference.mjs";
+import { chunkDocument, writeChunks } from "../../../admin-portal/lib/doc-chunker.mjs";
 
 const { values, positionals } = parseArgs({
   options: {
     "out-dir": { type: "string", default: "." },
+    "chunks-dir": { type: "string", default: "" },
     category: { type: "string", default: "" },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -46,6 +48,7 @@ Arguments:
 
 Options:
   --out-dir <dir>     Output directory (default: current directory)
+  --chunks-dir <dir>  Chunks output directory (default: {out-dir}/../hr-chunks)
   --category <name>   Sub-directory category name (e.g. leave, onboarding)
   -h, --help          Show this help message
 
@@ -61,6 +64,9 @@ Examples:
 
 const inputPath = resolve(positionals[0]);
 const outDir = resolve(values["out-dir"]);
+const chunksDir = values["chunks-dir"]
+  ? resolve(values["chunks-dir"])
+  : join(resolve(values["out-dir"]), "..", "hr-chunks");
 const category = values.category;
 const targetDir = category ? join(outDir, category) : outDir;
 const stateDir = env.OPENCLAW_STATE_DIR || join(env.HOME || "", ".openclaw");
@@ -141,7 +147,12 @@ for (const filePath of inputFiles) {
       `  -> metadata: ${metadata.doc_id} | ${metadata.version} | ${metadata.effective_date || "-"} | ${metadata.category} (${metadata.source})`,
     );
 
-    const combinedWarnings = [...warnings, ...metadata.warnings];
+    // Pre-chunk for OpenClaw indexing
+    const { chunks, warnings: chunkWarnings } = chunkDocument(enriched);
+    const chunkPaths = writeChunks(chunks, chunksDir);
+    console.log(`  -> ${chunkPaths.length} chunk(s) written to ${chunksDir}/`);
+
+    const combinedWarnings = [...warnings, ...metadata.warnings, ...chunkWarnings];
     if (combinedWarnings.length > 0) {
       warningCount += combinedWarnings.length;
       for (const warning of combinedWarnings) {

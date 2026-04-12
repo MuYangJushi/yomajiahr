@@ -94,7 +94,27 @@ function extractHeading(markdown) {
   return match ? match[1].trim() : "";
 }
 
-function classifyCategoryHeuristically(text, fileName) {
+/** Keyword lists for each category — shared by first-match and scored classifiers. */
+export const CATEGORY_KEYWORDS = [
+  [
+    "attendance",
+    ["考勤", "打卡", "加班", "排班", "调班", "attendance", "overtime",
+     "年假", "病假", "请假", "休假", "假期", "婚假", "产假", "丧假", "leave"],
+  ],
+  [
+    "staffing",
+    ["入职", "离职", "转正", "试用期", "报到", "交接", "招聘", "录用",
+     "offer", "onboard", "probation", "staffing"],
+  ],
+  [
+    "performance",
+    ["绩效", "考核", "KPI", "OKR", "评级", "评分", "晋升", "降级", "performance", "appraisal"],
+  ],
+  ["compensation", ["薪酬", "工资", "奖金", "补贴", "福利", "社保", "公积金", "compensation"]],
+  ["training", ["培训", "学习", "课程", "认证", "考试", "training"]],
+];
+
+export function classifyCategoryHeuristically(text, fileName) {
   const corpus = `${fileName}\n${text}`.toLowerCase();
   // Handbook-style documents usually span multiple policy areas.
   // Keep them in the generic bucket unless explicit metadata says otherwise.
@@ -103,30 +123,44 @@ function classifyCategoryHeuristically(text, fileName) {
   ) {
     return "general";
   }
-  const tests = [
-    [
-      "attendance",
-      ["考勤", "打卡", "加班", "排班", "调班", "attendance", "overtime",
-       "年假", "病假", "请假", "休假", "假期", "婚假", "产假", "丧假", "leave"],
-    ],
-    [
-      "staffing",
-      ["入职", "离职", "转正", "试用期", "报到", "交接", "招聘", "录用",
-       "offer", "onboard", "probation", "staffing"],
-    ],
-    [
-      "performance",
-      ["绩效", "考核", "KPI", "OKR", "评级", "评分", "晋升", "降级", "performance", "appraisal"],
-    ],
-    ["compensation", ["薪酬", "工资", "奖金", "补贴", "福利", "社保", "公积金", "compensation"]],
-    ["training", ["培训", "学习", "课程", "认证", "考试", "training"]],
-  ];
-  for (const [category, needles] of tests) {
+  for (const [category, needles] of CATEGORY_KEYWORDS) {
     if (needles.some((needle) => corpus.includes(needle))) {
       return category;
     }
   }
   return "general";
+}
+
+/**
+ * Score-based category classification: counts total keyword occurrences
+ * per category and returns the one with the highest count. Designed for
+ * chunk-level reclassification where a section may mention keywords from
+ * multiple categories (e.g. "绩效奖金" in a compensation section).
+ *
+ * Requires at least 2 total occurrences to reclassify, avoiding false
+ * positives from a single stray keyword mention.
+ */
+export function classifyCategoryByScore(text) {
+  const corpus = text.toLowerCase();
+  let bestCategory = "general";
+  let bestScore = 0;
+  for (const [category, needles] of CATEGORY_KEYWORDS) {
+    let score = 0;
+    for (const needle of needles) {
+      // Count all occurrences, not just presence
+      let idx = 0;
+      while ((idx = corpus.indexOf(needle, idx)) !== -1) {
+        score++;
+        idx += needle.length;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
+    }
+  }
+  // Require at least 2 occurrences to reclassify away from general
+  return bestScore >= 2 ? bestCategory : "general";
 }
 
 function inferHeuristics({ markdown, originalName }) {

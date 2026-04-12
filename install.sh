@@ -209,6 +209,12 @@ for existing_dir in "$POLICIES_DIR"/*; do
   rmdir "$existing_dir"
   echo "  Removed obsolete policy directory: $existing_dir"
 done
+# Pre-chunked knowledge base directory (for OpenClaw search indexing)
+CHUNKS_DIR="$STATE_DIR/data/hr-chunks"
+mkdir -p "$CHUNKS_DIR"
+for category in "${CURRENT_POLICY_DIRS[@]}"; do
+  mkdir -p "$CHUNKS_DIR/$category"
+done
 echo "  Done"
 
 # ---------------------------------------------------------------------------
