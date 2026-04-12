@@ -48,6 +48,7 @@ if [ "$(uname)" = "Linux" ] && command -v apt-get &>/dev/null; then
   NEED_PKGS=""
   command -v curl &>/dev/null || NEED_PKGS="$NEED_PKGS curl"
   command -v git  &>/dev/null || NEED_PKGS="$NEED_PKGS git"
+  command -v rg   &>/dev/null || NEED_PKGS="$NEED_PKGS ripgrep"
   if [ -n "$NEED_PKGS" ]; then
     echo "[0/8] Installing prerequisites:$NEED_PKGS..."
     sudo apt-get update -qq
@@ -154,13 +155,60 @@ mkdir -p "$STATE_DIR/workspaces/hr-assistant"
 mkdir -p "$STATE_DIR/workspaces/hr-admin"
 mkdir -p "$STATE_DIR/memory"
 mkdir -p "$STATE_DIR/skills"
-mkdir -p "$STATE_DIR/data/hr-policies/attendance"
-mkdir -p "$STATE_DIR/data/hr-policies/staffing"
-mkdir -p "$STATE_DIR/data/hr-policies/compensation"
-mkdir -p "$STATE_DIR/data/hr-policies/training"
-mkdir -p "$STATE_DIR/data/hr-policies/performance"
-mkdir -p "$STATE_DIR/data/hr-policies/general"
 mkdir -p "$STATE_DIR/data/hr-admin"
+POLICIES_DIR="$STATE_DIR/data/hr-policies"
+CURRENT_POLICY_DIRS=()
+while IFS= read -r category; do
+  CURRENT_POLICY_DIRS+=("$category")
+done < <(
+  node --input-type=module <<EOF
+import { CATEGORIES } from "${REPO_DIR}/admin-portal/lib/categories.mjs";
+
+if (!Array.isArray(CATEGORIES) || CATEGORIES.length === 0) {
+  console.error("ERROR: admin-portal/lib/categories.mjs does not export a non-empty CATEGORIES array.");
+  process.exit(1);
+}
+
+for (const category of CATEGORIES) {
+  if (typeof category !== "string" || category.trim() === "") {
+    console.error("ERROR: CATEGORIES contains an invalid category value.");
+    process.exit(1);
+  }
+  console.log(category);
+}
+EOF
+)
+if [ "${#CURRENT_POLICY_DIRS[@]}" -eq 0 ]; then
+  echo "ERROR: Failed to load policy categories from admin-portal/lib/categories.mjs"
+  exit 1
+fi
+mkdir -p "$POLICIES_DIR"
+for category in "${CURRENT_POLICY_DIRS[@]}"; do
+  mkdir -p "$POLICIES_DIR/$category"
+done
+for existing_dir in "$POLICIES_DIR"/*; do
+  if [ ! -d "$existing_dir" ]; then
+    continue
+  fi
+  dir_name=$(basename "$existing_dir")
+  keep_dir=false
+  for category in "${CURRENT_POLICY_DIRS[@]}"; do
+    if [ "$dir_name" = "$category" ]; then
+      keep_dir=true
+      break
+    fi
+  done
+  if [ "$keep_dir" = true ]; then
+    continue
+  fi
+  if find "$existing_dir" -mindepth 1 -print -quit | grep -q .; then
+    echo "  [WARN] Legacy policy directory not empty: $existing_dir"
+    echo "         Please migrate its files to the new categories before deleting it."
+    continue
+  fi
+  rmdir "$existing_dir"
+  echo "  Removed obsolete policy directory: $existing_dir"
+done
 echo "  Done"
 
 # ---------------------------------------------------------------------------

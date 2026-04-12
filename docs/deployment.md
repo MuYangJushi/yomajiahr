@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
 ```
 
-脚本会自动完成：安装 curl/git → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 安装 openclaw → 创建目录结构 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 安装 openclaw → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
 
 完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书 Bot（见飞书开放平台准备）→ 启动服务。
 
@@ -109,10 +109,11 @@ nano ~/.openclaw/.env
 
 ```bash
 ls ~/.openclaw/data/hr-policies/
-# leave/  onboarding/  attendance/  compensation/  training/  general/
+# attendance/  staffing/  compensation/  training/  performance/  general/
 ```
 
 也可以通过 Admin Portal 上传 PDF/Word/文本文件，系统会自动转换为 Markdown。
+`install.sh` 会保留 `admin-portal/lib/categories.mjs` 中定义的正式分类目录，并自动清理其它空的历史目录；若历史目录内仍有文件，脚本会保留目录并提示先迁移文档。
 
 ### Step 4: 验证安装
 
@@ -221,7 +222,8 @@ ss -ltnp | grep -E '18789|18790'
 ```bash
 cd /opt/yomajiahr
 git pull
-./install.sh                    # 重新部署配置和 skills
+sudo systemctl stop openclaw-gateway
+./install.sh --systemd          # 重新部署配置、skills 和 systemd unit
 sudo systemctl restart openclaw-gateway
 sudo systemctl restart openclaw-admin
 ```

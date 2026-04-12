@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 
 | 文件 | 改动内容 |
 |------|----------|
-| `install.sh` | 新增 Step 0：前置依赖检查 + 远程执行检测 + 自动克隆；systemd 安装改为动态路径替换 |
+| `install.sh` | 新增 Step 0：前置依赖检查（含 ripgrep）+ 远程执行检测 + 自动克隆；systemd 安装改为动态路径替换；清理空的旧政策目录 |
 | `config/openclaw-gateway.service` | 新增 `Environment=PATH=...` |
 | `config/openclaw-admin.service` | 新增 `Environment=PATH=...` |
 | `docs/deployment.md` | 顶部新增"一条命令部署"章节 |
@@ -29,13 +29,14 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 
 ### Step 0：前置依赖 + 远程检测（新增）
 
-**前置依赖安装**：在 Linux/apt 环境下，若 curl 或 git 缺失，自动安装：
+**前置依赖安装**：在 Linux/apt 环境下，若 curl、git 或 ripgrep 缺失，自动安装：
 
 ```bash
 if [ "$(uname)" = "Linux" ] && command -v apt-get &>/dev/null; then
   NEED_PKGS=""
   command -v curl &>/dev/null || NEED_PKGS="$NEED_PKGS curl"
   command -v git  &>/dev/null || NEED_PKGS="$NEED_PKGS git"
+  command -v rg   &>/dev/null || NEED_PKGS="$NEED_PKGS ripgrep"
   if [ -n "$NEED_PKGS" ]; then
     sudo apt-get update -qq && sudo apt-get install -y $NEED_PKGS
   fi
@@ -97,6 +98,15 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 ```
 
 `INSTALL_DIR` 可通过环境变量 `YOMAJIA_INSTALL_DIR` 覆盖，默认 `/opt/yomajiahr`。
+
+### 政策目录：按 `categories.mjs` 动态保留正式分类并清理空历史目录（新增）
+
+`install.sh` 现在从 `admin-portal/lib/categories.mjs` 读取 `CATEGORIES` 作为正式分类目录列表。
+
+`~/.openclaw/data/hr-policies/` 下凡是不在 `CATEGORIES` 中的一级子目录：
+
+- 若为空，会在部署时自动删除
+- 若目录内仍有文件，会保留原目录并输出告警，提示先迁移文档
 
 ---
 
