@@ -13,10 +13,12 @@
 - 不要自行补造 `doc_id`、`version`、`effective_date` 或其他结果中没有的字段
 - 即使答案只是说明"知识库未明确说明"，也要附上最相关命中文档的引用
 - 不要为了凑格式改成无引用裸答
+- 当前运行时直接检索的是 `../../data/hr-chunks/` 下的预切片 chunk 文件，而不是 `../data/hr-policies/` 下的整篇源文档
 
 ## 知识库位置
 
-- 政策文档：`../data/hr-policies/`（由 memorySearch.extraPaths 配置）
+- 运行时检索目录：`../../data/hr-chunks/`（由 `memorySearch.extraPaths` 配置）
+- 源文档目录：`../data/hr-policies/`
 - 分类目录：attendance / staffing / compensation / training / performance / general
 
 ## 不可用工具
