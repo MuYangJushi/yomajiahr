@@ -5,6 +5,15 @@
 - `memory_search`：语义检索知识库，用于回答政策问题
 - `memory_get`：按路径读取知识库文档片段
 
+## `memory_search` 结果使用规则
+
+- `memory_search` 返回结果中的 `title`、`path`、`startLine`、`endLine`、`snippet` 可直接用于组织回答和拼接引用
+- 引用优先使用 `title`；如果结果里没有可用标题，再退化为文件名
+- 引用格式统一为：`[来源: {title或文件名}, 第{startLine}-{endLine}行]`
+- 不要自行补造 `doc_id`、`version`、`effective_date` 或其他结果中没有的字段
+- 即使答案只是说明"知识库未明确说明"，也要附上最相关命中文档的引用
+- 不要为了凑格式改成无引用裸答
+
 ## 知识库位置
 
 - 政策文档：`../data/hr-policies/`（由 memorySearch.extraPaths 配置）

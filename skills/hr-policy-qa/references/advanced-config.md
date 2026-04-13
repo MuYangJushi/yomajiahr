@@ -1,6 +1,27 @@
 # Memory Search 高级配置
 
+## 当前运行态
+
+当前 `hr-policy-qa` 在运行时直接检索的是预切片目录：
+
+```text
+../../data/hr-chunks/
+```
+
+该目录与源文档目录使用相同的分类结构：
+
+- `attendance`
+- `staffing`
+- `compensation`
+- `training`
+- `performance`
+- `general`
+
+`memory_search` 命中的通常是 chunk 级 Markdown 文件，而不是 `hr-policies/` 下的整篇源文档。
+
 ## 知识库目录结构
+
+源文档仍保存在以下目录：
 
 ```
 ../data/hr-policies/
@@ -13,6 +34,8 @@
 ├── performance/        # 绩效管理
 └── general/            # 通用制度
 ```
+
+这些源文档会被转换并切片后，同步到运行时检索目录 `../../data/hr-chunks/`。
 
 ## 文档格式规范
 
@@ -53,18 +76,27 @@ total_pages: 3 # 原始 PDF 页数
 
 ### 搜索优先级
 
-1. 文档编号精确匹配（最高优先）
+1. 将文档编号作为高优先级检索关键词
 2. 标题关键词匹配
-3. 正文全文搜索
+3. 正文语义检索
+
+说明：
+
+- 这是检索建议，不是运行时硬保证
+- 最终回答必须以 `memory_search` 的实际返回结果为准
+- 不要假设文档编号检索一定只返回单个结果
 
 ### 结果数量
 
-- 默认返回 top 3 相关文档
-- 文档编号精确匹配时仅返回该文档
+- 默认优先查看最相关的前几条 chunk 结果
+- 是否只返回单条结果，取决于实际 `memory_search` 返回，不要在 skill 中写成硬保证
 
 ## 知识库导入边界
 
-政策问答 Agent 只负责检索 `../data/hr-policies/` 中已经存在的 Markdown 知识库，不负责导入或写入文档。
+政策问答 Agent 只负责检索已经建好索引的知识库内容，不负责导入或写入文档。
+
+- 源文档目录：`../data/hr-policies/`
+- 运行时检索目录：`../../data/hr-chunks/`
 
 如需导入新文档，请改走 `hr-admin` / `admin-portal`：
 
