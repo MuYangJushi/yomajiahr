@@ -94,6 +94,17 @@ function extractHeading(markdown) {
   return match ? match[1].trim() : "";
 }
 
+function buildTitleCorpus(markdown, originalName) {
+  return [
+    extractFrontmatterValue(markdown, "title"),
+    extractHeading(markdown),
+    basename(originalName),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+}
+
 /** Keyword lists for each category — shared by first-match and scored classifiers. */
 export const CATEGORY_KEYWORDS = [
   [
@@ -116,6 +127,16 @@ export const CATEGORY_KEYWORDS = [
 
 export function classifyCategoryHeuristically(text, fileName) {
   const corpus = `${fileName}\n${text}`.toLowerCase();
+  for (const [category, needles] of CATEGORY_KEYWORDS) {
+    if (needles.some((needle) => corpus.includes(needle))) {
+      return category;
+    }
+  }
+  return "general";
+}
+
+function classifyTitleSignals(markdown, originalName) {
+  const corpus = buildTitleCorpus(markdown, originalName);
   // Handbook-style documents usually span multiple policy areas.
   // Keep them in the generic bucket unless explicit metadata says otherwise.
   if (
@@ -128,7 +149,7 @@ export function classifyCategoryHeuristically(text, fileName) {
       return category;
     }
   }
-  return "general";
+  return "";
 }
 
 /**
@@ -178,6 +199,7 @@ function inferHeuristics({ markdown, originalName }) {
     "";
   const category =
     explicitCategory ||
+    classifyTitleSignals(markdown, originalName) ||
     classifyCategoryHeuristically(markdown, basename(originalName).toLowerCase());
   const version =
     normalizeVersion(extractFrontmatterValue(markdown, "version")) ||
