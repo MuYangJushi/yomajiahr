@@ -13,7 +13,7 @@ import { parseFrontmatter } from "./frontmatter.mjs";
 import { classifyCategoryByScore } from "./metadata-inference.mjs";
 
 const MIN_CHUNK_CHARS = 200;
-const MAX_CHUNK_CHARS = 1500;
+const MAX_CHUNK_CHARS = 1200;
 const HEADING_RE = /^(#{1,3})\s+(.+)$/;
 
 // ---------------------------------------------------------------------------
@@ -273,7 +273,8 @@ export function chunkDocument(markdown, options = {}) {
     };
 
     const fm = buildChunkFrontmatter(metadata);
-    const content = `${fm}\n\n${section.body}\n`;
+    const sectionHeading = sectionLabel.trim() ? `## ${sectionLabel.trim()}\n\n` : "";
+    const content = `${fm}\n\n${sectionHeading}${section.body}\n`;
 
     return { content, metadata };
   });

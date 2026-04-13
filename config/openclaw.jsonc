@@ -82,6 +82,11 @@
           },
         },
         "extraPaths": ["../../data/hr-chunks"],
+        // 预切片文件已按主题切好，调大窗口让每个 .md = 一个 chunk，避免 builtin 二次切片
+        "chunking": {
+          "tokens": 4000,
+          "overlap": 0,
+        },
       },
     },
     "list": [
