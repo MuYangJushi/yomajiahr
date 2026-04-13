@@ -30,6 +30,10 @@
           "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}",
           "dmPolicy": "open",
           "groupPolicy": "disabled",
+          // 管理后台每次发独立新消息，不以 reply-in-thread 形式挂在用户消息下方。
+          // streaming card（auto 默认）会暴露 agent ID / model / provider 等系统元信息，改 static 消除。
+          // 需要 OpenClaw >= 2026.2.26；低版本请先 npm install -g openclaw@latest。
+          "replyMode": "static",
         },
         // Phase 2+: 取消注释以启用
         // "hr-recruit": {
