@@ -30,10 +30,6 @@
           "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}",
           "dmPolicy": "open",
           "groupPolicy": "disabled",
-          // 管理后台每次发独立新消息，不以 reply-in-thread 形式挂在用户消息下方。
-          // streaming card（auto 默认）会暴露 agent ID / model / provider 等系统元信息，改 static 消除。
-          // 需要 OpenClaw >= 2026.2.26；低版本请先 npm install -g openclaw@latest。
-          "replyMode": "static",
         },
         // Phase 2+: 取消注释以启用
         // "hr-recruit": {
@@ -58,6 +54,12 @@
         // 当前默认使用 MiniMax 国内站；MiniMax 为单点 provider，建议接入第二家后启用 fallbacks。
         "primary": "minimax/MiniMax-M2.7",
         // "fallbacks": ["openai/gpt-5.1", "anthropic/claude-sonnet-4-5"],
+      },
+      // 心跳默认每 30 分钟执行一次，但默认不向飞书外发，仅用于内部巡检与保活。
+      // 各 agent 需显式声明 heartbeat 才会启用，避免依赖 “默认 agent” 的隐式规则。
+      "heartbeat": {
+        "every": "30m",
+        "target": "none",
       },
       // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）。
       // 两个 agent 配置完全相同，统一在此管理。
@@ -96,9 +98,11 @@
     "list": [
       {
         "id": "hr-assistant",
+        "default": true,
         "name": "HR小助手",
         "workspace": "~/.openclaw/workspaces/hr-assistant",
         "skills": ["hr-policy-qa", "hr-general"],
+        "heartbeat": {},
         "tools": {
           "deny": ["memory_write", "memory_delete", "exec"],
         },
@@ -108,6 +112,7 @@
         "name": "HR管理后台",
         "workspace": "~/.openclaw/workspaces/hr-admin",
         "skills": ["hr-admin"],
+        "heartbeat": {},
         "tools": {
           "deny": ["gateway", "sessions_spawn"],
         },

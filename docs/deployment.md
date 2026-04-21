@@ -82,6 +82,8 @@ cd /opt/yomajiahr
 7. 复制 .env 模板
 8. 安装 admin-portal 依赖
 
+当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向飞书用户外发心跳消息。
+
 ### Step 2: 配置环境变量
 
 编辑 `~/.openclaw/.env`，填入真实的 API 密钥：
@@ -127,6 +129,8 @@ OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw skills list
 # 检查 channels
 OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw channels status --probe
 ```
+
+如需确认 heartbeat 是否已注册，可额外检查各 agent 的会话索引里是否出现 `provider = "heartbeat"` 的主会话。
 
 ### Step 5: 启动服务
 
