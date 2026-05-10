@@ -21,6 +21,7 @@
           "appSecret": "${FEISHU_HR_BOT_APP_SECRET}",
           "dmPolicy": "open",
           "groupPolicy": "open",
+          "requireMention": true,
         },
         // Bot 4: HR管理后台 — 仅 HR 管理员
         // 已知风险: dmPolicy 为 open，任何知道 Bot ID 的员工均可 DM。

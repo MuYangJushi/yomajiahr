@@ -51,6 +51,8 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 7. 记录 `App ID` 和 `App Secret`
 8. 发布应用
 
+运行时配置中，HR小助手允许加入群聊，但群内消息必须显式 @ 机器人后才会回复（`groupPolicy: "open"` + `requireMention: true`）。
+
 **Bot 4: HR管理后台（仅 HR 管理员）**
 
 1. 同上流程创建第二个应用，命名 "HR管理后台"
@@ -206,12 +208,19 @@ ss -ltnp | grep -E '18789|18790'
     hr-general/
   memory/                       # 语义索引（自动生成）
   data/
-    hr-policies/                # 知识库文档
-      leave/
-      onboarding/
+    hr-policies/                # 原始政策文档（Admin Portal 上传源）
       attendance/
+      staffing/
       compensation/
       training/
+      performance/
+      general/
+    hr-chunks/                  # 切片检索索引（Admin Portal 上传时自动生成）
+      attendance/
+      staffing/
+      compensation/
+      training/
+      performance/
       general/
     hr-admin/
       audit-log.jsonl           # 操作审计日志
