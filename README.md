@@ -53,12 +53,13 @@ cd yomajiahr
 ```
 
 `install.sh` 会自动：
-1. 安装 openclaw（`npm install -g openclaw@latest`）
-2. 创建 `~/.openclaw/` 目录结构
-3. 复制 workspace 文件和 skills
-4. 编译配置文件（JSONC -> JSON）
-5. 复制 .env 模板
-6. 安装 admin-portal 依赖
+1. 安装 openclaw 主包（`npm install -g openclaw@latest`）
+2. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
+3. 创建 `~/.openclaw/` 目录结构
+4. 复制 workspace 文件和 skills
+5. 编译配置文件（JSONC -> JSON）
+6. 复制 .env 模板
+7. 安装 admin-portal 依赖
 
 ### 配置 API Keys
 

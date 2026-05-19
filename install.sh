@@ -139,9 +139,9 @@ if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
 fi
 # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
 if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
-  npm install -g openclaw@latest --ignore-scripts
+  npm install -g openclaw@latest
 else
-  sudo npm install -g openclaw@latest --ignore-scripts
+  sudo npm install -g openclaw@latest
 fi
 echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 
@@ -277,6 +277,22 @@ fs.writeFileSync(
 else
   echo "  [WARN] config/openclaw.jsonc not found (skipping)"
 fi
+
+echo "  Installing official Feishu plugin..."
+# The official installer command enters interactive bot onboarding and writes to the
+# caller's OpenClaw state directory. For unattended deploys with repo-managed
+# config/env files, use the official non-interactive update path against STATE_DIR.
+if ! OPENCLAW_STATE_DIR="$STATE_DIR" npx -y @larksuite/openclaw-lark update; then
+  if [ -d "$STATE_DIR/extensions/openclaw-lark/node_modules/openclaw" ]; then
+    echo "  [WARN] Official Feishu plugin update returned non-zero after install."
+    echo "         Continuing because the plugin files were installed into $STATE_DIR."
+    echo "         The official doctor currently expects single-account top-level credentials."
+  else
+    echo "ERROR: Official Feishu plugin update failed before the plugin was installed."
+    exit 1
+  fi
+fi
+echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
 # Step 7: Copy .env template

@@ -2,7 +2,7 @@
 
 本文档覆盖从代码仓库到云服务器运行的完整流程。
 
-> 本项目不包含 openclaw 源码。openclaw 通过 `npm install -g openclaw` 安装，本仓库只包含 HR Agent 配置和 Admin Portal。
+> 本项目不包含 openclaw 源码。部署时先安装 `openclaw` 主包，再通过飞书官方 CLI 的非交互更新命令 `OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update` 安装飞书插件；本仓库只包含 HR Agent 配置和 Admin Portal。
 
 ## 一条命令部署（推荐）
 
@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
 ```
 
-脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 安装 openclaw → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 按需自动使用 `sudo` 安装 openclaw 主包与飞书官方插件 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
 
 完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书 Bot（见飞书开放平台准备）→ 启动服务。
 
@@ -76,13 +76,14 @@ cd /opt/yomajiahr
 `install.sh` 会自动完成以下操作：
 
 1. 检查 Node.js >= 22
-2. 安装 openclaw（`npm install -g openclaw@latest`）
-3. 创建 `~/.openclaw/` 目录结构
-4. 复制 workspace 文件到 `~/.openclaw/workspaces/`
-5. 复制 skills 到 `~/.openclaw/skills/`
-6. 编译配置 JSONC -> JSON 写入 `~/.openclaw/openclaw.json`
-7. 复制 .env 模板
-8. 安装 admin-portal 依赖
+2. 安装 openclaw 主包（`npm install -g openclaw@latest`）
+3. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
+4. 创建 `~/.openclaw/` 目录结构
+5. 复制 workspace 文件到 `~/.openclaw/workspaces/`
+6. 复制 skills 到 `~/.openclaw/skills/`
+7. 编译配置 JSONC -> JSON 写入 `~/.openclaw/openclaw.json`
+8. 复制 .env 模板
+9. 安装 admin-portal 依赖
 
 当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向飞书用户外发心跳消息。
 
