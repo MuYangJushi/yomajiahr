@@ -21,7 +21,7 @@ GITHUB_REPO_URL="https://github.com/MorrisYangJushi/yomajiahr.git"
 INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIN_NODE_MAJOR=22
+MIN_NODE_MAJOR=24
 INSTALL_SYSTEMD=false
 
 for arg in "$@"; do
