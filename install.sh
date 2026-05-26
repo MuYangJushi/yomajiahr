@@ -42,6 +42,9 @@ echo
 HAS_SYSTEMD=false
 GATEWAY_WAS_ACTIVE=false
 ADMIN_WAS_ACTIVE=false
+ENV_WAS_PRESENT=false
+ENV_TEMPLATE_CREATED=false
+SERVICES_RESTARTED=false
 
 # ---------------------------------------------------------------------------
 # Step 0: Prerequisites (curl, git) + remote execution detection
@@ -300,40 +303,81 @@ fs.writeFileSync(
 );
 "
   echo "  $STATE_DIR/openclaw.json OK"
+  chmod 600 "$STATE_DIR/openclaw.json"
 else
   echo "  [WARN] config/openclaw.jsonc not found (skipping)"
 fi
-
-echo "  Installing official Feishu plugin..."
-# The official installer command enters interactive bot onboarding and writes to the
-# caller's OpenClaw state directory. For unattended deploys with repo-managed
-# config/env files, use the official non-interactive update path against STATE_DIR.
-if ! OPENCLAW_STATE_DIR="$STATE_DIR" npx -y @larksuite/openclaw-lark update; then
-  if [ -d "$STATE_DIR/extensions/openclaw-lark/node_modules/openclaw" ]; then
-    echo "  [WARN] Official Feishu plugin update returned non-zero after install."
-    echo "         Continuing because the plugin files were installed into $STATE_DIR."
-    echo "         The official doctor currently expects single-account top-level credentials."
-  else
-    echo "ERROR: Official Feishu plugin update failed before the plugin was installed."
-    exit 1
-  fi
-fi
-echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
 # Step 7: Copy .env template
 # ---------------------------------------------------------------------------
 
 echo "[7/8] Checking environment file..."
-if [ ! -f "$STATE_DIR/.env" ]; then
+if [ -f "$STATE_DIR/.env" ]; then
+  ENV_WAS_PRESENT=true
+  echo "  $STATE_DIR/.env already exists (skipped)"
+else
   if [ -f "$REPO_DIR/config/.env.example" ]; then
     cp "$REPO_DIR/config/.env.example" "$STATE_DIR/.env"
+    ENV_TEMPLATE_CREATED=true
     echo "  Copied .env template to $STATE_DIR/.env"
     echo "  ** Please edit $STATE_DIR/.env and fill in real API keys **"
   fi
-else
-  echo "  $STATE_DIR/.env already exists (skipped)"
 fi
+
+chmod 700 "$STATE_DIR"
+if [ -f "$STATE_DIR/.env" ]; then
+  chmod 600 "$STATE_DIR/.env"
+fi
+
+echo "  Installing official Feishu plugin..."
+# The official installer command enters interactive bot onboarding and writes to the
+# caller's OpenClaw state directory. For unattended deploys with repo-managed
+# config/env files, use the official non-interactive update path against STATE_DIR.
+# The bundled doctor currently only understands single-account top-level feishu
+# credentials and will false-positive on this repo's accounts-based config.
+PLUGIN_UPDATE_LOG="$(mktemp)"
+set +e
+OPENCLAW_STATE_DIR="$STATE_DIR" npx -y @larksuite/openclaw-lark update >"$PLUGIN_UPDATE_LOG" 2>&1
+PLUGIN_UPDATE_STATUS=$?
+set -e
+if [ "$PLUGIN_UPDATE_STATUS" -eq 0 ]; then
+  cat "$PLUGIN_UPDATE_LOG"
+else
+  if [ ! -d "$STATE_DIR/extensions/openclaw-lark/node_modules/openclaw" ]; then
+    cat "$PLUGIN_UPDATE_LOG"
+    rm -f "$PLUGIN_UPDATE_LOG"
+    echo "ERROR: Official Feishu plugin update failed before the plugin was installed."
+    exit 1
+  fi
+
+  sed \
+    -e '/^\[FAIL\] \.env file permissions are too open /d' \
+    -e '/^Suggestion: Run chmod 600 ".*\/\.env" or "feishu-plugin-onboard doctor --fix"\./d' \
+    -e '/^\[FAIL\] Feishu channel configuration missing or incomplete$/d' \
+    -e '/^Suggestion: App ID or Secret missing\. Run "feishu-plugin-onboard doctor --fix" to configure them\.$/d' \
+    -e '/^Some checks failed\. Use "feishu-plugin-onboard doctor --fix" to attempt automatic repair\.$/d' \
+    "$PLUGIN_UPDATE_LOG" > "$PLUGIN_UPDATE_LOG.filtered"
+
+  if grep -q '^\[FAIL\]' "$PLUGIN_UPDATE_LOG.filtered"; then
+    cat "$PLUGIN_UPDATE_LOG"
+    rm -f "$PLUGIN_UPDATE_LOG" "$PLUGIN_UPDATE_LOG.filtered"
+    echo "ERROR: Official Feishu plugin update reported unexpected failures."
+    exit 1
+  fi
+
+  cat "$PLUGIN_UPDATE_LOG.filtered"
+  if grep -q '^\[FAIL\] Feishu channel configuration missing or incomplete$' "$PLUGIN_UPDATE_LOG"; then
+    echo "  [WARN] Official Feishu plugin doctor does not yet understand this repo's multi-account channels.feishu.accounts layout."
+  fi
+  if grep -q '^\[FAIL\] \.env file permissions are too open ' "$PLUGIN_UPDATE_LOG"; then
+    echo "  [WARN] Official Feishu plugin doctor reported .env permissions before install.sh tightened them to 600."
+  fi
+  echo "  [WARN] Official Feishu plugin update returned non-zero due to known doctor limitations."
+  rm -f "$PLUGIN_UPDATE_LOG.filtered"
+fi
+rm -f "$PLUGIN_UPDATE_LOG"
+echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
 # Step 8: Install admin-portal dependencies
@@ -397,6 +441,7 @@ if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_
     sudo systemctl restart openclaw-admin
     echo "  openclaw-admin restarted"
   fi
+  SERVICES_RESTARTED=true
 fi
 
 # ---------------------------------------------------------------------------
@@ -417,16 +462,38 @@ echo "  data/hr-admin/              (audit logs)"
 echo "  openclaw.json               (gateway config)"
 echo "  .env                        (API keys)"
 echo
-echo "Next steps:"
-echo "  1. Edit $STATE_DIR/.env with your API keys"
-if [ "$INSTALL_SYSTEMD" = true ]; then
-  echo "  2. Enable and start services (after filling in .env):"
-  echo "     sudo systemctl enable --now openclaw-gateway"
-  echo "     sudo systemctl enable --now openclaw-admin"
+if [ "$SERVICES_RESTARTED" = true ] && [ "$ENV_WAS_PRESENT" = true ]; then
+  echo "Services were restarted automatically and the updated deployment is live."
+  if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
+    echo "  - openclaw-gateway restarted"
+  fi
+  if [ "$ADMIN_WAS_ACTIVE" = true ]; then
+    echo "  - openclaw-admin restarted"
+  fi
+  echo
+  echo "Useful checks:"
+  echo "  systemctl status openclaw-gateway --no-pager"
+  echo "  systemctl status openclaw-admin --no-pager"
+elif [ "$ENV_TEMPLATE_CREATED" = true ]; then
+  echo "Next steps:"
+  echo "  1. Edit $STATE_DIR/.env with your API keys"
+  if [ "$INSTALL_SYSTEMD" = true ]; then
+    echo "  2. Enable and start services:"
+    echo "     sudo systemctl enable --now openclaw-gateway"
+    echo "     sudo systemctl enable --now openclaw-admin"
+  else
+    echo "  2. Start gateway:"
+    echo "     OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
+    echo "  3. Start admin portal:"
+    echo "     cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+  fi
+elif [ "$INSTALL_SYSTEMD" = true ]; then
+  echo "Next steps:"
+  echo "  sudo systemctl enable --now openclaw-gateway"
+  echo "  sudo systemctl enable --now openclaw-admin"
 else
-  echo "  2. Start gateway:"
-  echo "     OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
-  echo "  3. Start admin portal:"
-  echo "     cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+  echo "Next steps:"
+  echo "  OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
+  echo "  cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
 fi
 echo
