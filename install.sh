@@ -39,6 +39,10 @@ echo "Source repo:  $REPO_DIR"
 echo "State dir:    $STATE_DIR"
 echo
 
+HAS_SYSTEMD=false
+GATEWAY_WAS_ACTIVE=false
+ADMIN_WAS_ACTIVE=false
+
 # ---------------------------------------------------------------------------
 # Step 0: Prerequisites (curl, git) + remote execution detection
 # ---------------------------------------------------------------------------
@@ -67,6 +71,28 @@ if [ ! -d "$REPO_DIR/workspaces" ] || [ ! -d "$REPO_DIR/skills" ]; then
     echo "  $INSTALL_DIR already exists, skipping clone"
   fi
   exec "$INSTALL_DIR/install.sh" "$@"
+fi
+
+if [ "$(uname)" = "Linux" ] && command -v systemctl &>/dev/null; then
+  HAS_SYSTEMD=true
+  if systemctl cat openclaw-gateway >/dev/null 2>&1 && systemctl is-active --quiet openclaw-gateway; then
+    GATEWAY_WAS_ACTIVE=true
+  fi
+  if systemctl cat openclaw-admin >/dev/null 2>&1 && systemctl is-active --quiet openclaw-admin; then
+    ADMIN_WAS_ACTIVE=true
+  fi
+fi
+
+if [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; then
+  echo "[0/8] Stopping running services before update..."
+  if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
+    sudo systemctl stop openclaw-gateway
+    echo "  openclaw-gateway stopped"
+  fi
+  if [ "$ADMIN_WAS_ACTIVE" = true ]; then
+    sudo systemctl stop openclaw-admin
+    echo "  openclaw-admin stopped"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -358,6 +384,18 @@ if [ "$INSTALL_SYSTEMD" = true ]; then
 
     sudo systemctl daemon-reload
     echo "  Service files installed."
+  fi
+fi
+
+if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; }; then
+  echo "[systemd] Restarting previously running services..."
+  if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
+    sudo systemctl restart openclaw-gateway
+    echo "  openclaw-gateway restarted"
+  fi
+  if [ "$ADMIN_WAS_ACTIVE" = true ]; then
+    sudo systemctl restart openclaw-admin
+    echo "  openclaw-admin restarted"
   fi
 fi
 
