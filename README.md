@@ -1,7 +1,7 @@
 # Yoma+HR 智能助手
 > 📚 项目计划、Sprint 看板、知识库在独立仓库:[yomajiahr-kb](https://github.com/MuYangJushi/yomajiahr-kb)
 
-基于 [OpenClaw](https://github.com/openclaw/openclaw) 构建的企业 HR 多 Agent 智能系统，通过飞书 Bot + Web 界面为全员提供 HR 自助服务。
+基于 [OpenClaw](https://github.com/openclaw/openclaw) 构建的企业 HR 多 Agent 智能系统，通过飞书 Bot、钉钉 Bot + Web 界面为全员提供 HR 自助服务。
 
 > 本仓库只包含 HR 定制配置（Agent workspace、Skills、配置文件和 Admin Portal），不包含 openclaw 源码。openclaw 通过 `npm install -g openclaw` 安装。
 
@@ -17,8 +17,8 @@
 ## 架构
 
 ```
-          飞书 Bot 1          飞书 Bot 4
-         (HR小助手)          (HR管理后台)
+     飞书/钉钉 HR小助手    飞书/钉钉 HR管理后台
+          (全员)              (HR管理员)
               |                   |
               v                   v
         hr-assistant          hr-admin          Admin Portal
@@ -35,8 +35,8 @@
                ~/.openclaw/data/hr-policies/
 ```
 
-- **hr-assistant**：员工入口，绑定飞书 Bot 1，只读知识库
-- **hr-admin**：管理入口，绑定飞书 Bot 4，读写知识库 + 审计日志
+- **hr-assistant**：员工入口，绑定飞书/钉钉 HR小助手，只读知识库
+- **hr-admin**：管理入口，绑定飞书/钉钉 HR管理后台，读写知识库 + 审计日志
 - **Admin Portal**：独立 Web 服务（端口 18790），文档上传/管理/审计日志
 
 ## 前置条件
@@ -54,12 +54,13 @@ cd yomajiahr
 
 `install.sh` 会自动：
 1. 安装 openclaw 主包（`npm install -g openclaw@latest`）
-2. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
-3. 创建 `~/.openclaw/` 目录结构
-4. 复制 workspace 文件和 skills
-5. 编译配置文件（JSONC -> JSON）
-6. 复制 .env 模板
-7. 安装 admin-portal 依赖
+2. 创建 `~/.openclaw/` 目录结构
+3. 复制 workspace 文件和 skills
+4. 编译配置文件（JSONC -> JSON）
+5. 复制 .env 模板
+6. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
+7. 通过 OpenClaw 插件命令安装钉钉官方 connector（`openclaw plugins install @dingtalk-real-ai/dingtalk-connector`）
+8. 安装 admin-portal 依赖
 
 ### 配置 API Keys
 

@@ -14,13 +14,13 @@
 ## 二、架构概览
 
 ```
-飞书 Bot 1 "HR小助手" ──binding──> hr-assistant（单 Agent）
+飞书/钉钉 "HR小助手" ──binding──> hr-assistant（单 Agent）
     Skills: [hr-policy-qa, hr-general]
     Tools: memory_search, memory_get
     Tools Deny: memory_write, memory_delete, exec
     memorySearch: DashScope embedding (text-embedding-v4)
 
-飞书 Bot 4 "HR管理后台" ──binding──> hr-admin（独立 Agent）
+飞书/钉钉 "HR管理后台" ──binding──> hr-admin（独立 Agent）
     Skills: [hr-admin]
     Tools: memory_search, memory_write, memory_delete, exec
 
@@ -44,7 +44,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 
 ### hr-assistant（员工入口）
 
-**定位**：全员可用的 HR 对话窗口，绑定飞书 Bot 1。
+**定位**：全员可用的 HR 对话窗口，绑定飞书和钉钉 HR小助手。
 
 **Skill 分工**：
 
@@ -63,6 +63,8 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 | `memory_delete` | 禁止 | 员工不能删除知识库 |
 | `exec`          | 禁止 | 员工不能执行脚本   |
 
+员工入口使用工具 allowlist，仅授权 `memory_search` / `memory_get`；钉钉 connector 附带的文档、日历、待办、DING 等额外业务工具默认不开放。
+
 **Embedding 配置**：
 
 - Provider: 阿里百炼 DashScope（OpenAI-compatible）
@@ -71,17 +73,17 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 
 ### hr-admin（管理入口）
 
-**定位**：仅 HR 管理员可用，绑定飞书 Bot 4。拥有知识库写权限。
+**定位**：仅 HR 管理员可用，绑定飞书和钉钉 HR管理后台。拥有知识库写权限。
 
 **管理入口**：
 
 | 入口                 | 适用场景                               |
 | -------------------- | -------------------------------------- |
 | Admin Portal（推荐） | 拖拽上传文档、可视化文档管理、审计日志 |
-| 飞书 Bot 4           | 快捷对话式操作                         |
-| Web Portal           | 与飞书 Bot 功能相同                    |
+| 飞书/钉钉管理 Bot    | 快捷对话式操作                         |
+| Web Portal           | 与管理 Bot 功能相同                    |
 
-**工具权限**：全部允许（memory_search, memory_write, memory_delete, exec）
+**工具权限**：仅允许 HR 知识库管理所需工具（memory_search, memory_get, memory_write, memory_delete, exec），禁用 gateway、sessions_spawn，并默认不开放钉钉 connector 附带的额外业务工具。
 
 ---
 
@@ -101,13 +103,13 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
               │  write/delete)│  │                 │
               └───────┬───────┘  └────────┬────────┘
                       │                   │
-              飞书 Bot 1            飞书 Bot 4
+          飞书/钉钉 HR小助手    飞书/钉钉 HR管理后台
               (全员)               (HR管理员)
 ```
 
 - `tools.deny` 是系统级硬隔离：即使 LLM 被诱导，被 deny 的工具也无法调用
 - 两个 Agent 完全独立，无 parent-child 关系
-- 飞书侧通过 Bot 可见范围控制用户访问
+- 飞书/钉钉侧通过 Bot 或应用可见范围控制用户访问
 
 ---
 
@@ -132,7 +134,7 @@ Plan A 通过 Skills 隔离领域行为，在同一 Agent 内完成检索和回�
 
 1. Admin Portal 拖拽上传（推荐）：PDF/Word/Text → 自动转 Markdown + 元数据推理
 2. CLI 脚本：`skills/hr-admin/scripts/doc-to-markdown.mjs`
-3. 飞书 Bot 4 对话指令
+3. 飞书/钉钉管理 Bot 对话指令
 
 ---
 

@@ -2,7 +2,7 @@
 
 本文档覆盖从代码仓库到云服务器运行的完整流程。
 
-> 本项目不包含 openclaw 源码。部署时先安装 `openclaw` 主包，再通过飞书官方 CLI 的非交互更新命令 `OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update` 安装飞书插件；本仓库只包含 HR Agent 配置和 Admin Portal。
+> 本项目不包含 openclaw 源码。部署时先安装 `openclaw` 主包，再安装飞书官方插件与钉钉官方 connector；本仓库只包含 HR Agent 配置和 Admin Portal。
 
 ## 一条命令部署（推荐）
 
@@ -16,9 +16,9 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
 ```
 
-脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 按需自动使用 `sudo` 安装 openclaw 主包与飞书官方插件 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
 
-完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书 Bot（见飞书开放平台准备）→ 启动服务。
+完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书/钉钉 Bot（见开放平台准备）→ 启动服务。
 
 ---
 
@@ -29,8 +29,9 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 - Linux（Ubuntu 22.04+ / Debian 12+）或 macOS
 - curl（用于自动安装 Node.js，如果尚未安装）
 - Node.js 22+（没有也可以，`install.sh` 会自动安装）
+- OpenClaw 2026.4.9+（钉钉官方 connector 的最低要求；`install.sh` 默认安装最新版）
 - 内存 2GB+，磁盘 10GB+
-- 网络：可出站访问飞书 API（`open.feishu.cn`）和 LLM API
+- 网络：可出站访问飞书 API（`open.feishu.cn`）、钉钉 API/Stream 服务和 LLM API
 
 ### 飞书开放平台准备
 
@@ -61,6 +62,30 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 4. 记录 `App ID` 和 `App Secret`
 5. 发布应用
 
+### 钉钉开放平台准备
+
+部署前需在 [钉钉开放平台](https://open-dev.dingtalk.com/) 创建两个企业内部应用机器人，并将消息接收模式设为 **Stream 模式**。v1 只申请消息收发所需权限，不启用钉钉文档、日历、待办、DING 等额外能力。
+
+**Bot 1: HR小助手（全员可用）**
+
+1. 创建企业内部应用，命名 "HR小助手"
+2. 添加「机器人」能力
+3. 消息接收模式选择 **Stream 模式**
+4. 权限管理中申请机器人消息接收/发送所需权限
+5. 版本管理与发布 -> 可见范围设为 **全部员工**
+6. 记录 `AppKey`（Client ID）和 `AppSecret`（Client Secret）
+7. 发布应用
+
+运行时配置中，HR小助手允许加入群聊，但群内消息必须显式 @ 机器人后才会回复（`groupPolicy: "open"` + `requireMention: true`）。
+
+**Bot 2: HR管理后台（仅 HR 管理员）**
+
+1. 同上流程创建第二个企业内部应用机器人，命名 "HR管理后台"
+2. 消息接收模式选择 **Stream 模式**
+3. 可见范围设为 **仅指定人员**（选择 HR 管理员）
+4. 记录 `AppKey`（Client ID）和 `AppSecret`（Client Secret）
+5. 发布应用
+
 ---
 
 ## 部署步骤
@@ -77,15 +102,16 @@ cd /opt/yomajiahr
 
 1. 检查 Node.js >= 22
 2. 安装 openclaw 主包（`npm install -g openclaw@latest`）
-3. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
-4. 创建 `~/.openclaw/` 目录结构
-5. 复制 workspace 文件到 `~/.openclaw/workspaces/`
-6. 复制 skills 到 `~/.openclaw/skills/`
-7. 编译配置 JSONC -> JSON 写入 `~/.openclaw/openclaw.json`
-8. 复制 .env 模板
-9. 安装 admin-portal 依赖
+3. 创建 `~/.openclaw/` 目录结构
+4. 复制 workspace 文件到 `~/.openclaw/workspaces/`
+5. 复制 skills 到 `~/.openclaw/skills/`
+6. 编译配置 JSONC -> JSON 写入 `~/.openclaw/openclaw.json`
+7. 复制 .env 模板
+8. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
+9. 通过 OpenClaw 插件命令安装钉钉官方 connector（`openclaw plugins install @dingtalk-real-ai/dingtalk-connector`）
+10. 安装 admin-portal 依赖
 
-当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向飞书用户外发心跳消息。
+当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向聊天渠道用户外发心跳消息。
 
 ### Step 2: 配置环境变量
 
@@ -105,6 +131,10 @@ nano ~/.openclaw/.env
 | `FEISHU_HR_BOT_APP_SECRET` | 飞书 Bot 1 App Secret |
 | `FEISHU_ADMIN_BOT_APP_ID` | 飞书 Bot 4 App ID |
 | `FEISHU_ADMIN_BOT_APP_SECRET` | 飞书 Bot 4 App Secret |
+| `DINGTALK_HR_BOT_CLIENT_ID` | 钉钉 HR小助手 AppKey / Client ID |
+| `DINGTALK_HR_BOT_CLIENT_SECRET` | 钉钉 HR小助手 AppSecret / Client Secret |
+| `DINGTALK_ADMIN_BOT_CLIENT_ID` | 钉钉 HR管理后台 AppKey / Client ID |
+| `DINGTALK_ADMIN_BOT_CLIENT_SECRET` | 钉钉 HR管理后台 AppSecret / Client Secret |
 | `OPENCLAW_GATEWAY_TOKEN` | Gateway 认证 token（自定义长随机串） |
 | `OPENCLAW_WEB_AUTH_TOKEN` | Admin Portal 认证 token |
 
@@ -269,7 +299,7 @@ sudo systemctl status openclaw-gateway --no-pager
 | 问题 | 排查方式 |
 |------|----------|
 | Gateway 启动失败 | `journalctl -u openclaw-gateway -n 100` |
-| 飞书 Bot 未响应 | `OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw channels status --probe` |
+| 聊天 Bot 未响应 | `OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw channels status --probe` |
 | Skills 未识别 | `OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw skills list` |
 | 知识库搜不到文档 | 确认 `~/.openclaw/data/hr-policies/` 下有 .md 文件且含正确 frontmatter |
 | Admin Portal 无法访问 | 确认端口 18790 开放；`journalctl -u openclaw-admin -n 100` |

@@ -19,7 +19,7 @@
 
 - **Admin Portal 上传（推荐）**：拖拽或选择文件，支持 PDF/Word(docx)/文本
 - 提供文件路径（服务器上的文件）
-- 飞书消息中直接发送附件（受限于飞书 channel 支持的格式）
+- 聊天消息中直接发送附件（受限于当前 channel 支持的格式）
 
 ### 步骤 2: 文档转换
 
@@ -83,7 +83,7 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
 **查看方式：**
 
 - **Admin Portal**（推荐）：`http://<server>:18790/#audit-log`，支持筛选、分页、CSV 导出
-- **对话查询**：通过飞书 Bot 或 Web Portal 向 Admin Agent 提问
+- **对话查询**：通过飞书/钉钉管理 Bot 或 Web Portal 向 Admin Agent 提问
 
 ## 分类管理
 

@@ -25,6 +25,7 @@
 ## 渠道
 
 - 飞书 Bot「HR管理后台」— 仅 HR 管理员
+- 钉钉 Bot「HR管理后台」— 仅 HR 管理员，Stream 长连接
 - Admin Portal — `http://<server>:18790`，文档管理 Web 界面
 - Yoma+HR Web Portal — web 界面
 

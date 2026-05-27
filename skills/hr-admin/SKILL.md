@@ -1,11 +1,11 @@
 ---
 name: hr-admin
-description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web Portal + Admin Portal），负责知识库文档的增删改查、多格式文档上传转换、文档版本管理和操作审计日志查询。当管理员需要管理政策文档、上传新政策、废止旧政策、查看操作记录时触发。
+description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管理 Bot + Web Portal + Admin Portal），负责知识库文档的增删改查、多格式文档上传转换、文档版本管理和操作审计日志查询。当管理员需要管理政策文档、上传新政策、废止旧政策、查看操作记录时触发。
 ---
 
 # HR 管理员 Agent
 
-管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书 Bot、Yoma+HR Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
+管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书/钉钉管理 Bot、Yoma+HR Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
 
 ## 管理入口
 
@@ -14,10 +14,10 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 | 入口                    | 适用场景                         | 说明                                                                                  |
 | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
 | **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-portal/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
-| **飞书 Bot 4**          | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
-| **Yoma+HR Web Portal**  | 对话式操作                       | 与飞书 Bot 功能相同，Web 聊天界面                                                     |
+| **飞书/钉钉管理 Bot**   | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
+| **Yoma+HR Web Portal**  | 对话式操作                       | 与管理 Bot 功能相同，Web 聊天界面                                                     |
 
-> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、自动分析元数据和即时反馈。飞书 Bot 和 Web Portal 适合快捷的查询和删除操作。
+> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、自动分析元数据和即时反馈。聊天 Bot 和 Web Portal 适合快捷的查询和删除操作。
 
 ## 核心功能
 
@@ -32,7 +32,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书 Bot 4 + Web
 3. 系统自动转为 Markdown 写入知识库
 4. 页面显示上传结果、自动识别出的元数据和警告信息
 
-**方式 B: 飞书 Bot / Web Portal 对话上传**
+**方式 B: 聊天 Bot / Web Portal 对话上传**
 
 管理员提供服务器上的文件路径，Agent 执行：
 
@@ -124,7 +124,7 @@ Agent:  已删除。审计记录已生成。
 - 支持分页浏览
 - 支持导出 CSV（兼容 Excel）
 
-**方式 B: 飞书 Bot / Web Portal 对话查询**
+**方式 B: 聊天 Bot / Web Portal 对话查询**
 
 管理员可通过对话查询：
 

@@ -57,7 +57,7 @@ if [ "$(uname)" = "Linux" ] && command -v apt-get &>/dev/null; then
   command -v git  &>/dev/null || NEED_PKGS="$NEED_PKGS git"
   command -v rg   &>/dev/null || NEED_PKGS="$NEED_PKGS ripgrep"
   if [ -n "$NEED_PKGS" ]; then
-    echo "[0/8] Installing prerequisites:$NEED_PKGS..."
+    echo "[0/9] Installing prerequisites:$NEED_PKGS..."
     sudo apt-get update -qq
     sudo apt-get install -y $NEED_PKGS
   fi
@@ -66,7 +66,7 @@ fi
 # Detect remote execution (curl | bash): repo files won't be present at REPO_DIR.
 # Clone the repo and re-exec from the cloned location.
 if [ ! -d "$REPO_DIR/workspaces" ] || [ ! -d "$REPO_DIR/skills" ]; then
-  echo "[0/8] Remote execution detected — cloning repo to $INSTALL_DIR..."
+  echo "[0/9] Remote execution detected — cloning repo to $INSTALL_DIR..."
   if [ ! -d "$INSTALL_DIR/.git" ]; then
     sudo git clone --depth=1 "$GITHUB_REPO_URL" "$INSTALL_DIR"
     sudo chown -R "$(id -u):$(id -g)" "$INSTALL_DIR"
@@ -87,7 +87,7 @@ if [ "$(uname)" = "Linux" ] && command -v systemctl &>/dev/null; then
 fi
 
 if [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; then
-  echo "[0/8] Stopping running services before update..."
+  echo "[0/9] Stopping running services before update..."
   if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
     sudo systemctl stop openclaw-gateway
     echo "  openclaw-gateway stopped"
@@ -121,7 +121,7 @@ install_node_via_apt() {
   sudo apt-get install -y nodejs
 }
 
-echo "[1/8] Checking Node.js..."
+echo "[1/9] Checking Node.js..."
 NODE_OK=false
 if command -v node &>/dev/null; then
   NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
@@ -159,7 +159,7 @@ npm config set registry https://registry.npmmirror.com
 # Step 2: Install openclaw
 # ---------------------------------------------------------------------------
 
-echo "[2/8] Installing openclaw..."
+echo "[2/9] Installing openclaw..."
 # Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
 NPM_PREFIX="$(npm config get prefix)"
 if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
@@ -178,7 +178,7 @@ echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 # Step 3: Create directory structure
 # ---------------------------------------------------------------------------
 
-echo "[3/8] Creating directory structure..."
+echo "[3/9] Creating directory structure..."
 mkdir -p "$STATE_DIR"
 mkdir -p "$STATE_DIR/workspaces/hr-assistant"
 mkdir -p "$STATE_DIR/workspaces/hr-admin"
@@ -250,7 +250,7 @@ echo "  Done"
 # Step 4: Copy workspace files
 # ---------------------------------------------------------------------------
 
-echo "[4/8] Copying workspace files..."
+echo "[4/9] Copying workspace files..."
 for agent in hr-assistant hr-admin; do
   src="$REPO_DIR/workspaces/$agent"
   dst="$STATE_DIR/workspaces/$agent"
@@ -272,7 +272,7 @@ done
 # Step 5: Copy skills
 # ---------------------------------------------------------------------------
 
-echo "[5/8] Copying skills..."
+echo "[5/9] Copying skills..."
 for skill_dir in "$REPO_DIR/skills"/*/; do
   skill_name=$(basename "$skill_dir")
   dst="$STATE_DIR/skills/$skill_name"
@@ -285,7 +285,7 @@ done
 # Step 6: Compile config (JSONC -> JSON)
 # ---------------------------------------------------------------------------
 
-echo "[6/8] Compiling config..."
+echo "[6/9] Compiling config..."
 if [ -f "$REPO_DIR/config/openclaw.jsonc" ]; then
   node -e "
 const fs = require('fs');
@@ -312,7 +312,7 @@ fi
 # Step 7: Copy .env template
 # ---------------------------------------------------------------------------
 
-echo "[7/8] Checking environment file..."
+echo "[7/9] Checking environment file..."
 if [ -f "$STATE_DIR/.env" ]; then
   ENV_WAS_PRESENT=true
   echo "  $STATE_DIR/.env already exists (skipped)"
@@ -380,10 +380,41 @@ rm -f "$PLUGIN_UPDATE_LOG"
 echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
-# Step 8: Install admin-portal dependencies
+# Step 8: Install DingTalk connector
 # ---------------------------------------------------------------------------
 
-echo "[8/8] Installing admin-portal dependencies..."
+echo "[8/9] Installing official DingTalk connector..."
+# The official DingTalk connector also provides a QR-code onboarding command via
+# npx, but production deploys keep credentials in repo-managed config/env files.
+# Install the plugin package only; do not enter interactive onboarding here.
+DINGTALK_PLUGIN_LOG="$(mktemp)"
+set +e
+OPENCLAW_STATE_DIR="$STATE_DIR" openclaw plugins install @dingtalk-real-ai/dingtalk-connector >"$DINGTALK_PLUGIN_LOG" 2>&1
+DINGTALK_PLUGIN_STATUS=$?
+if [ "$DINGTALK_PLUGIN_STATUS" -ne 0 ]; then
+  cat "$DINGTALK_PLUGIN_LOG"
+  echo "  DingTalk connector install returned non-zero; trying plugin update for rerunnable deploys..."
+  : >"$DINGTALK_PLUGIN_LOG"
+  OPENCLAW_STATE_DIR="$STATE_DIR" openclaw plugins update dingtalk-connector >"$DINGTALK_PLUGIN_LOG" 2>&1
+  DINGTALK_PLUGIN_STATUS=$?
+fi
+set -e
+if [ "$DINGTALK_PLUGIN_STATUS" -ne 0 ]; then
+  cat "$DINGTALK_PLUGIN_LOG"
+  rm -f "$DINGTALK_PLUGIN_LOG"
+  echo "ERROR: Official DingTalk connector install failed."
+  echo "       Check OpenClaw version (requires >= 2026.4.9), network access, and plugin registry availability."
+  exit 1
+fi
+cat "$DINGTALK_PLUGIN_LOG"
+rm -f "$DINGTALK_PLUGIN_LOG"
+echo "  official DingTalk connector installed"
+
+# ---------------------------------------------------------------------------
+# Step 9: Install admin-portal dependencies
+# ---------------------------------------------------------------------------
+
+echo "[9/9] Installing admin-portal dependencies..."
 if [ -f "$REPO_DIR/admin-portal/package.json" ]; then
   cd "$REPO_DIR/admin-portal"
   sudo npm install --omit=dev

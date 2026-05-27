@@ -31,6 +31,7 @@
 ## 渠道
 
 - 飞书 Bot「HR小助手」— 全员可用，WebSocket 长连接
+- 钉钉 Bot「HR小助手」— 全员可用，Stream 长连接，群内需 @ 机器人
 - Yoma+HR Web Portal — web 界面
 
 ## 联系方式（引导用户时使用）

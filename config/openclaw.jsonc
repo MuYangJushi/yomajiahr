@@ -5,11 +5,23 @@
     "enabled": true,
   },
 
+  // 非内置渠道插件需要显式信任/启用，gateway 启动时才会加载 runtime。
+  "plugins": {
+    "entries": {
+      "dingtalk-connector": {
+        "enabled": true,
+      },
+      "openclaw-lark": {
+        "enabled": true,
+      },
+    },
+  },
+
   // ---------------------------------------------------------------------------
   // Channels
   // ---------------------------------------------------------------------------
   "channels": {
-    // 飞书 (Phase 1: Bot 1 全员 + Bot 4 管理员)
+    // 飞书 (Bot 1 全员 + Bot 4 管理员)
     "feishu": {
       "enabled": true,
       "domain": "feishu",
@@ -44,6 +56,40 @@
       },
       "streaming": true,
     },
+
+    // 钉钉 (双入口镜像: HR小助手 + HR管理后台)
+    // 使用钉钉官方 connector: @dingtalk-real-ai/dingtalk-connector
+    // 钉钉开放平台需创建企业内部应用机器人，并将消息接收模式设为 Stream 模式。
+    "dingtalk-connector": {
+      "enabled": true,
+      "accounts": {
+        // HR小助手 — 全员可用
+        "hr-assistant": {
+          "enabled": true,
+          "name": "HR小助手",
+          "clientId": "${DINGTALK_HR_BOT_CLIENT_ID}",
+          "clientSecret": "${DINGTALK_HR_BOT_CLIENT_SECRET}",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "requireMention": true,
+        },
+        // HR管理后台 — 仅 HR 管理员
+        // 管理入口依赖钉钉应用可见范围做第一道隔离，agent tools.deny 做第二道隔离。
+        "hr-admin": {
+          "enabled": true,
+          "name": "HR管理后台",
+          "clientId": "${DINGTALK_ADMIN_BOT_CLIENT_ID}",
+          "clientSecret": "${DINGTALK_ADMIN_BOT_CLIENT_SECRET}",
+          "dmPolicy": "open",
+          "groupPolicy": "disabled",
+        },
+      },
+      "tools": {
+        "docs": false,
+        "media": false,
+      },
+      "groupReplyMode": "markdown",
+    },
   },
 
   // ---------------------------------------------------------------------------
@@ -56,7 +102,7 @@
         "primary": "minimax/MiniMax-M2.7",
         // "fallbacks": ["openai/gpt-5.1", "anthropic/claude-sonnet-4-5"],
       },
-      // 心跳默认每 30 分钟执行一次，但默认不向飞书外发，仅用于内部巡检与保活。
+      // 心跳默认每 30 分钟执行一次，但默认不向聊天渠道外发，仅用于内部巡检与保活。
       // 各 agent 需显式声明 heartbeat 才会启用，避免依赖 “默认 agent” 的隐式规则。
       "heartbeat": {
         "every": "30m",
@@ -105,6 +151,8 @@
         "skills": ["hr-policy-qa", "hr-general"],
         "heartbeat": {},
         "tools": {
+          // 使用 allowlist 防止钉钉 connector 的文档/日历/待办/DING 等额外工具默认暴露给员工入口。
+          "allow": ["memory_search", "memory_get"],
           "deny": ["memory_write", "memory_delete", "exec"],
         },
       },
@@ -115,6 +163,8 @@
         "skills": ["hr-admin"],
         "heartbeat": {},
         "tools": {
+          // 管理员入口只开放 HR 知识库管理所需工具；钉钉额外业务工具默认不授权。
+          "allow": ["memory_search", "memory_get", "memory_write", "memory_delete", "exec"],
           "deny": ["gateway", "sessions_spawn"],
         },
       },
@@ -147,6 +197,20 @@
       "agentId": "hr-admin",
       "match": {
         "channel": "feishu",
+        "accountId": "hr-admin",
+      },
+    },
+    {
+      "agentId": "hr-assistant",
+      "match": {
+        "channel": "dingtalk-connector",
+        "accountId": "hr-assistant",
+      },
+    },
+    {
+      "agentId": "hr-admin",
+      "match": {
+        "channel": "dingtalk-connector",
         "accountId": "hr-admin",
       },
     },
