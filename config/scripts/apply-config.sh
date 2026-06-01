@@ -18,6 +18,8 @@ GATEWAY_SVC="${GATEWAY_SVC:-openclaw-gateway}"
 PROBE_WINDOW="${PROBE_WINDOW:-15}"
 
 CONFIG_DIR="$REPO_DIR/config"
+STORE_DIR="$STATE_DIR/config-store"   # 运行时 store（平台拥有；仓库内为 config-store.seed 模板）
+SKILLS_DIR="$STATE_DIR/skills"
 RUNTIME="$STATE_DIR/openclaw.json"
 STAGING="$STATE_DIR/openclaw.json.staging"
 LASTGOOD="$STATE_DIR/openclaw.json.last-good"
@@ -73,20 +75,22 @@ rollback() { # reason
   fail "$1（无 last-good 可回滚）"
 }
 
-# —— 1. 生成 + 校验 → staging ——
+# —— 1. 生成 + 校验 → staging（含 --check-fs：workspace/skill 存在性）——
 log "生成 + 校验 → staging"
 node "$CONFIG_DIR/dist/generate-config.js" \
   --out "$STAGING" \
   --base "$CONFIG_DIR/openclaw.base.jsonc" \
-  --store "$CONFIG_DIR/config-store" \
+  --store "$STORE_DIR" \
   --env "$CONFIG_DIR/.env.example" \
+  --state-dir "$STATE_DIR" \
+  --check-fs --skills-dir "$SKILLS_DIR" \
   || fail "生成/校验失败（未改动运行时配置）"
 
 # —— 2. 快照 last-good + store 版本 ——
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 [ -f "$RUNTIME" ] && cp "$RUNTIME" "$LASTGOOD"
 mkdir -p "$VERSIONS/$TS"
-cp "$CONFIG_DIR"/config-store/*.json "$VERSIONS/$TS/" 2>/dev/null || true
+cp "$STORE_DIR"/*.json "$VERSIONS/$TS/" 2>/dev/null || true
 log "已快照 last-good + store 版本 $TS"
 
 # —— 3. 原子应用 ——

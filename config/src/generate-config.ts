@@ -1,11 +1,22 @@
 // 生成器（基石 A）：base.jsonc + config-store/*.json → 运行时 openclaw.json。
 // 被 install.sh（CLI）与未来 portal（programmatic）共用。
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import type { ConfigStore, RuntimeConfig } from './types.js';
 import { validateConfig, type ValidateOptions } from './validate-config.js';
+
+/** 把 agent.workspace（如 "~/.openclaw/workspaces/x"）解析为绝对路径。
+ *  优先把前缀 ~/.openclaw 映射到运行时 stateDir（apply 以 root 运行时 ~ ≠ 部署用户家目录）。 */
+export function makeWorkspaceResolver(stateDir?: string): (ws: string) => string {
+  return (ws: string) => {
+    if (stateDir && ws.startsWith('~/.openclaw')) return ws.replace('~/.openclaw', stateDir);
+    if (ws.startsWith('~')) return ws.replace('~', homedir());
+    return ws;
+  };
+}
 
 /** 解析 JSONC：复用 install.sh 的语义（去 BOM/注释 + JS 对象字面量求值，容忍尾逗号）。 */
 export function parseJsonc(text: string): unknown {
@@ -41,7 +52,8 @@ export function readEnvKeys(path: string): Set<string> {
 
 export interface GenerateOptions {
   basePath: string; // openclaw.base.jsonc
-  storeDir: string; // config-store/
+  storeDir?: string; // config-store/（与 store 二选一）
+  store?: ConfigStore; // 内存 store（portal 预校验用；优先于 storeDir）
   envPath?: string; // .env / .env.example（占位符校验）
   checkFilesystem?: boolean;
   skillsDir?: string;
@@ -56,11 +68,18 @@ export interface GenerateResult {
 /** 装配运行时配置；校验失败抛错（带可读中文错误）。 */
 export function generateConfig(opts: GenerateOptions): GenerateResult {
   const base = readJsonc(opts.basePath) as any;
-  const store: ConfigStore = {
-    channels: readJson(resolve(opts.storeDir, 'channels.json')),
-    agents: readJson(resolve(opts.storeDir, 'agents.json')),
-    bindings: readJson(resolve(opts.storeDir, 'bindings.json')),
-  };
+  let store: ConfigStore;
+  if (opts.store) {
+    store = opts.store;
+  } else if (opts.storeDir) {
+    store = {
+      channels: readJson(resolve(opts.storeDir, 'channels.json')),
+      agents: readJson(resolve(opts.storeDir, 'agents.json')),
+      bindings: readJson(resolve(opts.storeDir, 'bindings.json')),
+    };
+  } else {
+    throw new Error('generateConfig：需提供 storeDir 或 store 之一');
+  }
 
   // 深拷贝 base，避免污染
   const config: any = structuredClone(base);
@@ -122,18 +141,25 @@ function isMain(): boolean {
 if (isMain()) {
   const args = parseArgs(process.argv.slice(2));
   const configDir = resolve(dirname(fileURLToPath(import.meta.url)), '..'); // dist/ 的上一级 = config/
+  // 运行时目录：用于默认 store 位置与 ~/.openclaw 工作区解析。
+  const stateDir = resolve(
+    args['state-dir'] ?? process.env.OPENCLAW_STATE_DIR ?? resolve(homedir(), '.openclaw'),
+  );
   const basePath = resolve(args.base ?? resolve(configDir, 'openclaw.base.jsonc'));
-  const storeDir = resolve(args.store ?? resolve(configDir, 'config-store'));
+  // 默认从运行时 $STATE_DIR/config-store 读取（仓库内的是 config-store.seed 模板，不在此默认）。
+  const storeDir = resolve(args.store ?? resolve(stateDir, 'config-store'));
   const envPath = resolve(args.env ?? resolve(configDir, '.env.example'));
   const out = args.out ? resolve(args.out) : undefined;
+  const checkFs = args['check-fs'] === 'true';
 
   try {
     const { config } = generateConfig({
       basePath,
       storeDir,
       envPath,
-      checkFilesystem: args['check-fs'] === 'true',
+      checkFilesystem: checkFs,
       skillsDir: args['skills-dir'] ? resolve(args['skills-dir']) : undefined,
+      resolveWorkspace: checkFs ? makeWorkspaceResolver(stateDir) : undefined,
     });
     const text = serializeConfig(config);
     if (out) {

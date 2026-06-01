@@ -324,11 +324,22 @@ if [ -f "$REPO_DIR/config/openclaw.base.jsonc" ]; then
     || { echo "  [FAIL] config toolkit build failed"; exit 1; }
   # \u751F\u6210 + \u6821\u9A8C\uFF08base + config-store \u2192 \u8FD0\u884C\u65F6 JSON\uFF09\u3002\u6821\u9A8C\u5931\u8D25\u5219\u975E\u96F6\u9000\u51FA\uFF0C\u4E0D\u5199\u574F\u914D\u7F6E\u3002
   # \u5360\u4F4D\u7B26\u5B58\u5728\u6027\u5BF9\u7167 .env.example\uFF08\u5951\u7EA6\u6A21\u677F\uFF1Bstep 7 \u624D\u62F7\u8D1D/\u586B\u5145\u771F\u5B9E .env\uFF09\u3002
+  # 运行时 config-store 由平台拥有，存于 $STATE_DIR；首装从仓库 seed 播种，已存在则保留(不覆盖线上配置)。
+  if [ ! -d "$STATE_DIR/config-store" ]; then
+    cp -r "$REPO_DIR/config/config-store.seed" "$STATE_DIR/config-store"
+    echo "  seeded $STATE_DIR/config-store from repo template"
+  else
+    echo "  $STATE_DIR/config-store exists (kept; not overwritten)"
+  fi
+  # 生成 + 校验（base + 运行时 store → 运行时 JSON）。开 --check-fs 校验 workspace/skill 存在性。
+  # 占位符存在性对照 .env.example（契约模板；step 7 才拷贝/填充真实 .env）。
   node "$REPO_DIR/config/dist/generate-config.js" \
     --out "$STATE_DIR/openclaw.json" \
     --base "$REPO_DIR/config/openclaw.base.jsonc" \
-    --store "$REPO_DIR/config/config-store" \
+    --store "$STATE_DIR/config-store" \
     --env "$REPO_DIR/config/.env.example" \
+    --state-dir "$STATE_DIR" \
+    --check-fs --skills-dir "$STATE_DIR/skills" \
     || { echo "  [FAIL] config generation/validation failed"; exit 1; }
   chmod 600 "$STATE_DIR/openclaw.json"
   echo "  $STATE_DIR/openclaw.json OK"
