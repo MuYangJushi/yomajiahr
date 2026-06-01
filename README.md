@@ -94,7 +94,8 @@ sudo systemctl enable --now openclaw-admin
 yomajiahr/
   install.sh              # 一键部署脚本
   config/
-    openclaw.jsonc         # gateway 配置模板
+    openclaw.base.jsonc        # 静态基座
+    config-store/              # 动态配置(agents/channels/bindings)
     .env.example           # 环境变量模板
     openclaw-*.service     # systemd 服务文件
   workspaces/

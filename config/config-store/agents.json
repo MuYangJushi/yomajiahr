@@ -1,0 +1,27 @@
+[
+  {
+    "id": "hr-assistant",
+    "role": "employee",
+    "default": true,
+    "name": "HR小助手",
+    "workspace": "~/.openclaw/workspaces/hr-assistant",
+    "skills": ["hr-policy-qa", "hr-general"],
+    "heartbeat": {},
+    "tools": {
+      "allow": ["memory_search", "memory_get"],
+      "deny": ["memory_write", "memory_delete", "exec"]
+    }
+  },
+  {
+    "id": "hr-admin",
+    "role": "admin",
+    "name": "HR管理后台",
+    "workspace": "~/.openclaw/workspaces/hr-admin",
+    "skills": ["hr-admin"],
+    "heartbeat": {},
+    "tools": {
+      "allow": ["memory_search", "memory_get", "memory_write", "memory_delete", "exec"],
+      "deny": ["gateway", "sessions_spawn"]
+    }
+  }
+]

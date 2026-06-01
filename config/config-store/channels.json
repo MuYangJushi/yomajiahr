@@ -1,0 +1,36 @@
+{
+  "feishu": {
+    "hr-assistant": {
+      "appId": "${FEISHU_HR_BOT_APP_ID}",
+      "appSecret": "${FEISHU_HR_BOT_APP_SECRET}",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "requireMention": true
+    },
+    "hr-admin": {
+      "appId": "${FEISHU_ADMIN_BOT_APP_ID}",
+      "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}",
+      "dmPolicy": "open",
+      "groupPolicy": "disabled"
+    }
+  },
+  "dingtalk-connector": {
+    "hr-assistant": {
+      "enabled": true,
+      "name": "HR小助手",
+      "clientId": "${DINGTALK_HR_BOT_CLIENT_ID}",
+      "clientSecret": "${DINGTALK_HR_BOT_CLIENT_SECRET}",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "requireMention": true
+    },
+    "hr-admin": {
+      "enabled": true,
+      "name": "HR管理后台",
+      "clientId": "${DINGTALK_ADMIN_BOT_CLIENT_ID}",
+      "clientSecret": "${DINGTALK_ADMIN_BOT_CLIENT_SECRET}",
+      "dmPolicy": "open",
+      "groupPolicy": "disabled"
+    }
+  }
+}

@@ -33,6 +33,7 @@ import { convertBuffer, isSupported, supportedFormats } from "./lib/doc-converte
 import { overwriteFrontmatter, parseFrontmatter } from "./lib/frontmatter.mjs";
 import { inferDocumentMetadata } from "./lib/metadata-inference.mjs";
 import { chunkDocument, writeChunks, removeChunks } from "./lib/doc-chunker.mjs";
+import { triggerApply, readLastResult } from "./lib/config-apply.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -40,6 +41,7 @@ import { chunkDocument, writeChunks, removeChunks } from "./lib/doc-chunker.mjs"
 
 const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
 const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME, ".openclaw");
+const REPO_DIR = join(import.meta.dirname, ".."); // 仓库根（含 config/）
 const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
 const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
 const CHUNKS_DIR = join(STATE_DIR, "data", "hr-chunks");
@@ -477,6 +479,27 @@ app.get("/api/info", (_req, res) => {
     auth_enabled: Boolean(AUTH_TOKEN),
     max_upload_mb: MAX_UPLOAD_FILE_MB,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Config apply（P0 基石 B：触发"生成→校验→快照→重启→探活→回滚"流水线）
+// 注意：当前由共享 token 守卫；平台级 RBAC 为已知缺口，留待后续补强。
+// ---------------------------------------------------------------------------
+
+app.post("/api/config/apply", async (_req, res) => {
+  try {
+    const result = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+    const code = result.status === "success" ? 200 : result.status === "failed" ? 422 : 202;
+    res.status(code).json(result);
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+app.get("/api/config/apply/result", (_req, res) => {
+  const result = readLastResult(STATE_DIR);
+  if (!result) return res.status(404).json({ status: "none", message: "尚无 apply 结果" });
+  res.json(result);
 });
 
 // ---------------------------------------------------------------------------

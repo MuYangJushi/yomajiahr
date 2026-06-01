@@ -317,27 +317,23 @@ done
 # Step 6: Compile config (JSONC -> JSON)
 # ---------------------------------------------------------------------------
 
-echo "[6/9] Compiling config..."
-if [ -f "$REPO_DIR/config/openclaw.jsonc" ]; then
-  node -e "
-const fs = require('fs');
-const vm = require('vm');
-const text = fs.readFileSync('$REPO_DIR/config/openclaw.jsonc', 'utf-8');
-const sanitized = text
-  .replace(/^\uFEFF/, '')
-  .replace(/^\s*\/\/.*$/gm, '')
-  .replace(/\/\*[\s\S]*?\*\//g, '');
-const json = vm.runInNewContext('(' + sanitized + ')', {});
-json.gateway = { mode: 'local' };
-fs.writeFileSync(
-  '$STATE_DIR/openclaw.json',
-  JSON.stringify(json, null, 2) + '\n'
-);
-"
-  echo "  $STATE_DIR/openclaw.json OK"
+echo "[6/9] Building config toolkit & generating config..."
+if [ -f "$REPO_DIR/config/openclaw.base.jsonc" ]; then
+  # \u6784\u5EFA config \u5DE5\u5177\u5305\uFF08TS\u2192JS\uFF09\u3002\u9700\u8981 devDeps(typescript)\uFF0C\u6545\u7528\u666E\u901A npm install\u3002
+  ( cd "$REPO_DIR/config" && npm install --no-audit --no-fund >/dev/null 2>&1 && npm run build >/dev/null 2>&1 ) \
+    || { echo "  [FAIL] config toolkit build failed"; exit 1; }
+  # \u751F\u6210 + \u6821\u9A8C\uFF08base + config-store \u2192 \u8FD0\u884C\u65F6 JSON\uFF09\u3002\u6821\u9A8C\u5931\u8D25\u5219\u975E\u96F6\u9000\u51FA\uFF0C\u4E0D\u5199\u574F\u914D\u7F6E\u3002
+  # \u5360\u4F4D\u7B26\u5B58\u5728\u6027\u5BF9\u7167 .env.example\uFF08\u5951\u7EA6\u6A21\u677F\uFF1Bstep 7 \u624D\u62F7\u8D1D/\u586B\u5145\u771F\u5B9E .env\uFF09\u3002
+  node "$REPO_DIR/config/dist/generate-config.js" \
+    --out "$STATE_DIR/openclaw.json" \
+    --base "$REPO_DIR/config/openclaw.base.jsonc" \
+    --store "$REPO_DIR/config/config-store" \
+    --env "$REPO_DIR/config/.env.example" \
+    || { echo "  [FAIL] config generation/validation failed"; exit 1; }
   chmod 600 "$STATE_DIR/openclaw.json"
+  echo "  $STATE_DIR/openclaw.json OK"
 else
-  echo "  [WARN] config/openclaw.jsonc not found (skipping)"
+  echo "  [WARN] config/openclaw.base.jsonc not found (skipping)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -491,8 +487,20 @@ if [ "$INSTALL_SYSTEMD" = true ]; then
       "$REPO_DIR/config/openclaw-admin.service" \
       /etc/systemd/system/openclaw-admin.service
 
+    # P0 基石 B：特权配置应用通道（oneshot helper + 文件监听）。
+    # apply.service 以 root 运行(需 systemctl restart gateway)；_install_service 的 User=ubuntu→CURRENT_USER
+    # 替换不影响它(它写的是 User=root)。
+    _install_service \
+      "$REPO_DIR/config/openclaw-apply.service" \
+      /etc/systemd/system/openclaw-apply.service
+    _install_service \
+      "$REPO_DIR/config/openclaw-apply.path" \
+      /etc/systemd/system/openclaw-apply.path
+    sudo chmod +x "$REPO_DIR/config/scripts/apply-config.sh"
+
     sudo systemctl daemon-reload
-    echo "  Service files installed."
+    sudo systemctl enable --now openclaw-apply.path
+    echo "  Service files installed (incl. config apply channel)."
   fi
 fi
 

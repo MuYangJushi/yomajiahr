@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for Yoma+HR config apply requests
+
+[Path]
+# admin-portal(ubuntu) 原子写入此文件即触发 openclaw-apply.service。
+PathModified=/home/ubuntu/.openclaw/control/apply-request.json
+Unit=openclaw-apply.service
+
+[Install]
+WantedBy=multi-user.target

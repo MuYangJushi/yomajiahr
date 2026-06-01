@@ -47,8 +47,8 @@ config/
 ├── config-store/                # 新：动态结构化存储（平台拥有）
 │   ├── agents.json              #   agents.list[] 的数据（含每个 agent 的 role）
 │   ├── channels.json            #   channels.*.accounts（秘钥用 ${VAR} 引用）
-│   ├── bindings.json            #   bindings[]
-│   └── versions/                #   每次 apply 前的快照（回滚/审计），运行时生成
+│   └── bindings.json            #   bindings[]
+（注：apply 前的快照/版本不写在仓库内，而在运行时目录 $STATE_DIR/config-versions/ 与 openclaw.json.last-good）
 ├── package.json                 # 新：config 工具包（deps: zod, typescript, tsup）
 ├── tsconfig.json                # 新：TS 配置
 ├── src/                         # 新：TypeScript 源
@@ -131,7 +131,7 @@ apply 流程（由基石 B 的 helper 执行）：
 
 ```
 1. 生成 + 校验 → 产出 staging 配置（如 openclaw.json.staging）
-2. 快照：cp 现 openclaw.json → openclaw.json.last-good；cp config-store → versions/<ISO 时间戳>/
+2. 快照：cp 现 openclaw.json → $STATE_DIR/openclaw.json.last-good；cp config-store → $STATE_DIR/config-versions/<时间戳>/
 3. 应用：mv staging → openclaw.json（原子 rename）
 4. systemctl restart openclaw-gateway
 5. 健康探活（见 4.3）
