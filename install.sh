@@ -46,6 +46,38 @@ ENV_WAS_PRESENT=false
 ENV_TEMPLATE_CREATED=false
 SERVICES_RESTARTED=false
 
+normalize_runtime_config() {
+  if [ ! -f "$STATE_DIR/openclaw.json" ]; then
+    return
+  fi
+
+  node <<EOF
+const fs = require('fs');
+const configPath = '$STATE_DIR/openclaw.json';
+const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+let changed = false;
+
+for (const agent of json.agents?.list ?? []) {
+  const tools = agent?.tools;
+  if (
+    tools &&
+    Array.isArray(tools.allow) &&
+    tools.allow.length > 0 &&
+    Array.isArray(tools.alsoAllow) &&
+    tools.alsoAllow.length > 0
+  ) {
+    delete tools.alsoAllow;
+    changed = true;
+  }
+}
+
+if (changed) {
+  fs.writeFileSync(configPath, JSON.stringify(json, null, 2) + '\\n');
+  console.log('  normalized agent tools policy: removed plugin-added alsoAllow where allow is explicit');
+}
+EOF
+}
+
 # ---------------------------------------------------------------------------
 # Step 0: Prerequisites (curl, git) + remote execution detection
 # ---------------------------------------------------------------------------
@@ -377,6 +409,7 @@ else
   rm -f "$PLUGIN_UPDATE_LOG.filtered"
 fi
 rm -f "$PLUGIN_UPDATE_LOG"
+normalize_runtime_config
 echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
@@ -408,6 +441,7 @@ if [ "$DINGTALK_PLUGIN_STATUS" -ne 0 ]; then
 fi
 cat "$DINGTALK_PLUGIN_LOG"
 rm -f "$DINGTALK_PLUGIN_LOG"
+normalize_runtime_config
 echo "  official DingTalk connector installed"
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,8 @@
 
   // 非内置渠道插件需要显式信任/启用，gateway 启动时才会加载 runtime。
   "plugins": {
+    "bundledDiscovery": "compat",
+    "allow": ["dingtalk-connector", "openclaw-lark"],
     "entries": {
       "dingtalk-connector": {
         "enabled": true,

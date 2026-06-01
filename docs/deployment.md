@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
 ```
 
-脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 22 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 24 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
 
 完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书/钉钉 Bot（见开放平台准备）→ 启动服务。
 
@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 
 - Linux（Ubuntu 22.04+ / Debian 12+）或 macOS
 - curl（用于自动安装 Node.js，如果尚未安装）
-- Node.js 22+（没有也可以，`install.sh` 会自动安装）
+- Node.js 24+（没有也可以，`install.sh` 会自动安装）
 - OpenClaw 2026.4.9+（钉钉官方 connector 的最低要求；`install.sh` 默认安装最新版）
 - 内存 2GB+，磁盘 10GB+
 - 网络：可出站访问飞书 API（`open.feishu.cn`）、钉钉 API/Stream 服务和 LLM API
@@ -100,7 +100,7 @@ cd /opt/yomajiahr
 
 `install.sh` 会自动完成以下操作：
 
-1. 检查 Node.js >= 22
+1. 检查 Node.js >= 24
 2. 安装 openclaw 主包（`npm install -g openclaw@latest`）
 3. 创建 `~/.openclaw/` 目录结构
 4. 复制 workspace 文件到 `~/.openclaw/workspaces/`

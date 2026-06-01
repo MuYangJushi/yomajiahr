@@ -42,7 +42,7 @@
 ## 前置条件
 
 - curl（用于自动安装 Node.js）
-- Node.js >= 22（没有也可以，`install.sh` 会自动安装）
+- Node.js >= 24（没有也可以，`install.sh` 会自动安装）
 
 ## 一键部署
 
