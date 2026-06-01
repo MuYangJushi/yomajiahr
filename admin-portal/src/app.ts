@@ -13,6 +13,7 @@ import { uploadRouter } from "./routes/upload.js";
 import { documentsRouter } from "./routes/documents.js";
 import { auditRouter } from "./routes/audit.js";
 import { configRouter } from "./routes/config.js";
+import { agentsRouter } from "./routes/agents.js";
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp() {
   app.use("/api", documentsRouter);
   app.use("/api", auditRouter);
   app.use("/api", configRouter);
+  app.use("/api", agentsRouter);
 
   // 服务信息
   app.get("/api/info", (_req: Request, res: Response) => {

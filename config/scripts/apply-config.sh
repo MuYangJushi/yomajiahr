@@ -77,11 +77,13 @@ rollback() { # reason
 
 # —— 1. 生成 + 校验 → staging（含 --check-fs：workspace/skill 存在性）——
 log "生成 + 校验 → staging"
+# 运行时占位符校验对照真实 $STATE_DIR/.env（含编排刚写入的新 bot 秘钥）；不存在则回退 .env.example。
+ENV_FILE="$STATE_DIR/.env"; [ -f "$ENV_FILE" ] || ENV_FILE="$CONFIG_DIR/.env.example"
 node "$CONFIG_DIR/dist/generate-config.js" \
   --out "$STAGING" \
   --base "$CONFIG_DIR/openclaw.base.jsonc" \
   --store "$STORE_DIR" \
-  --env "$CONFIG_DIR/.env.example" \
+  --env "$ENV_FILE" \
   --state-dir "$STATE_DIR" \
   --check-fs --skills-dir "$SKILLS_DIR" \
   || fail "生成/校验失败（未改动运行时配置）"
