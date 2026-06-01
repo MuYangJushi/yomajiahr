@@ -455,11 +455,12 @@ echo "  official DingTalk connector installed"
 # Step 9: Install admin-portal dependencies
 # ---------------------------------------------------------------------------
 
-echo "[9/9] Installing admin-portal dependencies..."
+echo "[9/9] Installing & building admin-portal..."
 if [ -f "$REPO_DIR/admin-portal/package.json" ]; then
-  cd "$REPO_DIR/admin-portal"
-  sudo npm install --omit=dev
-  echo "  admin-portal dependencies installed"
+  # 需 devDeps(tsup/typescript) 构建后端 TS → dist/server.js（与 config 工具包同例，不用 sudo）。
+  ( cd "$REPO_DIR/admin-portal" && npm install --no-audit --no-fund && npm run build ) \
+    || { echo "  [FAIL] admin-portal install/build failed"; exit 1; }
+  echo "  admin-portal installed & built (dist/server.js)"
 else
   echo "  [WARN] admin-portal/package.json not found (skipping)"
 fi

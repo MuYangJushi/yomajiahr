@@ -7,7 +7,7 @@ Type=simple
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/yomajiahr/admin-portal
-ExecStart=/usr/bin/node server.mjs
+ExecStart=/usr/bin/node dist/server.js
 Restart=always
 RestartSec=10
 Environment=PATH=/usr/local/bin:/usr/bin:/bin

@@ -24,6 +24,7 @@ function readResult(resultPath) {
 
 /**
  * 触发一次配置应用。
+ * @param {{stateDir: string, repoDir: string, timeoutMs?: number}} opts
  * @returns {Promise<{status:'success'|'failed'|'pending', message?:string, version?:string, mode:string}>}
  */
 export async function triggerApply({ stateDir, repoDir, timeoutMs = 30000 } = {}) {
