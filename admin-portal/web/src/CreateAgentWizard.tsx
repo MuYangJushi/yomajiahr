@@ -76,22 +76,16 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
   }
 
   return (
-    <StepsForm
-      onFinish={handleFinish}
-      stepsFormRender={(dom, submitter) => (
-        <Modal
-          title="招募一名 HR 数字员工"
-          open={open}
-          footer={submitter}
-          onCancel={onClose}
-          width={640}
-          destroyOnClose
-        >
-          {dom}
-        </Modal>
-      )}
+    <Modal
+      title="招募一名 HR 数字员工"
+      open={open}
+      footer={null}
+      onCancel={onClose}
+      width={640}
+      destroyOnClose
     >
-      <StepsForm.StepForm name="identity" title="身份与岗位">
+      <StepsForm onFinish={handleFinish}>
+        <StepsForm.StepForm name="identity" title="身份与岗位">
         <ProFormText
           name="id"
           label="ID（创建后不可改）"
@@ -148,6 +142,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
           }
         </ProFormDependency>
       </StepsForm.StepForm>
-    </StepsForm>
+      </StepsForm>
+    </Modal>
   );
 }
