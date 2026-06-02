@@ -455,12 +455,18 @@ echo "  official DingTalk connector installed"
 # Step 9: Install admin-portal dependencies
 # ---------------------------------------------------------------------------
 
-echo "[9/9] Installing & building admin-portal..."
+echo "[9/9] Installing & building admin-portal (backend + web)..."
 if [ -f "$REPO_DIR/admin-portal/package.json" ]; then
-  # 需 devDeps(tsup/typescript) 构建后端 TS → dist/server.js（与 config 工具包同例，不用 sudo）。
+  # 后端：需 devDeps(tsup/typescript) 构建 TS → dist/server.js
   ( cd "$REPO_DIR/admin-portal" && npm install --no-audit --no-fund && npm run build ) \
-    || { echo "  [FAIL] admin-portal install/build failed"; exit 1; }
-  echo "  admin-portal installed & built (dist/server.js)"
+    || { echo "  [FAIL] admin-portal backend install/build failed"; exit 1; }
+  echo "  admin-portal backend built (dist/server.js)"
+  # 前端：React+antd Vite 工程 → 产物输出到 public/console/
+  if [ -f "$REPO_DIR/admin-portal/web/package.json" ]; then
+    ( cd "$REPO_DIR/admin-portal/web" && npm install --no-audit --no-fund && npm run build ) \
+      || { echo "  [FAIL] admin-portal web install/build failed"; exit 1; }
+    echo "  admin-portal web built (public/console/)"
+  fi
 else
   echo "  [WARN] admin-portal/package.json not found (skipping)"
 fi
