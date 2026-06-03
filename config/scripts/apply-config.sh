@@ -4,10 +4,13 @@
 # 由特权 helper(openclaw-apply.service, root) 触发执行；也可手工运行做验证。
 #
 # 入参（环境变量）：
-#   REPO_DIR   仓库根（含 config/）            必填
-#   STATE_DIR  运行时目录（~/.openclaw）        必填
+#   REPO_DIR     仓库根（含 config/）            必填
+#   STATE_DIR    运行时目录（~/.openclaw）        必填
 #   GATEWAY_SVC  systemd 服务名（默认 openclaw-gateway）
-#   PROBE_WINDOW 探活观测秒数（默认 15，需 > RestartSec=10）
+#   GATEWAY_PORT gateway HTTP 端口（默认 18789）；用于 /health 功能性就绪检查
+#   PROBE_WINDOW   探活最长等待秒数（默认 30）；达成连续就绪即提前返回
+#   READY_SUSTAIN  连续就绪所需秒数（默认 11，需 > systemd RestartSec=10）
+#   HEALTH_URL     就绪探测地址（默认 http://127.0.0.1:$GATEWAY_PORT/health）
 #   PROBE_FORCE_FAIL=1  仅测试用：强制探活失败以验证回滚
 #
 set -uo pipefail
@@ -15,7 +18,10 @@ set -uo pipefail
 REPO_DIR="${REPO_DIR:?REPO_DIR required}"
 STATE_DIR="${STATE_DIR:?STATE_DIR required}"
 GATEWAY_SVC="${GATEWAY_SVC:-openclaw-gateway}"
-PROBE_WINDOW="${PROBE_WINDOW:-15}"
+GATEWAY_PORT="${GATEWAY_PORT:-18789}"
+PROBE_WINDOW="${PROBE_WINDOW:-30}"
+READY_SUSTAIN="${READY_SUSTAIN:-11}"   # 连续就绪秒数，需 > systemd RestartSec(10)
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${GATEWAY_PORT}/health}"
 
 CONFIG_DIR="$REPO_DIR/config"
 STORE_DIR="$STATE_DIR/config-store"   # 运行时 store（平台拥有；仓库内为 config-store.seed 模板）
@@ -50,19 +56,41 @@ restart_gateway() {
   systemctl restart "$GATEWAY_SVC"
 }
 
-# 探活判别器（应对 Restart=always 抖动）：观测窗内须持续 active 且 NRestarts 不增长。
+# 探活判别器：观测窗内须持续 active、NRestarts 不增长，且 GET /health 连续 200 ≥ READY_SUSTAIN 秒。
+# openclaw gateway 在 --port 端口原生暴露 GET /health（liveness，进程存活即 200，不受渠道连通性影响）。
+# “连续就绪 > RestartSec” 而非“单次 200”：坏配置 crash-loop 时 /health 会随重启间歇中断，
+# 就绪计数被重置 → 无法累积到阈值 → 探活失败 → 回滚。一旦达成连续就绪即提前返回成功。
 probe() {
   [ "${PROBE_FORCE_FAIL:-0}" = "1" ] && { log "PROBE_FORCE_FAIL=1 → 故意失败"; return 1; }
   has_systemctl || { log "no systemd; skip probe (dev)"; return 0; }
-  local baseline now i
+  local have_curl=0; command -v curl >/dev/null 2>&1 && have_curl=1
+  [ "$have_curl" = 0 ] && log "无 curl，降级：以 is-active+NRestarts 连续观测代替 /health 校验"
+  local baseline now streak=0 i code
   baseline=$(systemctl show -p NRestarts --value "$GATEWAY_SVC" 2>/dev/null || echo 0)
   for ((i = 0; i < PROBE_WINDOW; i++)); do
     sleep 1
     systemctl is-active --quiet "$GATEWAY_SVC" || { log "not active @${i}s"; return 1; }
     now=$(systemctl show -p NRestarts --value "$GATEWAY_SVC" 2>/dev/null || echo 0)
     [ "${now:-0}" -gt "${baseline:-0}" ] && { log "NRestarts 增长 ${baseline}→${now}（crash-loop）"; return 1; }
+    if [ "$have_curl" = 1 ]; then
+      code=$(curl --silent --max-time 1 --output /dev/null --write-out '%{http_code}' \
+        "$HEALTH_URL" 2>/dev/null || echo "000")
+      if [ "$code" = "200" ]; then
+        streak=$((streak + 1))
+      else
+        [ "$streak" -gt 0 ] && log "GET /health 中断（code=${code} @${i}s），就绪计数重置"
+        streak=0
+      fi
+    else
+      streak=$((streak + 1)) # 无 curl：以连续 is-active 秒数代替
+    fi
+    if [ "$streak" -ge "$READY_SUSTAIN" ]; then
+      log "就绪确认（连续 ${streak}s 满足，> RestartSec）"
+      return 0
+    fi
   done
-  return 0
+  log "PROBE_WINDOW=${PROBE_WINDOW}s 内未达连续就绪 ${READY_SUSTAIN}s（最后 streak=${streak}，端口 ${GATEWAY_PORT}）"
+  return 1
 }
 
 rollback() { # reason
