@@ -1,38 +1,44 @@
-// axios 实例：注入 Bearer token（localStorage），401 时提示重输。
+// axios 实例：cookie 会话（决策六）。401 → 跳登录页。
 import axios from "axios";
 
-const TOKEN_KEY = "hr_admin_token";
-
-export function getToken(): string {
-  return localStorage.getItem(TOKEN_KEY) || "";
-}
-export function setToken(t: string): void {
-  localStorage.setItem(TOKEN_KEY, t);
-}
-
-export const api = axios.create({ baseURL: "/api" });
-
-api.interceptors.request.use((config) => {
-  const t = getToken();
-  if (t) config.headers.Authorization = `Bearer ${t}`;
-  return config;
-});
+export const api = axios.create({ baseURL: "/api", withCredentials: true });
 
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err?.response?.status === 401) {
-      const t = window.prompt("请输入 Admin Portal 访问令牌（OPENCLAW_WEB_AUTH_TOKEN）：");
-      if (t) {
-        setToken(t);
-        // 重试一次
-        err.config.headers.Authorization = `Bearer ${t}`;
-        return api.request(err.config);
-      }
+    const status = err?.response?.status;
+    const url: string = err?.config?.url || "";
+    const onLogin = window.location.pathname.endsWith("/login");
+    // 未认证 → 回登录页；但 /auth/* 自身的 401（如 /auth/me 探活）与已在登录页时不跳，避免循环。
+    if (status === 401 && !onLogin && !url.includes("/auth/")) {
+      window.location.href = "/console/login";
     }
     return Promise.reject(err);
   },
 );
+
+// —— 认证 ——
+export type PlatformRole = "admin" | "ops" | "audit";
+export interface Me {
+  platformUserId: string;
+  name: string;
+  platformRole: PlatformRole;
+  idp: string;
+}
+export interface Providers {
+  session_enabled: boolean;
+  providers: { feishu: boolean; dingtalk: boolean };
+}
+
+export async function fetchMe(): Promise<Me> {
+  return (await api.get("/auth/me")).data;
+}
+export async function fetchProviders(): Promise<Providers> {
+  return (await api.get("/auth/providers")).data;
+}
+export async function logout(): Promise<void> {
+  await api.post("/auth/logout");
+}
 
 // —— 类型 ——
 export interface AgentRow {

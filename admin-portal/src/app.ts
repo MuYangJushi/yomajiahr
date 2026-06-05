@@ -9,6 +9,7 @@ import {
 } from "./config.js";
 import { supportedFormats } from "../lib/doc-converter.mjs";
 import { authMiddleware, requestLog, uploadErrorHandler } from "./middleware.js";
+import { authRouter } from "./routes/auth.js";
 import { uploadRouter } from "./routes/upload.js";
 import { documentsRouter } from "./routes/documents.js";
 import { auditRouter } from "./routes/audit.js";
@@ -27,6 +28,9 @@ export function createApp() {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "hr-admin-portal" });
   });
+
+  // 平台登录路由：公开（鉴权之前），供 OAuth 登录/回调/me/logout
+  app.use("/api", authRouter);
 
   // 鉴权应用到其余 /api
   app.use("/api", authMiddleware);

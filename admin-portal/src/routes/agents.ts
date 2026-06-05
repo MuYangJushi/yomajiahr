@@ -4,13 +4,14 @@ import { createAgent, listAgents } from "../services/orchestrator.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
+import { requireRole } from "../auth/rbac.js";
 
 export const agentsRouter = Router();
 
 // 支持的渠道域（来自 base 脚手架；P1 固定两类）
 const SUPPORTED_CHANNELS = ["feishu", "dingtalk-connector"];
 
-agentsRouter.get("/config/agents", (_req: Request, res: Response) => {
+agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     res.json({ agents: listAgents() });
   } catch (err) {
@@ -18,7 +19,7 @@ agentsRouter.get("/config/agents", (_req: Request, res: Response) => {
   }
 });
 
-agentsRouter.post("/config/agents", async (req: Request, res: Response) => {
+agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { agent, apply } = await createAgent(req.body);
     res.status(apply.status === "success" ? 201 : 422).json({ agent, apply });
@@ -27,7 +28,7 @@ agentsRouter.post("/config/agents", async (req: Request, res: Response) => {
   }
 });
 
-agentsRouter.get("/config/skills", (_req: Request, res: Response) => {
+agentsRouter.get("/config/skills", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     res.json({ skills: listSkills() });
   } catch (err) {
@@ -35,7 +36,7 @@ agentsRouter.get("/config/skills", (_req: Request, res: Response) => {
   }
 });
 
-agentsRouter.get("/config/channels", (_req: Request, res: Response) => {
+agentsRouter.get("/config/channels", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     const { channels } = readStore();
     const keys = envKeysSet();

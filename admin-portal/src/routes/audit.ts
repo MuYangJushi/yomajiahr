@@ -1,6 +1,7 @@
 // 审计日志路由（迁自 server.mjs，逻辑不变）。
 import { Router, type Request, type Response } from "express";
 import { csvEscape, readAuditLog } from "../util.js";
+import { requireRole } from "../auth/rbac.js";
 
 export const auditRouter = Router();
 
@@ -20,7 +21,7 @@ function applyFilters(logs: any[], query: any): any[] {
   return filtered;
 }
 
-auditRouter.get("/audit-log", (req: Request, res: Response) => {
+auditRouter.get("/audit-log", requireRole("audit"), (req: Request, res: Response) => {
   try {
     const filtered = applyFilters(readAuditLog(), req.query);
     filtered.reverse(); // newest first
@@ -37,7 +38,7 @@ auditRouter.get("/audit-log", (req: Request, res: Response) => {
   }
 });
 
-auditRouter.get("/audit-log/export", (req: Request, res: Response) => {
+auditRouter.get("/audit-log/export", requireRole("audit"), (req: Request, res: Response) => {
   try {
     const filtered = applyFilters(readAuditLog(), req.query);
     filtered.reverse();

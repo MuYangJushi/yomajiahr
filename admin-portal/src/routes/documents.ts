@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { parseFrontmatter } from "../../lib/frontmatter.mjs";
 import { removeChunks } from "../../lib/doc-chunker.mjs";
 import { CHUNKS_DIR, POLICIES_DIR } from "../config.js";
+import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 
 export const documentsRouter = Router();
 
-documentsRouter.get("/documents", (_req: Request, res: Response) => {
+documentsRouter.get("/documents", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     const result: any[] = [];
     const categories = readdirSync(POLICIES_DIR).filter((d) => {
@@ -41,7 +42,7 @@ documentsRouter.get("/documents", (_req: Request, res: Response) => {
   }
 });
 
-documentsRouter.get("/documents/:category/:file", (req: Request, res: Response) => {
+documentsRouter.get("/documents/:category/:file", requireRole("ops"), (req: Request, res: Response) => {
   try {
     const filePath = join(POLICIES_DIR, String(req.params.category), String(req.params.file));
     if (!existsSync(filePath)) {
@@ -55,7 +56,7 @@ documentsRouter.get("/documents/:category/:file", (req: Request, res: Response) 
   }
 });
 
-documentsRouter.delete("/documents/:category/:file", (req: Request, res: Response) => {
+documentsRouter.delete("/documents/:category/:file", requireRole("ops"), (req: Request, res: Response) => {
   try {
     const filePath = join(POLICIES_DIR, String(req.params.category), String(req.params.file));
     if (!existsSync(filePath)) {
@@ -79,7 +80,7 @@ documentsRouter.delete("/documents/:category/:file", (req: Request, res: Respons
   }
 });
 
-documentsRouter.get("/categories", (_req: Request, res: Response) => {
+documentsRouter.get("/categories", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     const categories = readdirSync(POLICIES_DIR).filter((d) =>
       statSync(join(POLICIES_DIR, d)).isDirectory(),
@@ -90,7 +91,7 @@ documentsRouter.get("/categories", (_req: Request, res: Response) => {
   }
 });
 
-documentsRouter.post("/categories", (req: Request, res: Response) => {
+documentsRouter.post("/categories", requireRole("ops"), (req: Request, res: Response) => {
   try {
     const { name } = req.body;
     if (!name || !/^[a-z0-9-]+$/.test(name)) {

@@ -8,6 +8,7 @@ import { inferDocumentMetadata } from "../../lib/metadata-inference.mjs";
 import { chunkDocument, writeChunks } from "../../lib/doc-chunker.mjs";
 import { CHUNKS_DIR, POLICIES_DIR, STATE_DIR } from "../config.js";
 import { rateLimit, upload } from "../middleware.js";
+import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog, normalizeUploadedFilename } from "../util.js";
 
 const uploadLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "上传过于频繁，请稍后再试" });
@@ -16,6 +17,7 @@ export const uploadRouter = Router();
 
 uploadRouter.post(
   "/upload",
+  requireRole("ops"),
   uploadLimiter,
   upload.single("file"),
   async (req: Request, res: Response) => {
