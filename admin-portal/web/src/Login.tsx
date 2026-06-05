@@ -157,11 +157,21 @@ const STYLES = `
   }
 
   .btn-ding {
+    background: #ffffff;
+    border: 1.5px solid #3296fa;
+    color: #3296fa;
+    font-size: 14px;
+  }
+  .btn-ding:hover:not(:disabled) {
+    box-shadow: 0 6px 18px rgba(50,150,250,0.22);
+    transform: translateY(-1px);
+  }
+  .btn-ding:active:not(:disabled) { transform: translateY(0); }
+  .btn-ding:disabled {
     background: transparent;
     border: 1.5px solid #dde3ec;
     color: #94a3b8;
     cursor: not-allowed;
-    font-size: 14px;
   }
 
   .btn-tag {
@@ -247,12 +257,13 @@ function FeishuIcon({ disabled }: { disabled: boolean }) {
   );
 }
 
-function DingIcon() {
+function DingIcon({ disabled }: { disabled: boolean }) {
+  const fg = disabled ? "#b0bec5" : "#3296fa";
   return (
     <svg width="19" height="19" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <rect x="6" y="6" width="36" height="36" rx="8" fill="#dde3ec" />
-      <circle cx="24" cy="24" r="8" stroke="#b0bec5" strokeWidth="2" />
-      <path d="M24 19v5l3 3" stroke="#b0bec5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="6" y="6" width="36" height="36" rx="8" fill={disabled ? "#dde3ec" : "rgba(50,150,250,0.1)"} />
+      <circle cx="24" cy="24" r="8" stroke={fg} strokeWidth="2" />
+      <path d="M24 19v5l3 3" stroke={fg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -282,6 +293,8 @@ export default function Login() {
   const sessionDisabled = providers != null && !providers.session_enabled;
   const feishuOn = Boolean(providers?.providers.feishu);
   const feishuDisabled = !feishuOn || sessionDisabled;
+  const dingtalkOn = Boolean(providers?.providers.dingtalk);
+  const dingtalkDisabled = !dingtalkOn || sessionDisabled;
 
   return (
     <div className="login-root">
@@ -332,13 +345,14 @@ export default function Login() {
 
             <button
               className="btn btn-ding"
-              disabled
-              title="即将支持钉钉登录"
-              aria-disabled="true"
+              disabled={dingtalkDisabled}
+              onClick={() => { window.location.href = "/api/auth/dingtalk/login"; }}
+              title={dingtalkOn ? "使用钉钉账号登录" : "钉钉登录未配置"}
+              aria-label="使用钉钉账号登录"
             >
-              <DingIcon />
-              钉钉登录
-              <span className="btn-tag">即将支持</span>
+              <DingIcon disabled={dingtalkDisabled} />
+              使用钉钉登录
+              {!dingtalkOn && <span className="btn-tag">未配置</span>}
             </button>
           </div>
         )}

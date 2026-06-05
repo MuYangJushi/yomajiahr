@@ -38,6 +38,16 @@ export const FEISHU_ACCOUNTS_BASE = (env.FEISHU_ACCOUNTS_BASE || "https://accoun
 /** 申请的授权 scope（空格分隔）。② 归一化需手机号/邮箱时填
  *  `contact:user.phone:readonly contact:user.email:readonly`；① 仅 union_id 可留空。 */
 export const FEISHU_LOGIN_SCOPE = (env.FEISHU_LOGIN_SCOPE || "").trim();
+/** 钉钉"网页登录"应用凭据（可单开应用，或复用管理 Bot 应用）。 */
+export const DINGTALK_LOGIN_CLIENT_ID = env.DINGTALK_LOGIN_CLIENT_ID || env.DINGTALK_ADMIN_BOT_CLIENT_ID || "";
+export const DINGTALK_LOGIN_CLIENT_SECRET =
+  env.DINGTALK_LOGIN_CLIENT_SECRET || env.DINGTALK_ADMIN_BOT_CLIENT_SECRET || "";
+/** 钉钉 OAuth 授权域名（登录页，与 API 域名不同）。 */
+export const DINGTALK_LOGIN_BASE = (env.DINGTALK_LOGIN_BASE || "https://login.dingtalk.com").replace(/\/$/, "");
+/** 钉钉开放平台 API 地址（换 token / 取用户信息）。 */
+export const DINGTALK_API_BASE = (env.DINGTALK_API_BASE || "https://api.dingtalk.com").replace(/\/$/, "");
+/** 钉钉授权 scope，默认 openid（手机号/邮箱由应用权限决定，非 scope）。 */
+export const DINGTALK_LOGIN_SCOPE = (env.DINGTALK_LOGIN_SCOPE || "openid").trim();
 /** 开发兜底：显式置 1 时，localhost 无凭据请求按 admin 放行（生产请勿开启）。 */
 export const DEV_LOCALHOST_ADMIN = env.ADMIN_PORTAL_DEV_LOCALHOST_ADMIN === "1";
 /** 引导管理员名单（解决首个 admin 的鸡生蛋）：逗号分隔的手机号或 IdP unionId。

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { PUBLIC_BASE_URL, SESSION_SECRET } from "../config.js";
 import { feishuAuthorizeUrl, feishuConfigured, feishuExchangeCode } from "../auth/feishu.js";
+import { dingtalkAuthorizeUrl, dingtalkConfigured, dingtalkExchangeCode } from "../auth/dingtalk.js";
 import {
   clearOauthState,
   clearSession,
@@ -31,7 +32,7 @@ authRouter.get("/auth/providers", (_req: Request, res: Response) => {
     session_enabled: Boolean(SESSION_SECRET),
     providers: {
       feishu: feishuConfigured() && Boolean(SESSION_SECRET),
-      dingtalk: false, // ② 待实现
+      dingtalk: dingtalkConfigured() && Boolean(SESSION_SECRET),
     },
   });
 });
@@ -93,6 +94,53 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
     res.redirect("/console");
   } catch (err) {
     log("ERROR", `飞书回调失败：${(err as Error).message}`);
+    res.redirect("/console/login?error=login_failed");
+  }
+});
+
+/** 钉钉登录入口：生成 state，跳转钉钉授权页。 */
+authRouter.get("/auth/dingtalk/login", (req: Request, res: Response) => {
+  if (!SESSION_SECRET) return res.status(503).send("平台未配置 SESSION_SECRET，登录不可用");
+  if (!dingtalkConfigured()) return res.status(503).send("钉钉登录未配置（缺 DINGTALK_LOGIN_CLIENT_ID/SECRET）");
+  const state = randomUUID();
+  issueOauthState(res, state);
+  const redirectUri = `${baseUrl(req)}/api/auth/dingtalk/callback`;
+  res.redirect(dingtalkAuthorizeUrl(state, redirectUri));
+});
+
+/** 钉钉回调：校验 state → 换 authCode → 角色映射 → 颁 session → 回 /console。 */
+authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) => {
+  try {
+    if (!verifyOauthState(req, req.query.state as string | undefined)) {
+      return res.status(400).send("state 校验失败（可能为 CSRF 或已过期），请重新登录");
+    }
+    clearOauthState(res);
+    // ⚠️ 钉钉回调用 authCode（兼容 code 以防文档/版本差异）
+    const code = (req.query.authCode || req.query.code) as string | undefined;
+    const error = req.query.error as string | undefined;
+    if (error) {
+      log("WARN", `钉钉授权被拒：${error}`);
+      return res.redirect("/console/login?error=access_denied");
+    }
+    if (!code) return res.status(400).send("缺少授权 authCode");
+
+    const identity = await dingtalkExchangeCode(code);
+    const user = resolveUser(identity);
+    if (!user) {
+      log("WARN", `钉钉登录被拒（不在授权名单）：${identity.name} union_id=${identity.unionId}`);
+      return res.redirect("/console/login?error=unauthorized");
+    }
+
+    issueSession(res, {
+      platformUserId: user.platformUserId,
+      name: user.name,
+      platformRole: user.platformRole,
+      idp: "dingtalk",
+    });
+    log("INFO", `钉钉登录成功：${user.name}（${user.platformRole}）`);
+    res.redirect("/console");
+  } catch (err) {
+    log("ERROR", `钉钉回调失败：${(err as Error).message}`);
     res.redirect("/console/login?error=login_failed");
   }
 });
