@@ -45,9 +45,17 @@
 - **Client ID**（即 AppKey，形如 `dingxxxxxxxx`）
 - **Client Secret**（即 AppSecret）
 
-### 1.3 申请用户字段权限（可选，②自动归一化才需要）
+### 1.3 申请接口权限（⚠️ `Contact.User.Read` 必做）
 
-钉钉的手机号/邮箱**不是 OAuth scope**，而是**应用权限**。在「权限管理」申请并发布：
+钉钉的接口权限不是 OAuth scope，而是**应用权限**，在「权限管理」申请。
+
+**必做**：`Contact.User.Read`（控制台显示「**个人信息读权限**」）——`contact/users/me` 接口本身就需要它，否则换到 token 后取用户信息会报：
+```
+code=Forbidden.AccessDenied.AccessTokenPermissionDenied 没有调用该接口的权限
+```
+这是**基础权限，企业内部应用可自助开通、即时生效**（无需审核）。开通后重新登录即可，不用改代码/重启。
+
+**可选（②自动归一化才需要）**：手机号/邮箱同样是应用权限，在「权限管理」申请并发布：
 - 「个人手机号信息」（`contact/users/me` 才返回 `mobile`）
 - 「邮箱等个人信息」（才返回 `email`）
 
@@ -146,9 +154,9 @@ node --env-file=../config/.env dist/server.js 2>&1 | tee /tmp/portal.log
 
 ---
 
-## 5. ⚠️ 真机联调必须逐项复核（本手册核心）
+## 5. 真机联调复核表（✅ 已于 2026-06-06 全部验证为真）
 
-`dingtalkExchangeCode` 未真机跑过，端点/字段名来自官方示例+检索。联调时对照日志/抓包**逐项确认**，任一不符就改 `src/auth/dingtalk.ts`：
+下表 7 项端点/参数/字段在杨沐真机登录中**全部跑通**，代码无需改动。保留此表供换环境/钉钉改版时回归核对：
 
 | 项 | 代码当前假设 | 复核点 |
 |---|---|---|
