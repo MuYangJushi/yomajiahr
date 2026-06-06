@@ -15,7 +15,7 @@ import { readSession } from "./auth/session.js";
 import { isPlatformRole, type PlatformRole } from "./auth/types.js";
 import { log, normalizeUploadedFilename } from "./util.js";
 
-function isLocalhost(req: Request): boolean {
+export function isLocalhost(req: Request): boolean {
   const ip = req.ip || (req.socket && req.socket.remoteAddress) || "";
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
