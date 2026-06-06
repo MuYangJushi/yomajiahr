@@ -112,32 +112,26 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 
 ## 日常更新：仅更新配置文件
 
-修改 `config/openclaw.jsonc` 后，无需重跑完整部署，只需上传并重新编译：
+配置已拆为**静态基座 `config/openclaw.base.jsonc` + 动态存储 `config/config-store/*.json`**（见 `docs/p0-config-platform-plan.md`）。修改后无需重跑完整部署，上传并用生成器重新生成即可：
 
 ```bash
-# 1. 从本地上传 jsonc 到服务器
-scp config/openclaw.jsonc yomajia:/tmp/openclaw.jsonc
-ssh yomajia "sudo mv /tmp/openclaw.jsonc /opt/yomajiahr/config/openclaw.jsonc"
+# 1. 从本地上传 base / store 到服务器
+scp config/openclaw.base.jsonc yomajia:/tmp/openclaw.base.jsonc
+scp -r config/config-store yomajia:/tmp/config-store
+ssh yomajia "sudo mv /tmp/openclaw.base.jsonc /opt/yomajiahr/config/ && sudo rm -rf /opt/yomajiahr/config/config-store && sudo mv /tmp/config-store /opt/yomajiahr/config/"
 
-# 2. 在服务器上重新编译 JSONC → JSON
-ssh yomajia 
-node -e "
-const fs = require('fs');
-const vm = require('vm');
-const text = fs.readFileSync('/opt/yomajiahr/config/openclaw.jsonc', 'utf-8');
-const sanitized = text
-  .replace(/^\uFEFF/, '')
-  .replace(/^\s*\/\/.*\$/gm, '')
-  .replace(/\/\*[\s\S]*?\*\//g, '');
-const json = vm.runInNewContext('(' + sanitized + ')', {});
-json.gateway = { mode: 'local' };
-fs.writeFileSync('/home/ubuntu/.openclaw/openclaw.json', JSON.stringify(json, null, 2) + '\n');
-console.log('Done');
-"
+# 2. 在服务器上构建工具包并重新生成（含校验，校验不过不写盘）
+ssh yomajia "cd /opt/yomajiahr/config && npm install --no-audit --no-fund && npm run build && \
+  node dist/generate-config.js \
+    --out /home/ubuntu/.openclaw/openclaw.json \
+    --base openclaw.base.jsonc --store config-store --env .env.example && \
+  chmod 600 /home/ubuntu/.openclaw/openclaw.json"
 
 # 3. 重启服务使配置生效
 ssh yomajia "sudo systemctl restart openclaw-gateway"
 ```
+
+> 注：P0 后续会引入“受控重启通道 + 校验回滚”（见 P0 方案基石 B/C），届时步骤 3 由平台编排，不再手工重启。
 
 ---
 

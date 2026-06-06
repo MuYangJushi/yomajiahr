@@ -214,7 +214,8 @@ ss -ltnp | grep -E '18789|18790'
 /opt/yomajiahr/
   install.sh
   config/
-    openclaw.jsonc              # 配置模板
+    openclaw.base.jsonc        # 静态基座
+    config-store/              # 动态配置(agents/channels/bindings)
     .env.example                # 环境变量模板
     openclaw-gateway.service    # systemd 服务
     openclaw-admin.service

@@ -1,0 +1,127 @@
+// Yoma+HR 智能助手 — 静态配置基座 (openclaw.base.jsonc)
+//
+// 工程师维护的不常变部分。动态部分(channels.accounts / agents.list / bindings)在 config-store/。
+// 由 config/src/generate-config.ts 合并 base + store → 运行时 ~/.openclaw/openclaw.json。
+//
+// 切分边界见 docs/p0-config-platform-plan.md §3.1：
+//   - 渠道节点：仅渠道级开关/参数留在此(脚手架)，accounts 来自 config-store/channels.json
+//   - agents：仅 defaults 留在此(含 ADR-004 锁定的 chunking)，list 来自 config-store/agents.json
+{
+  "web": {
+    "enabled": true,
+  },
+
+  // 非内置渠道插件需要显式信任/启用，gateway 启动时才会加载 runtime。
+  "plugins": {
+    "bundledDiscovery": "compat",
+    "allow": ["dingtalk-connector", "openclaw-lark"],
+    "entries": {
+      "dingtalk-connector": {
+        "enabled": true,
+      },
+      "openclaw-lark": {
+        "enabled": true,
+      },
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Channels — 渠道脚手架(仅渠道级开关/参数；accounts 由生成器从 config-store 注入)
+  // ---------------------------------------------------------------------------
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "streaming": true,
+    },
+    "dingtalk-connector": {
+      "enabled": true,
+      "tools": {
+        "docs": false,
+        "media": false,
+      },
+      "groupReplyMode": "markdown",
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Agents — 仅 defaults(静态)；list 由生成器从 config-store/agents.json 注入
+  // ---------------------------------------------------------------------------
+  "agents": {
+    "defaults": {
+      "model": {
+        // 当前默认使用 MiniMax 国内站；MiniMax 为单点 provider，建议接入第二家后启用 fallbacks。
+        "primary": "minimax/MiniMax-M2.7",
+        // "fallbacks": ["openai/gpt-5.1", "anthropic/claude-sonnet-4-5"],
+      },
+      // 心跳默认每 30 分钟执行一次，但默认不向聊天渠道外发，仅用于内部巡检与保活。
+      // 各 agent 需显式声明 heartbeat 才会启用，避免依赖 “默认 agent” 的隐式规则。
+      "heartbeat": {
+        "every": "30m",
+        "target": "none",
+      },
+      // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）。
+      // 注意: ADR-004 锁定 chunking.tokens=4000 / overlap=0，校验器会强制此不变量。
+      "memorySearch": {
+        "enabled": true,
+        "sources": ["memory"],
+        "experimental": {
+          "sessionMemory": false,
+        },
+        "provider": "openai",
+        "model": "text-embedding-v4",
+        "fallback": "none",
+        "remote": {
+          "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "apiKey": "${DASHSCOPE_API_KEY}",
+        },
+        "sync": {
+          "watch": true,
+          "onSessionStart": true,
+        },
+        "query": {
+          "hybrid": {
+            "enabled": true,
+          },
+        },
+        "extraPaths": ["../../data/hr-chunks"],
+        // 预切片文件已按主题切好，调大窗口让每个 .md = 一个 chunk，避免 builtin 二次切片
+        "chunking": {
+          "tokens": 4000,
+          "overlap": 0,
+        },
+      },
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Session 管理 — 按账号-频道-对话对象维度隔离，每天凌晨重置
+  // ---------------------------------------------------------------------------
+  "session": {
+    "dmScope": "per-account-channel-peer",
+    "reset": {
+      "mode": "daily",
+      "atHour": 6,
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Models
+  // ---------------------------------------------------------------------------
+  "models": {
+    // 保持 merge，便于后续继续接入 OpenAI / Anthropic / OpenRouter 等其他 provider。
+    "mode": "merge",
+    "providers": {
+      "minimax": {
+        // MiniMax 国内 Anthropic 兼容入口。显式写死可避免自动注入回落到全球域名。
+        "baseUrl": "https://api.minimaxi.com/anthropic",
+        "api": "anthropic-messages",
+        "authHeader": true,
+        "apiKey": "${MINIMAX_API_KEY}",
+        // 保留空数组以通过 schema 校验，实际模型目录仍由 MiniMax 插件补全。
+        "models": [],
+      },
+    },
+  },
+}

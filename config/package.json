@@ -1,0 +1,19 @@
+{
+  "name": "yomajiahr-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Yoma+HR 配置工具包：base + config-store → 运行时 openclaw.json（生成 + 校验 + 迁移）",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "node dist/generate-config.js",
+    "migrate": "node dist/migrate-jsonc.js"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

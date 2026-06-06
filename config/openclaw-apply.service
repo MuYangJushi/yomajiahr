@@ -1,0 +1,15 @@
+[Unit]
+Description=Yoma+HR Config Apply (oneshot)
+# 由 openclaw-apply.path 监听 control/apply-request.json 变化触发。
+# 以 root 运行：因为需要 systemctl restart 系统单元 openclaw-gateway。
+# 这是平台唯一的特权集中点——admin-portal(ubuntu) 仅写请求文件，从不直接重启。
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/yomajiahr/config
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=REPO_DIR=/opt/yomajiahr
+Environment=STATE_DIR=/home/ubuntu/.openclaw
+Environment=GATEWAY_SVC=openclaw-gateway
+ExecStart=/opt/yomajiahr/config/scripts/apply-config.sh
