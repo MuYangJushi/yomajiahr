@@ -13,7 +13,7 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管�
 
 | 入口                    | 适用场景                         | 说明                                                                                  |
 | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-portal/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
+| **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-server/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
 | **飞书/钉钉管理 Bot**   | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
 | **Yoma+HR Web Portal**  | 对话式操作                       | 与管理 Bot 功能相同，Web 聊天界面                                                     |
 
@@ -157,5 +157,5 @@ Agent:  已删除。审计记录已生成。
 ## 参考文档
 
 - 管理操作详细规范：[references/admin-operations.md](references/admin-operations.md)
-- Admin Portal 源码：`admin-portal/`（独立 Web 服务，端口 18790）
+- Admin Portal 源码：`admin-server/`（独立 Web 服务，端口 18790）
 - 多格式 CLI 转换脚本：`skills/hr-admin/scripts/doc-to-markdown.mjs`

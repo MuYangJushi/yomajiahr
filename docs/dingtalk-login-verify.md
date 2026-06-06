@@ -1,8 +1,8 @@
 # 钉钉登录真实联调手册
 
 > **适用范围**：ADR-005 决策六 ② — Admin Portal 平台登录（钉钉 IdP，新版 OAuth2 授权码流程）+ 跨家身份归一化。
-> **代码位置**：`admin-portal/src/auth/{dingtalk,session,users}.ts`、`admin-portal/src/routes/auth.ts`。
-> **状态**：钉钉登录代码已完整并通过本地构建/归一化验证。**`exchangeCode`（换 token + 取用户信息）尚未真机跑过**——端点来自官方示例+检索（钉钉文档 SPA 抓不到正文），本手册的核心目的就是真机联调时**逐项复核**这些端点/字段名（飞书 v1/v2 就栽在这）。
+> **代码位置**：`admin-server/src/auth/{dingtalk,session,users}.ts`、`admin-server/src/routes/auth.ts`。
+> **状态**：钉钉登录与手动跨家归一化已于 2026-06-06 完成真机全链路验证；`exchangeCode` 使用的端点、参数与响应字段均已验证。自动连接键归一化仍需飞书/钉钉两侧开放手机号或邮箱权限。
 > **配套**：飞书侧见 `docs/feishu-login-verify.md`；二者共用同一套 session/RBAC/归一化框架。
 
 ---
@@ -132,11 +132,11 @@ ADMIN_PORTAL_PUBLIC_URL=http://localhost:18790
 ## 4. 执行联调
 
 ```bash
-cd yomajiahr/admin-portal
+cd yomajiahr/admin-server
 
 # 构建前后端（如已构建可跳过）
 npx tsup
-(cd web && npm run build)
+(cd ../admin-web && npm run build)
 
 # 启动：必须用 --env-file 加载 config/.env（代码直接读 process.env，无 dotenv）
 node --env-file=../config/.env dist/server.js 2>&1 | tee /tmp/portal.log
@@ -213,9 +213,9 @@ node --env-file=../config/.env dist/server.js 2>&1 | tee /tmp/portal.log
 
 | 环节 | 文件 |
 |---|---|
-| 授权 URL / 换 token / 取 user_info | `admin-portal/src/auth/dingtalk.ts` |
-| 登录入口 / 回调 / providers | `admin-portal/src/routes/auth.ts` |
-| 签名 cookie session + state 防 CSRF | `admin-portal/src/auth/session.ts` |
-| 角色映射 / 跨家归一化 / 名单 | `admin-portal/src/auth/users.ts` |
-| 环境变量定义 | `admin-portal/src/config.ts` |
-| 登录页（双 IdP 按钮） | `admin-portal/web/src/Login.tsx` |
+| 授权 URL / 换 token / 取 user_info | `admin-server/src/auth/dingtalk.ts` |
+| 登录入口 / 回调 / providers | `admin-server/src/routes/auth.ts` |
+| 签名 cookie session + state 防 CSRF | `admin-server/src/auth/session.ts` |
+| 角色映射 / 跨家归一化 / 名单 | `admin-server/src/auth/users.ts` |
+| 环境变量定义 | `admin-server/src/config.ts` |
+| 登录页（双 IdP 按钮） | `admin-web/src/Login.tsx` |

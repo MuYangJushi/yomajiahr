@@ -2,5 +2,3 @@ node_modules/
 uploads/
 dist/
 public/console/
-web/node_modules/
-web/dist/

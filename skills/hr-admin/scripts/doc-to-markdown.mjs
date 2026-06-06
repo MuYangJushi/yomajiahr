@@ -24,10 +24,10 @@ import {
   convertFile,
   isSupported,
   supportedFormats,
-} from "../../../admin-portal/lib/doc-converter.mjs";
-import { overwriteFrontmatter } from "../../../admin-portal/lib/frontmatter.mjs";
-import { inferDocumentMetadata } from "../../../admin-portal/lib/metadata-inference.mjs";
-import { chunkDocument, writeChunks } from "../../../admin-portal/lib/doc-chunker.mjs";
+} from "../../../admin-server/lib/doc-converter.mjs";
+import { overwriteFrontmatter } from "../../../admin-server/lib/frontmatter.mjs";
+import { inferDocumentMetadata } from "../../../admin-server/lib/metadata-inference.mjs";
+import { chunkDocument, writeChunks } from "../../../admin-server/lib/doc-chunker.mjs";
 
 const { values, positionals } = parseArgs({
   options: {

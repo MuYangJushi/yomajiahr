@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/inst
 curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
 ```
 
-脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 24 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-portal 依赖 → （可选）安装 systemd 服务。
+脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 24 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-server 依赖 → （可选）安装 systemd 服务。
 
 完成后手动操作：填写 API 密钥（见 Step 2）→ 创建飞书/钉钉 Bot（见开放平台准备）→ 启动服务。
 
@@ -109,7 +109,7 @@ cd /opt/yomajiahr
 7. 复制 .env 模板
 8. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
 9. 通过 OpenClaw 插件命令安装钉钉官方 connector（`openclaw plugins install @dingtalk-real-ai/dingtalk-connector`）
-10. 安装 admin-portal 依赖
+10. 安装 admin-server 依赖
 
 当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向聊天渠道用户外发心跳消息。
 
@@ -148,7 +148,7 @@ ls ~/.openclaw/data/hr-policies/
 ```
 
 也可以通过 Admin Portal 上传 PDF/Word/文本文件，系统会自动转换为 Markdown。
-`install.sh` 会保留 `admin-portal/lib/categories.mjs` 中定义的正式分类目录，并自动清理其它空的历史目录；若历史目录内仍有文件，脚本会保留目录并提示先迁移文档。
+`install.sh` 会保留 `admin-server/lib/categories.mjs` 中定义的正式分类目录，并自动清理其它空的历史目录；若历史目录内仍有文件，脚本会保留目录并提示先迁移文档。
 
 ### Step 4: 验证安装
 
@@ -175,8 +175,8 @@ OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json \
   openclaw gateway run --bind loopback --port 18789
 
 # 终端 2: 启动 admin portal
-cd /opt/yomajiahr/admin-portal
-OPENCLAW_STATE_DIR=~/.openclaw node server.mjs
+cd /opt/yomajiahr/admin-server
+OPENCLAW_STATE_DIR=~/.openclaw node --env-file=~/.openclaw/.env dist/server.js
 ```
 
 **systemd 部署（生产推荐）：**
@@ -221,7 +221,7 @@ ss -ltnp | grep -E '18789|18790'
     openclaw-admin.service
   workspaces/                   # Agent workspace 模板
   skills/                       # HR Skills
-  admin-portal/                 # Admin Web 服务
+  admin-server/                 # Admin Web 服务
   docs/
 ```
 
@@ -267,11 +267,10 @@ ss -ltnp | grep -E '18789|18790'
 ```bash
 cd /opt/yomajiahr
 git pull
-sudo systemctl stop openclaw-gateway
-./install.sh --systemd          # 重新部署配置、skills 和 systemd unit
-sudo systemctl restart openclaw-gateway
-sudo systemctl restart openclaw-admin
+./install.sh                    # 自动刷新已有 systemd unit，并重启更新前正在运行的服务
 ```
+
+首次注册 systemd 服务仍使用 `./install.sh --systemd`。后续即使省略 `--systemd`，脚本检测到已有 `openclaw-gateway` 或 `openclaw-admin` unit 后也会刷新 unit，避免代码目录迁移后继续引用旧路径。
 
 ### 查看日志
 

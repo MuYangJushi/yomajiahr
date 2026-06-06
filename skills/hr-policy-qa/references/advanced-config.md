@@ -98,7 +98,7 @@ total_pages: 3 # 原始 PDF 页数
 - 源文档目录：`../data/hr-policies/`
 - 运行时检索目录：`../../data/hr-chunks/`
 
-如需导入新文档，请改走 `hr-admin` / `admin-portal`：
+如需导入新文档，请改走 `hr-admin` / `admin-server`：
 
-- 推荐：通过 `admin-portal` 上传 PDF、Word、文本并自动转换为 Markdown
+- 推荐：通过 `admin-server` 上传 PDF、Word、文本并自动转换为 Markdown
 - 命令行：使用 `skills/hr-admin/scripts/doc-to-markdown.mjs` 处理 PDF、Word、文本并自动分析元数据

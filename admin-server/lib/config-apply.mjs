@@ -1,5 +1,5 @@
 // P0 基石 B：触发配置应用。
-// 生产(systemd)：admin-portal 仅原子写 control/apply-request.json，由特权 helper 执行重启；轮询结果。
+// 生产(systemd)：admin-server 仅原子写 control/apply-request.json，由特权 helper 执行重启；轮询结果。
 // 开发(无 systemd 或 OPENCLAW_APPLY_DIRECT=1)：直接 spawn apply-config.sh 内联执行。
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
