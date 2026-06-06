@@ -38,7 +38,7 @@ node skills/hr-admin/scripts/doc-to-markdown.mjs <path> \
   --category <category>
 ```
 
-`admin-portal/lib/doc-converter.mjs` 仅作为 Admin Portal 服务端内部实现，不作为 `hr-admin` 对话链路的首选调用目标。
+`admin-server/lib/doc-converter.mjs` 仅作为 Admin Portal 服务端内部实现，不作为 `hr-admin` 对话链路的首选调用目标。
 
 支持的格式：PDF (.pdf)、Word (.docx)、文本 (.txt, .md)。
 

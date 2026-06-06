@@ -40,6 +40,7 @@ echo "State dir:    $STATE_DIR"
 echo
 
 HAS_SYSTEMD=false
+SYSTEMD_CONFIGURED=false
 GATEWAY_WAS_ACTIVE=false
 ADMIN_WAS_ACTIVE=false
 ENV_WAS_PRESENT=false
@@ -110,6 +111,9 @@ fi
 
 if [ "$(uname)" = "Linux" ] && command -v systemctl &>/dev/null; then
   HAS_SYSTEMD=true
+  if systemctl cat openclaw-gateway >/dev/null 2>&1 || systemctl cat openclaw-admin >/dev/null 2>&1; then
+    SYSTEMD_CONFIGURED=true
+  fi
   if systemctl cat openclaw-gateway >/dev/null 2>&1 && systemctl is-active --quiet openclaw-gateway; then
     GATEWAY_WAS_ACTIVE=true
   fi
@@ -223,10 +227,10 @@ while IFS= read -r category; do
   CURRENT_POLICY_DIRS+=("$category")
 done < <(
   node --input-type=module <<EOF
-import { CATEGORIES } from "${REPO_DIR}/admin-portal/lib/categories.mjs";
+import { CATEGORIES } from "${REPO_DIR}/admin-server/lib/categories.mjs";
 
 if (!Array.isArray(CATEGORIES) || CATEGORIES.length === 0) {
-  console.error("ERROR: admin-portal/lib/categories.mjs does not export a non-empty CATEGORIES array.");
+  console.error("ERROR: admin-server/lib/categories.mjs does not export a non-empty CATEGORIES array.");
   process.exit(1);
 }
 
@@ -240,7 +244,7 @@ for (const category of CATEGORIES) {
 EOF
 )
 if [ "${#CURRENT_POLICY_DIRS[@]}" -eq 0 ]; then
-  echo "ERROR: Failed to load policy categories from admin-portal/lib/categories.mjs"
+  echo "ERROR: Failed to load policy categories from admin-server/lib/categories.mjs"
   exit 1
 fi
 mkdir -p "$POLICIES_DIR"
@@ -452,30 +456,30 @@ normalize_runtime_config
 echo "  official DingTalk connector installed"
 
 # ---------------------------------------------------------------------------
-# Step 9: Install admin-portal dependencies
+# Step 9: Install admin-server dependencies
 # ---------------------------------------------------------------------------
 
-echo "[9/9] Installing & building admin-portal (backend + web)..."
-if [ -f "$REPO_DIR/admin-portal/package.json" ]; then
+echo "[9/9] Installing & building admin-server (backend + web)..."
+if [ -f "$REPO_DIR/admin-server/package.json" ]; then
   # 后端：需 devDeps(tsup/typescript) 构建 TS → dist/server.js
-  ( cd "$REPO_DIR/admin-portal" && npm install --no-audit --no-fund && npm run build ) \
-    || { echo "  [FAIL] admin-portal backend install/build failed"; exit 1; }
-  echo "  admin-portal backend built (dist/server.js)"
-  # 前端：React+antd Vite 工程 → 产物输出到 public/console/
-  if [ -f "$REPO_DIR/admin-portal/web/package.json" ]; then
-    ( cd "$REPO_DIR/admin-portal/web" && npm install --no-audit --no-fund && npm run build ) \
-      || { echo "  [FAIL] admin-portal web install/build failed"; exit 1; }
-    echo "  admin-portal web built (public/console/)"
+  ( cd "$REPO_DIR/admin-server" && npm install --no-audit --no-fund && npm run build ) \
+    || { echo "  [FAIL] admin-server backend install/build failed"; exit 1; }
+  echo "  admin-server backend built (dist/server.js)"
+  # 前端：React+antd Vite 工程（admin-web/ 与 admin-server/ 同级）→ 产物输出到 admin-server/public/console/
+  if [ -f "$REPO_DIR/admin-web/package.json" ]; then
+    ( cd "$REPO_DIR/admin-web" && npm install --no-audit --no-fund && npm run build ) \
+      || { echo "  [FAIL] admin-web install/build failed"; exit 1; }
+    echo "  admin-web built (admin-server/public/console/)"
   fi
 else
-  echo "  [WARN] admin-portal/package.json not found (skipping)"
+  echo "  [WARN] admin-server/package.json not found (skipping)"
 fi
 
 # ---------------------------------------------------------------------------
-# Optional: systemd services (Linux only)
+# Install or refresh systemd services (Linux only)
 # ---------------------------------------------------------------------------
 
-if [ "$INSTALL_SYSTEMD" = true ]; then
+if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
   if [ "$(uname)" != "Linux" ]; then
     echo "[WARN] --systemd is only supported on Linux (skipping)"
   else
@@ -568,7 +572,7 @@ if [ "$SERVICES_RESTARTED" = true ] && [ "$ENV_WAS_PRESENT" = true ]; then
 elif [ "$ENV_TEMPLATE_CREATED" = true ]; then
   echo "Next steps:"
   echo "  1. Edit $STATE_DIR/.env with your API keys"
-  if [ "$INSTALL_SYSTEMD" = true ]; then
+  if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
     echo "  2. Enable and start services:"
     echo "     sudo systemctl enable --now openclaw-gateway"
     echo "     sudo systemctl enable --now openclaw-admin"
@@ -576,15 +580,15 @@ elif [ "$ENV_TEMPLATE_CREATED" = true ]; then
     echo "  2. Start gateway:"
     echo "     OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
     echo "  3. Start admin portal:"
-    echo "     cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+    echo "     cd $REPO_DIR/admin-server && OPENCLAW_STATE_DIR=$STATE_DIR node --env-file=$STATE_DIR/.env dist/server.js"
   fi
-elif [ "$INSTALL_SYSTEMD" = true ]; then
+elif [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
   echo "Next steps:"
   echo "  sudo systemctl enable --now openclaw-gateway"
   echo "  sudo systemctl enable --now openclaw-admin"
 else
   echo "Next steps:"
   echo "  OPENCLAW_CONFIG_PATH=$STATE_DIR/openclaw.json openclaw gateway run --bind loopback --port 18789"
-  echo "  cd $REPO_DIR/admin-portal && OPENCLAW_STATE_DIR=$STATE_DIR node server.mjs"
+  echo "  cd $REPO_DIR/admin-server && OPENCLAW_STATE_DIR=$STATE_DIR node --env-file=$STATE_DIR/.env dist/server.js"
 fi
 echo

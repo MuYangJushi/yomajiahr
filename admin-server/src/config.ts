@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { CATEGORIES } from "../lib/categories.mjs";
 
 // 运行文件位于 dist/server.js；据此推导目录。
-const ADMIN_DIR = join(import.meta.dirname, ".."); // admin-portal/
+const ADMIN_DIR = join(import.meta.dirname, ".."); // admin-server/
 export const REPO_DIR = join(ADMIN_DIR, ".."); // 仓库根（含 config/）
 export const PUBLIC_DIR = join(ADMIN_DIR, "public");
 

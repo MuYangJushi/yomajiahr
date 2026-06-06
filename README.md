@@ -60,7 +60,7 @@ cd yomajiahr
 5. 复制 .env 模板
 6. 通过飞书官方 CLI 的非交互更新命令安装插件（`OPENCLAW_STATE_DIR=... npx -y @larksuite/openclaw-lark update`）
 7. 通过 OpenClaw 插件命令安装钉钉官方 connector（`openclaw plugins install @dingtalk-real-ai/dingtalk-connector`）
-8. 安装 admin-portal 依赖
+8. 安装 admin-server 依赖
 
 ### 配置 API Keys
 
@@ -77,7 +77,8 @@ vi ~/.openclaw/.env
 OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw gateway run --bind loopback --port 18789
 
 # 启动 admin portal（另一个终端）
-cd admin-portal && node server.mjs
+cd admin-server
+OPENCLAW_STATE_DIR=~/.openclaw node --env-file=~/.openclaw/.env dist/server.js
 ```
 
 ### systemd 部署（Linux）
@@ -105,7 +106,7 @@ yomajiahr/
     hr-policy-qa/          # 政策问答 Skill
     hr-admin/              # 知识库管理 Skill
     hr-general/            # 通用对话 Skill
-  admin-portal/            # 独立 Admin Web 服务
+  admin-server/            # 独立 Admin Web 服务
   docs/                    # 项目文档
 ```
 
@@ -114,7 +115,7 @@ yomajiahr/
 ```bash
 cd yomajiahr
 git pull
-./install.sh    # 重新部署配置和 skills
+./install.sh    # 重新部署配置和 skills；已有 systemd unit 时自动刷新并重启原运行服务
 ```
 
 ## 文档

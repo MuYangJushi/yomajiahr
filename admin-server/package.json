@@ -1,5 +1,5 @@
 {
-  "name": "hr-admin-portal",
+  "name": "hr-admin-server",
   "version": "1.0.0",
   "private": true,
   "description": "HR Admin Portal - document management, audit log viewer, agent config",

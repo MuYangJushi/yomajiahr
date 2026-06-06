@@ -101,7 +101,7 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 
 ### 政策目录：按 `categories.mjs` 动态保留正式分类并清理空历史目录（新增）
 
-`install.sh` 现在从 `admin-portal/lib/categories.mjs` 读取 `CATEGORIES` 作为正式分类目录列表。
+`install.sh` 现在从 `admin-server/lib/categories.mjs` 读取 `CATEGORIES` 作为正式分类目录列表。
 
 `~/.openclaw/data/hr-policies/` 下凡是不在 `CATEGORIES` 中的一级子目录：
 

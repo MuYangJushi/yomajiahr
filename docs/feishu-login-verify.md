@@ -1,7 +1,7 @@
 # 飞书登录真实联调手册
 
 > **适用范围**：ADR-005 决策六 ① — Admin Portal 平台登录（飞书单 IdP，全页跳转 OAuth 授权码流程）。
-> **代码位置**：`admin-portal/src/auth/{feishu,session,users}.ts`、`admin-portal/src/routes/auth.ts`。
+> **代码位置**：`admin-server/src/auth/{feishu,session,users}.ts`、`admin-server/src/routes/auth.ts`。
 > **结论**：登录代码已完整并通过本地冒烟（17/17）。真实联调的卡点全在**飞书开放平台配置**与**首个管理员引导**，本手册逐步打通。
 
 ---
@@ -132,11 +132,11 @@ PLATFORM_BOOTSTRAP_ADMINS=13800138000     # 你的飞书手机号，逗号分隔
 ## 4. 执行联调
 
 ```bash
-cd yomajiahr/admin-portal
+cd yomajiahr/admin-server
 
 # 构建前后端
 npx tsup                       # 后端 → dist/server.js
-(cd web && npm run build)      # 前端 → public/console/
+(cd ../admin-web && npm run build)   # 前端（与 admin-server 同级）→ admin-server/public/console/
 
 # 启动：必须用 --env-file 加载 config/.env（代码直接读 process.env，无 dotenv，
 # 裸 node dist/server.js 不会读 .env，会报"未配置 SESSION_SECRET"）。Node 20.6+ 原生支持。
@@ -185,9 +185,9 @@ node --env-file=../config/.env dist/server.js
 
 | 环节 | 文件 |
 |---|---|
-| 授权 URL / 换 token / 取 user_info | `admin-portal/src/auth/feishu.ts` |
-| 登录入口 / 回调 / me / logout | `admin-portal/src/routes/auth.ts` |
-| 签名 cookie session + state 防 CSRF | `admin-portal/src/auth/session.ts` |
-| 角色映射 / 名单 / 引导管理员 | `admin-portal/src/auth/users.ts` |
-| 环境变量定义 | `admin-portal/src/config.ts` |
-| 登录页 / 鉴权门 | `admin-portal/web/src/{Login,App}.tsx` |
+| 授权 URL / 换 token / 取 user_info | `admin-server/src/auth/feishu.ts` |
+| 登录入口 / 回调 / me / logout | `admin-server/src/routes/auth.ts` |
+| 签名 cookie session + state 防 CSRF | `admin-server/src/auth/session.ts` |
+| 角色映射 / 名单 / 引导管理员 | `admin-server/src/auth/users.ts` |
+| 环境变量定义 | `admin-server/src/config.ts` |
+| 登录页 / 鉴权门 | `admin-web/src/{Login,App}.tsx` |

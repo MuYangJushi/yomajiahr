@@ -26,7 +26,7 @@ export function createApp() {
 
   // 健康检查：鉴权之前（供 LB/systemd 探针）
   app.get("/api/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", service: "hr-admin-portal" });
+    res.json({ status: "ok", service: "hr-admin-server" });
   });
 
   // 平台登录路由：公开（鉴权之前），供 OAuth 登录/回调/me/logout
