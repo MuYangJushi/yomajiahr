@@ -100,7 +100,17 @@ rollback() { # reason
     restart_gateway || true
     fail "$1（已回滚至 last-good）"
   fi
-  fail "$1（无 last-good 可回滚）"
+  # 首次 apply 无 last-good：坏配置已在 $RUNTIME 且网关在其上 crash-loop。
+  # 隔离坏配置 + 停服，避免持续服务已知坏配置（而非放任 crash-loop）。
+  if [ -f "$RUNTIME" ]; then
+    mv "$RUNTIME" "$RUNTIME.rejected.$(date -u +%Y%m%dT%H%M%SZ)" 2>/dev/null || true
+    log "无 last-good：已隔离坏配置 → $RUNTIME.rejected.*"
+  fi
+  if has_systemctl; then
+    systemctl stop "$GATEWAY_SVC" 2>/dev/null || true
+    log "已停 $GATEWAY_SVC（无可回滚配置，避免 crash-loop）"
+  fi
+  fail "$1（无 last-good 可回滚；已隔离坏配置并停服）"
 }
 
 # —— 1. 生成 + 校验 → staging（含 --check-fs：workspace/skill 存在性）——

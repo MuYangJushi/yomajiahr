@@ -28,9 +28,33 @@ function serviceTokenRole(): PlatformRole {
   return SESSION_SECRET ? "ops" : "admin";
 }
 
-/** /api 请求日志。 */
+/** query 中需脱敏的键（OAuth 授权码、共享/用户 token 等），小写比较。 */
+const SENSITIVE_QUERY_KEYS = new Set([
+  "token",
+  "code",
+  "authcode",
+  "access_token",
+  "refresh_token",
+  "client_secret",
+]);
+
+/** 脱敏日志 URL：屏蔽 query 里的敏感值，避免凭据（OAuth code / ?token=）写入日志。 */
+function redactUrl(originalUrl: string): string {
+  const q = originalUrl.indexOf("?");
+  if (q < 0) return originalUrl;
+  const params = new URLSearchParams(originalUrl.slice(q + 1));
+  const toRedact: string[] = [];
+  for (const key of params.keys()) {
+    if (SENSITIVE_QUERY_KEYS.has(key.toLowerCase())) toRedact.push(key);
+  }
+  if (toRedact.length === 0) return originalUrl;
+  for (const key of toRedact) params.set(key, "***");
+  return `${originalUrl.slice(0, q)}?${params.toString()}`;
+}
+
+/** /api 请求日志（query 敏感值已脱敏）。 */
 export function requestLog(req: Request, _res: Response, next: NextFunction): void {
-  log("INFO", `${req.method} ${req.originalUrl}`);
+  log("INFO", `${req.method} ${redactUrl(req.originalUrl)}`);
   next();
 }
 
