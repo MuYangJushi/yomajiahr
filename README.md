@@ -53,7 +53,7 @@ cd yomajiahr
 ```
 
 `install.sh` 会自动：
-1. 安装 openclaw 主包（`npm install -g openclaw@latest`）
+1. 安装已验证兼容的 OpenClaw 版本（默认 `2026.5.26`；可用 `OPENCLAW_VERSION` 覆盖）
 2. 创建 `~/.openclaw/` 目录结构
 3. 复制 workspace 文件和 skills
 4. 编译配置文件（JSONC -> JSON）

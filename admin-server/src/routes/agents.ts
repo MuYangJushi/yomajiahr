@@ -1,15 +1,18 @@
 // 数字员工配置路由（P1 支柱一）：列表 / 新建（原子编排上线）/ 技能 / 渠道。
 import { Router, type Request, type Response } from "express";
-import { createAgent, listAgents } from "../services/orchestrator.js";
+import { listAgents } from "../services/orchestrator.js";
+import { cancelOnboarding, getOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
 import { requireRole } from "../auth/rbac.js";
+import { rateLimit } from "../middleware.js";
 
 export const agentsRouter = Router();
 
 // 支持的渠道域（来自 base 脚手架；P1 固定两类）
 const SUPPORTED_CHANNELS = ["feishu", "dingtalk-connector"];
+const onboardingLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "扫码创建请求过于频繁，请稍后再试" });
 
 agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Response) => {
   try {
@@ -20,11 +23,30 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
 });
 
 agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, res: Response) => {
+  res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
+});
+
+agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLimiter, (req: Request, res: Response) => {
   try {
-    const { agent, apply } = await createAgent(req.body);
-    res.status(apply.status === "success" ? 201 : 422).json({ agent, apply });
+    res.status(202).json(startOnboarding(req.user!.platformUserId, req.body));
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+agentsRouter.get("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+  const session = getOnboarding(req.user!.platformUserId, String(req.params.id));
+  if (!session) return res.status(404).json({ error: "会话不存在或已过期" });
+  res.json(session);
+});
+
+agentsRouter.delete("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+  try {
+    const session = cancelOnboarding(req.user!.platformUserId, String(req.params.id));
+    if (!session) return res.status(404).json({ error: "会话不存在或已过期" });
+    res.json(session);
+  } catch (err) {
+    res.status(409).json({ error: (err as Error).message });
   }
 });
 
