@@ -101,7 +101,7 @@ cd /opt/yomajiahr
 `install.sh` 会自动完成以下操作：
 
 1. 检查 Node.js >= 24
-2. 安装 openclaw 主包（`npm install -g openclaw@latest`）
+2. 安装已验证兼容的 OpenClaw 版本（默认 `2026.5.26`；可用 `OPENCLAW_VERSION` 覆盖）
 3. 创建 `~/.openclaw/` 目录结构
 4. 复制 workspace 文件到 `~/.openclaw/workspaces/`
 5. 复制 skills 到 `~/.openclaw/skills/`
@@ -202,6 +202,25 @@ sudo journalctl -u openclaw-admin -f
 
 # 检查端口
 ss -ltnp | grep -E '18789|18790'
+```
+
+### Admin Portal 扫码创建数字员工
+
+数字员工页面的创建向导支持飞书和钉钉扫码创建应用，操作人必须具备 Admin Portal `admin` 角色。
+
+- 飞书由 Admin Server 调用官方 Node SDK `registerApp()`。
+- 钉钉由 Admin Server 执行 `init → begin → poll` Device Flow。
+- 已有应用可通过手工凭证入口接入；凭证只随创建请求提交，不进入状态查询响应或浏览器持久存储。
+- 浏览器轮询接口只返回 `id/status/message/qr_url/expires_at`，不会收到 `client_secret`、`device_code` 或内部配置草稿。
+- 授权成功后，服务端将凭证直接写入 `~/.openclaw/.env`，动态配置只保存 `${VAR}` 引用。
+- Agent workspace、已有技能、渠道账号和 binding 写入后，平台自动应用配置、重启网关并验证目标渠道；任一步失败都会恢复原配置。
+
+相关接口：
+
+```text
+POST   /api/config/agent-onboarding
+GET    /api/config/agent-onboarding/:id
+DELETE /api/config/agent-onboarding/:id
 ```
 
 ---

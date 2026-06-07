@@ -51,6 +51,13 @@ log() { echo "[apply-config] $*" >&2; }
 
 fail() { write_result failed "$1" "${2:-}"; log "FAIL: $1"; exit 1; }
 
+set_runtime_permissions() {
+  chmod 600 "$RUNTIME"
+  # apply.service 以 root 运行，但 gateway 以 STATE_DIR 所有者运行。
+  # 每次原子替换/回滚后必须恢复归属，否则 gateway 无法读取 0600 配置。
+  chown --reference="$STATE_DIR" "$RUNTIME" 2>/dev/null || true
+}
+
 restart_gateway() {
   has_systemctl || { log "no systemd; skip restart (dev)"; return 0; }
   systemctl restart "$GATEWAY_SVC"
@@ -96,7 +103,7 @@ probe() {
 rollback() { # reason
   log "回滚中：$1"
   if [ -f "$LASTGOOD" ]; then
-    cp "$LASTGOOD" "$RUNTIME"; chmod 600 "$RUNTIME"
+    cp "$LASTGOOD" "$RUNTIME"; set_runtime_permissions
     restart_gateway || true
     fail "$1（已回滚至 last-good）"
   fi
@@ -134,7 +141,7 @@ cp "$STORE_DIR"/*.json "$VERSIONS/$TS/" 2>/dev/null || true
 log "已快照 last-good + store 版本 $TS"
 
 # —— 3. 原子应用 ——
-mv "$STAGING" "$RUNTIME"; chmod 600 "$RUNTIME"
+mv "$STAGING" "$RUNTIME"; set_runtime_permissions
 log "已应用 → $RUNTIME"
 
 # —— 4. 重启 ——

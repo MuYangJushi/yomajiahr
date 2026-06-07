@@ -68,6 +68,29 @@ export async function fetchSkills(): Promise<Skill[]> {
 export async function fetchChannels(): Promise<ChannelsInfo> {
   return (await api.get("/config/channels")).data;
 }
-export async function createAgent(body: unknown) {
-  return (await api.post("/config/agents", body)).data;
+export type OnboardingStatus =
+  | "preparing"
+  | "awaiting_scan"
+  | "authorized"
+  | "applying"
+  | "verifying"
+  | "success"
+  | "failed"
+  | "expired"
+  | "cancelled";
+export interface OnboardingSession {
+  id: string;
+  status: OnboardingStatus;
+  message?: string;
+  qr_url?: string;
+  expires_at: string;
+}
+export async function startAgentOnboarding(body: unknown): Promise<OnboardingSession> {
+  return (await api.post("/config/agent-onboarding", body)).data;
+}
+export async function fetchAgentOnboarding(id: string): Promise<OnboardingSession> {
+  return (await api.get(`/config/agent-onboarding/${id}`)).data;
+}
+export async function cancelAgentOnboarding(id: string): Promise<void> {
+  await api.delete(`/config/agent-onboarding/${id}`);
 }

@@ -2,7 +2,8 @@
 // 本路由公开（挂在 authMiddleware 之前）。
 import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
-import { PUBLIC_BASE_URL, SESSION_SECRET } from "../config.js";
+import { DEV_LOCALHOST_ADMIN, PUBLIC_BASE_URL, SESSION_SECRET } from "../config.js";
+import { isLocalhost } from "../middleware.js";
 import { feishuAuthorizeUrl, feishuConfigured, feishuExchangeCode } from "../auth/feishu.js";
 import { dingtalkAuthorizeUrl, dingtalkConfigured, dingtalkExchangeCode } from "../auth/dingtalk.js";
 import {
@@ -40,8 +41,13 @@ authRouter.get("/auth/providers", (_req: Request, res: Response) => {
 /** 当前登录用户（无 session → 401）。 */
 authRouter.get("/auth/me", (req: Request, res: Response) => {
   const s = readSession(req);
-  if (!s) return res.status(401).json({ error: "未登录" });
-  res.json({ platformUserId: s.platformUserId, name: s.name, platformRole: s.platformRole, idp: s.idp });
+  if (s) return res.json({ platformUserId: s.platformUserId, name: s.name, platformRole: s.platformRole, idp: s.idp });
+  // 开发兜底：与 authMiddleware ③ 一致（ADMIN_PORTAL_DEV_LOCALHOST_ADMIN=1 且 localhost），
+  // 让 SPA 登录闸放行；受保护路由仍由 authMiddleware 按 localhost 授予 admin。
+  if (DEV_LOCALHOST_ADMIN && isLocalhost(req)) {
+    return res.json({ platformUserId: "dev-localhost", name: "Dev (localhost)", platformRole: "admin", idp: "dev" });
+  }
+  return res.status(401).json({ error: "未登录" });
 });
 
 /** 登出。 */

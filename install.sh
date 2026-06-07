@@ -22,6 +22,8 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIN_NODE_MAJOR=24
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.5.26}"
+OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
 
 for arg in "$@"; do
@@ -196,19 +198,24 @@ npm config set registry https://registry.npmmirror.com
 # ---------------------------------------------------------------------------
 
 echo "[2/9] Installing openclaw..."
-# Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
-NPM_PREFIX="$(npm config get prefix)"
-if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
-  echo "  Removing existing openclaw installation..."
-  sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
-fi
-# Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
-if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
-  npm install -g openclaw@latest
+if [ "$OPENCLAW_SKIP_INSTALL" = "1" ]; then
+  command -v openclaw >/dev/null 2>&1 || { echo "ERROR: OPENCLAW_SKIP_INSTALL=1 but openclaw is not on PATH"; exit 1; }
+  echo "  skipped; using $(openclaw --version 2>/dev/null || echo openclaw)"
 else
-  sudo npm install -g openclaw@latest
+  # Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
+  NPM_PREFIX="$(npm config get prefix)"
+  if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
+    echo "  Removing existing openclaw installation..."
+    sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
+  fi
+  # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
+  if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
+    npm install -g "openclaw@$OPENCLAW_VERSION"
+  else
+    sudo npm install -g "openclaw@$OPENCLAW_VERSION"
+  fi
+  echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 fi
-echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
 
 # ---------------------------------------------------------------------------
 # Step 3: Create directory structure

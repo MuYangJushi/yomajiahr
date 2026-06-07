@@ -44,3 +44,16 @@ export function envKeysSet(): Set<string> {
   }
   return keys;
 }
+
+/** 读取运行时 .env 供子进程使用；不对外暴露、不写日志。 */
+export function runtimeEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!existsSync(ENV_PATH)) return out;
+  for (const line of readFileSync(ENV_PATH, "utf-8").split("\n")) {
+    const m = line.match(KEY_RE);
+    if (!m) continue;
+    const eq = line.indexOf("=");
+    out[m[1]] = line.slice(eq + 1);
+  }
+  return out;
+}

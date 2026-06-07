@@ -1,5 +1,7 @@
 // 新建数字员工向导（StepsForm）：身份岗位 → 技能 → 渠道接入 → 提交上线。
-import { Modal, message } from "antd";
+import { useEffect, useState } from "react";
+import { Alert, Button, Collapse, Modal, Space, Spin, Typography, message } from "antd";
+import { QRCodeSVG } from "qrcode.react";
 import {
   ProFormDependency,
   ProFormRadio,
@@ -8,7 +10,14 @@ import {
   ProFormTextArea,
   StepsForm,
 } from "@ant-design/pro-components";
-import { createAgent, type ChannelsInfo, type Skill } from "./api";
+import {
+  cancelAgentOnboarding,
+  fetchAgentOnboarding,
+  startAgentOnboarding,
+  type ChannelsInfo,
+  type OnboardingSession,
+  type Skill,
+} from "./api";
 
 interface Props {
   open: boolean;
@@ -24,50 +33,45 @@ const DOMAIN_LABEL: Record<string, string> = {
 };
 
 export default function CreateAgentWizard({ open, onClose, onCreated, skills, channels }: Props) {
-  async function handleFinish(values: any): Promise<boolean> {
-    const { id, name, role, persona, skills: chosenSkills, domain, accountId, cred1, cred2 } = values;
-    const up = String(id).toUpperCase().replace(/-/g, "_");
-    let account: Record<string, unknown>;
-    let secrets: Record<string, string>;
-    if (domain === "feishu") {
-      account = {
-        appId: `\${FEISHU_${up}_APP_ID}`,
-        appSecret: `\${FEISHU_${up}_APP_SECRET}`,
-        dmPolicy: "open",
-        groupPolicy: "open",
-        requireMention: true,
-      };
-      secrets = { [`FEISHU_${up}_APP_ID`]: cred1, [`FEISHU_${up}_APP_SECRET`]: cred2 };
-    } else {
-      account = {
-        enabled: true,
-        name,
-        clientId: `\${DINGTALK_${up}_CLIENT_ID}`,
-        clientSecret: `\${DINGTALK_${up}_CLIENT_SECRET}`,
-        dmPolicy: "open",
-        groupPolicy: "open",
-        requireMention: true,
-      };
-      secrets = { [`DINGTALK_${up}_CLIENT_ID`]: cred1, [`DINGTALK_${up}_CLIENT_SECRET`]: cred2 };
+  const [session, setSession] = useState<OnboardingSession | null>(null);
+
+  useEffect(() => {
+    if (!session || ["success", "failed", "expired", "cancelled"].includes(session.status)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await fetchAgentOnboarding(session.id);
+        setSession(next);
+        if (next.status === "success") {
+          message.success("数字员工已上线");
+          onCreated();
+        }
+      } catch (err: any) {
+        setSession((s) => s ? { ...s, status: "failed", message: err?.response?.data?.error || "状态查询失败" } : s);
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [session?.id, session?.status]);
+
+  async function closeWizard() {
+    if (session && !["success", "failed", "expired", "cancelled"].includes(session.status)) {
+      await cancelAgentOnboarding(session.id).catch(() => {});
     }
+    setSession(null);
+    onClose();
+  }
+
+  async function handleFinish(values: any): Promise<boolean> {
+    const { id, name, role, persona, skills: chosenSkills, domain, accountId, mode, cred1, cred2 } = values;
     const body = {
-      id,
-      name,
-      role,
-      persona,
+      id, name, role, persona,
       skills: chosenSkills,
-      channels: [{ domain, accountId: accountId || id, account, secrets }],
+      domain,
+      accountId: accountId || undefined,
+      mode: mode || "scan",
+      credentials: mode === "manual" ? { clientId: cred1, clientSecret: cred2 } : undefined,
     };
     try {
-      const hide = message.loading("正在上线数字员工…", 0);
-      const res = await createAgent(body);
-      hide();
-      if (res?.apply?.status === "success") {
-        message.success(`已上线：${name}（版本 ${res.apply.version}）`);
-        onCreated();
-        return true;
-      }
-      message.error(`上线未成功：${res?.apply?.message || "未知"}`);
+      setSession(await startAgentOnboarding(body));
       return false;
     } catch (err: any) {
       message.error(err?.response?.data?.error || err.message || "创建失败");
@@ -80,11 +84,17 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
       title="招募一名 HR 数字员工"
       open={open}
       footer={null}
-      onCancel={onClose}
+      onCancel={closeWizard}
       width={640}
       destroyOnClose
     >
-      <StepsForm onFinish={handleFinish}>
+      {session ? (
+        <OnboardingProgress
+          session={session}
+          onRetry={() => setSession(null)}
+          onClose={closeWizard}
+        />
+      ) : <StepsForm onFinish={handleFinish}>
         <StepsForm.StepForm name="identity" title="身份与岗位">
         <ProFormText
           name="id"
@@ -126,23 +136,91 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
           rules={[{ required: true }]}
         />
         <ProFormText name="accountId" label="账号 ID" tooltip="留空则用 agent ID" placeholder="留空则同 agent ID" />
-        <ProFormDependency name={["domain"]}>
-          {({ domain }) =>
-            domain === "dingtalk-connector" ? (
-              <>
-                <ProFormText name="cred1" label="Client ID" rules={[{ required: true }]} />
-                <ProFormText.Password name="cred2" label="Client Secret" rules={[{ required: true }]} />
-              </>
-            ) : (
-              <>
-                <ProFormText name="cred1" label="App ID" rules={[{ required: true }]} />
-                <ProFormText.Password name="cred2" label="App Secret" rules={[{ required: true }]} />
-              </>
-            )
-          }
+        <ProFormRadio.Group
+          name="mode"
+          label="接入方式"
+          initialValue="scan"
+          options={[
+            { label: "扫码创建新应用", value: "scan" },
+            { label: "使用已有应用", value: "manual" },
+          ]}
+        />
+        <ProFormDependency name={["domain", "mode"]}>
+          {({ domain, mode }) => mode === "manual" ? (
+            <Collapse
+              defaultActiveKey={["manual"]}
+              items={[{
+                key: "manual",
+                label: "已有应用凭证",
+                children: domain === "dingtalk-connector" ? (
+                  <>
+                    <ProFormText name="cred1" label="Client ID" rules={[{ required: true }]} />
+                    <ProFormText.Password name="cred2" label="Client Secret" rules={[{ required: true }]} />
+                  </>
+                ) : (
+                  <>
+                    <ProFormText name="cred1" label="App ID" rules={[{ required: true }]} />
+                    <ProFormText.Password name="cred2" label="App Secret" rules={[{ required: true }]} />
+                  </>
+                ),
+              }]}
+            />
+          ) : <Alert type="info" showIcon message="提交后将显示二维码；扫码授权成功后自动上线。" />}
         </ProFormDependency>
       </StepsForm.StepForm>
-      </StepsForm>
+      </StepsForm>}
     </Modal>
   );
 }
+
+function OnboardingProgress({
+  session,
+  onRetry,
+  onClose,
+}: {
+  session: OnboardingSession;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  const terminal = ["success", "failed", "expired", "cancelled"].includes(session.status);
+  const error = ["failed", "expired", "cancelled"].includes(session.status);
+  return (
+    <Space direction="vertical" align="center" size="large" style={{ width: "100%", padding: "24px 0" }}>
+      {session.qr_url && session.status === "awaiting_scan" ? (
+        <>
+          <QRCodeSVG value={session.qr_url} size={240} />
+          <Button type="link" href={session.qr_url} target="_blank">无法扫码？打开授权链接</Button>
+        </>
+      ) : !terminal ? <Spin size="large" /> : null}
+      <Alert
+        type={error ? "error" : session.status === "success" ? "success" : "info"}
+        showIcon
+        message={STATUS_LABEL[session.status]}
+        description={session.message}
+      />
+      {session.status === "awaiting_scan" && (
+        <Typography.Text type="secondary">
+          授权链接过期时间：{new Date(session.expires_at).toLocaleString()}
+        </Typography.Text>
+      )}
+      {terminal && (
+        <Space>
+          {error && <Button onClick={onRetry}>重新发起</Button>}
+          <Button type={session.status === "success" ? "primary" : "default"} onClick={onClose}>关闭</Button>
+        </Space>
+      )}
+    </Space>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  preparing: "正在准备扫码会话",
+  awaiting_scan: "等待扫码授权",
+  authorized: "授权成功",
+  applying: "正在应用配置并重启网关",
+  verifying: "正在验证目标渠道",
+  success: "数字员工已上线",
+  failed: "创建失败",
+  expired: "授权已过期",
+  cancelled: "已取消",
+};
