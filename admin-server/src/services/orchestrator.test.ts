@@ -6,6 +6,7 @@ import test from "node:test";
 
 const stateDir = join(tmpdir(), `yomajiahr-orchestrator-test-${process.pid}`);
 process.env.OPENCLAW_STATE_DIR = stateDir;
+process.env.OPENCLAW_APPLY_DIRECT = "1";
 mkdirSync(join(stateDir, "config-store"), { recursive: true });
 mkdirSync(join(stateDir, "skills", "hr-general"), { recursive: true });
 writeFileSync(join(stateDir, "skills", "hr-general", "SKILL.md"), "---\nname: hr-general\ndescription: test\n---\n");
@@ -23,7 +24,20 @@ writeFileSync(fakeOpenclaw, `#!/bin/sh
 printf '%s\\n' '{"channelAccounts":{"feishu":[{"accountId":"integration-agent","configured":true,"running":true,"probe":{"ok":true}}]}}'
 `);
 chmodSync(fakeOpenclaw, 0o755);
+const fakeSystemctl = join(fakeBin, "systemctl");
+writeFileSync(fakeSystemctl, `#!/bin/sh
+[ "$1" = "show" ] && printf '0\\n'
+exit 0
+`);
+chmodSync(fakeSystemctl, 0o755);
+const fakeCurl = join(fakeBin, "curl");
+writeFileSync(fakeCurl, `#!/bin/sh
+printf '200'
+`);
+chmodSync(fakeCurl, 0o755);
 process.env.PATH = `${fakeBin}:${process.env.PATH}`;
+process.env.PROBE_WINDOW = "1";
+process.env.READY_SUSTAIN = "1";
 
 const { assembleCreateInput, createAgentFromCredentials, validateAgentDraft } = await import("./orchestrator.js");
 const { runtimeEnv } = await import("./secrets.js");
