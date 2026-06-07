@@ -14,7 +14,10 @@ export type OnboardingStatus =
   | "expired"
   | "cancelled";
 
-export type StartOnboardingInput = AgentDraft;
+export interface StartOnboardingInput extends AgentDraft {
+  mode?: "scan" | "manual";
+  credentials?: ChannelCredentials;
+}
 
 interface Session {
   id: string;
@@ -171,9 +174,14 @@ async function runDingTalk(s: Session): Promise<void> {
   await finish(s, credentials);
 }
 
-async function run(s: Session): Promise<void> {
+async function run(s: Session, input: StartOnboardingInput): Promise<void> {
   try {
-    if (s.draft.domain === "feishu") {
+    if (input.mode === "manual") {
+      if (!input.credentials?.clientId?.trim() || !input.credentials?.clientSecret?.trim()) {
+        throw new Error("手工接入凭证不能为空");
+      }
+      await finish(s, input.credentials);
+    } else if (s.draft.domain === "feishu") {
       await runFeishu(s);
     } else {
       await runDingTalk(s);
@@ -200,6 +208,7 @@ export function startOnboarding(owner: string, input: StartOnboardingInput) {
     accountId: input.accountId,
   };
   validateAgentDraft(draft);
+  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual") throw new Error("接入方式非法");
   const accountId = draft.accountId || draft.id;
   for (const existing of sessions.values()) {
     if (["success", "failed", "expired", "cancelled"].includes(existing.status)) continue;
@@ -219,7 +228,7 @@ export function startOnboarding(owner: string, input: StartOnboardingInput) {
     abort: new AbortController(),
   };
   sessions.set(session.id, session);
-  void run(session);
+  void run(session, input);
   return publicSession(session);
 }
 

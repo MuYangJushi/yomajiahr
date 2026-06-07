@@ -210,6 +210,7 @@ ss -ltnp | grep -E '18789|18790'
 
 - 飞书由 Admin Server 调用官方 Node SDK `registerApp()`。
 - 钉钉由 Admin Server 执行 `init → begin → poll` Device Flow。
+- 已有应用可通过手工凭证入口接入；凭证只随创建请求提交，不进入状态查询响应或浏览器持久存储。
 - 浏览器轮询接口只返回 `id/status/message/qr_url/expires_at`，不会收到 `client_secret`、`device_code` 或内部配置草稿。
 - 授权成功后，服务端将凭证直接写入 `~/.openclaw/.env`，动态配置只保存 `${VAR}` 引用。
 - Agent workspace、已有技能、渠道账号和 binding 写入后，平台自动应用配置、重启网关并验证目标渠道；任一步失败都会恢复原配置。

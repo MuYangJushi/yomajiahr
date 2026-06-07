@@ -1,8 +1,9 @@
 // 新建数字员工向导（StepsForm）：身份岗位 → 技能 → 渠道接入 → 提交上线。
 import { useEffect, useState } from "react";
-import { Alert, Button, Modal, Space, Spin, Typography, message } from "antd";
+import { Alert, Button, Collapse, Modal, Space, Spin, Typography, message } from "antd";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  ProFormDependency,
   ProFormRadio,
   ProFormSelect,
   ProFormText,
@@ -60,12 +61,14 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
   }
 
   async function handleFinish(values: any): Promise<boolean> {
-    const { id, name, role, persona, skills: chosenSkills, domain, accountId } = values;
+    const { id, name, role, persona, skills: chosenSkills, domain, accountId, mode, cred1, cred2 } = values;
     const body = {
       id, name, role, persona,
       skills: chosenSkills,
       domain,
       accountId: accountId || undefined,
+      mode: mode || "scan",
+      credentials: mode === "manual" ? { clientId: cred1, clientSecret: cred2 } : undefined,
     };
     try {
       setSession(await startAgentOnboarding(body));
@@ -133,7 +136,37 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
           rules={[{ required: true }]}
         />
         <ProFormText name="accountId" label="账号 ID" tooltip="留空则用 agent ID" placeholder="留空则同 agent ID" />
-        <Alert type="info" showIcon message="提交后将显示二维码；扫码授权成功后自动上线。" />
+        <ProFormRadio.Group
+          name="mode"
+          label="接入方式"
+          initialValue="scan"
+          options={[
+            { label: "扫码创建新应用", value: "scan" },
+            { label: "使用已有应用", value: "manual" },
+          ]}
+        />
+        <ProFormDependency name={["domain", "mode"]}>
+          {({ domain, mode }) => mode === "manual" ? (
+            <Collapse
+              defaultActiveKey={["manual"]}
+              items={[{
+                key: "manual",
+                label: "已有应用凭证",
+                children: domain === "dingtalk-connector" ? (
+                  <>
+                    <ProFormText name="cred1" label="Client ID" rules={[{ required: true }]} />
+                    <ProFormText.Password name="cred2" label="Client Secret" rules={[{ required: true }]} />
+                  </>
+                ) : (
+                  <>
+                    <ProFormText name="cred1" label="App ID" rules={[{ required: true }]} />
+                    <ProFormText.Password name="cred2" label="App Secret" rules={[{ required: true }]} />
+                  </>
+                ),
+              }]}
+            />
+          ) : <Alert type="info" showIcon message="提交后将显示二维码；扫码授权成功后自动上线。" />}
+        </ProFormDependency>
       </StepsForm.StepForm>
       </StepsForm>}
     </Modal>
