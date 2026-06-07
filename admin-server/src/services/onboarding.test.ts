@@ -67,6 +67,52 @@ test("钉钉注册严格执行 init → begin → WAITING → SUCCESS", async ()
   assert.deepEqual(credentials, { clientId: "ding-test", clientSecret: "dingtalk-secret" });
 });
 
+test("钉钉注册在 FAIL 时停止并返回失败原因", async () => {
+  const responses = [
+    { errcode: 0, nonce: "nonce" },
+    {
+      errcode: 0,
+      device_code: "device",
+      verification_uri_complete: "https://example.test/dingtalk-qr",
+      expires_in: 600,
+      interval: 1,
+    },
+    { errcode: 0, status: "FAIL", fail_reason: "用户拒绝授权" },
+  ];
+  await assert.rejects(
+    registerDingTalkApplication(
+      { signal: new AbortController().signal, onQRCode() {} },
+      async () => responses.shift(),
+      async () => {},
+    ),
+    /用户拒绝授权/,
+  );
+  assert.equal(responses.length, 0);
+});
+
+test("钉钉注册在 EXPIRED 时标记授权过期", async () => {
+  const responses = [
+    { errcode: 0, nonce: "nonce" },
+    {
+      errcode: 0,
+      device_code: "device",
+      verification_uri_complete: "https://example.test/dingtalk-qr",
+      expires_in: 600,
+      interval: 1,
+    },
+    { errcode: 0, status: "EXPIRED" },
+  ];
+  await assert.rejects(
+    registerDingTalkApplication(
+      { signal: new AbortController().signal, onQRCode() {} },
+      async () => responses.shift(),
+      async () => {},
+    ),
+    (err: any) => err.expired === true && /已过期/.test(err.message),
+  );
+  assert.equal(responses.length, 0);
+});
+
 test("公开会话只返回二维码和流程状态，不包含凭证、草稿或内部结果", () => {
   const response = publicSession({
     id: "session-id",
