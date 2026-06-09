@@ -343,12 +343,17 @@ if [ -f "$REPO_DIR/config/openclaw.base.jsonc" ]; then
     echo "  $STATE_DIR/config-store exists (kept; not overwritten)"
   fi
   # 生成 + 校验（base + 运行时 store → 运行时 JSON）。开 --check-fs 校验 workspace/skill 存在性。
-  # 占位符存在性对照 .env.example（契约模板；step 7 才拷贝/填充真实 .env）。
+  # 已有部署优先对照运行时 .env，以支持平台动态创建的 channel 凭据；
+  # 首次安装尚无运行时 .env 时，仍对照 .env.example 契约模板。
+  CONFIG_ENV_FILE="$REPO_DIR/config/.env.example"
+  if [ -f "$STATE_DIR/.env" ]; then
+    CONFIG_ENV_FILE="$STATE_DIR/.env"
+  fi
   node "$REPO_DIR/config/dist/generate-config.js" \
     --out "$STATE_DIR/openclaw.json" \
     --base "$REPO_DIR/config/openclaw.base.jsonc" \
     --store "$STATE_DIR/config-store" \
-    --env "$REPO_DIR/config/.env.example" \
+    --env "$CONFIG_ENV_FILE" \
     --state-dir "$STATE_DIR" \
     --check-fs --skills-dir "$STATE_DIR/skills" \
     || { echo "  [FAIL] config generation/validation failed"; exit 1; }

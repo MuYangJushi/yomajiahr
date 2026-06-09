@@ -3,7 +3,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import type { Request, Response } from "express";
-import { IS_PROD, SESSION_MAX_AGE_SEC, SESSION_SECRET } from "../config.js";
+import { COOKIE_SECURE, SESSION_MAX_AGE_SEC, SESSION_SECRET } from "../config.js";
 import type { SessionPayload } from "./types.js";
 
 export const SESSION_COOKIE = "hr_portal_session";
@@ -58,7 +58,7 @@ export function parseCookies(req: Request): Record<string, string> {
 
 function cookieAttrs(maxAgeSec: number): string {
   const attrs = [`Path=/`, `HttpOnly`, `SameSite=Lax`, `Max-Age=${maxAgeSec}`];
-  if (IS_PROD) attrs.push("Secure");
+  if (COOKIE_SECURE) attrs.push("Secure");
   return attrs.join("; ");
 }
 

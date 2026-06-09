@@ -31,6 +31,17 @@ export const FEISHU_LOGIN_APP_ID = env.FEISHU_LOGIN_APP_ID || env.FEISHU_ADMIN_B
 export const FEISHU_LOGIN_APP_SECRET = env.FEISHU_LOGIN_APP_SECRET || env.FEISHU_ADMIN_BOT_APP_SECRET || "";
 /** OAuth 回调基址（如 https://portal.example.com）；用于拼回调 URL。 */
 export const PUBLIC_BASE_URL = (env.ADMIN_PORTAL_PUBLIC_URL || "").replace(/\/$/, "");
+/**
+ * 仅 localhost SSH 隧道联调的明文 http 回调才去掉 Secure cookie，
+ * 否则 OAuth state/session cookie 不会随明文回调可靠返回。
+ * 非回环主机即使配成 http 也保留 Secure，避免误配明文公网地址
+ * 静默导致 session cookie 被明文传输/嗅探。
+ * 未显式配置回调基址时，生产环境仍默认 Secure，适配 HTTPS 反代。
+ */
+const PUBLIC_BASE_IS_LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(PUBLIC_BASE_URL);
+export const COOKIE_SECURE = PUBLIC_BASE_URL
+  ? PUBLIC_BASE_URL.startsWith("https://") || !PUBLIC_BASE_IS_LOOPBACK
+  : IS_PROD;
 /** 飞书开放平台 API 地址（token/user_info），默认国内站。 */
 export const FEISHU_OPEN_BASE = (env.FEISHU_OPEN_BASE || "https://open.feishu.cn").replace(/\/$/, "");
 /** 飞书 OAuth 授权域名（与 API 域名不同！授权走 accounts.feishu.cn）。 */

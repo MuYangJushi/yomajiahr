@@ -70,6 +70,10 @@ authRouter.get("/auth/feishu/login", (req: Request, res: Response) => {
 authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
   try {
     if (!verifyOauthState(req, req.query.state as string | undefined)) {
+      log(
+        "WARN",
+        `飞书 state 校验失败：host=${req.headers.host || ""} has_cookie=${Boolean(req.headers.cookie)} has_state=${Boolean(req.query.state)}`,
+      );
       return res.status(400).send("state 校验失败（可能为 CSRF 或已过期），请重新登录");
     }
     clearOauthState(res);
@@ -118,6 +122,10 @@ authRouter.get("/auth/dingtalk/login", (req: Request, res: Response) => {
 authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) => {
   try {
     if (!verifyOauthState(req, req.query.state as string | undefined)) {
+      log(
+        "WARN",
+        `钉钉 state 校验失败：host=${req.headers.host || ""} has_cookie=${Boolean(req.headers.cookie)} has_state=${Boolean(req.query.state)}`,
+      );
       return res.status(400).send("state 校验失败（可能为 CSRF 或已过期），请重新登录");
     }
     clearOauthState(res);
