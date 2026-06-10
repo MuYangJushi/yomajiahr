@@ -109,10 +109,11 @@ export async function health(): Promise<KbHealth> {
   if (!isConfigured()) {
     return { ...base, message: "FastGPT 未配置完整（缺 BASE_URL/API_KEY/KB_ID）—— 已回退本地检索" };
   }
-  // 仅做可达性探活；具体 collection/索引状态待 Gate-B 接通 listCollections 后填充。
+  // 可达性探活：用确认存在的轻量端点（4.8.22 实测 200）。
   try {
-    const res = await fgFetch("/api/v1/health", { method: "GET" }, 5000).catch(() => fgFetch("/", { method: "GET" }, 5000));
+    const res = await fgFetch("/api/common/system/getInitData", { method: "GET" }, 5000);
     base.reachable = res.ok || res.status < 500;
+    base.indexStatus = base.reachable ? "ready" : "unknown";
     base.message = base.reachable ? "FastGPT 可达" : `FastGPT 返回 ${res.status}`;
   } catch (err) {
     base.reachable = false;
@@ -121,11 +122,48 @@ export async function health(): Promise<KbHealth> {
   return base;
 }
 
-// —— 检索 / 导入 / 集合（#38+，依赖实例 + Gate-B；当前抛 Unavailable 由路由翻 503）——
-export async function search(_query: string, _topK = 5): Promise<KbChunk[]> {
+// FastGPT searchTest 的 score 是 [{type,value}]（embedding/fullText/reRank/rrf）；取最终分。
+function pickScore(score: unknown): number {
+  if (typeof score === "number") return score;
+  if (!Array.isArray(score)) return 0;
+  const byType = (t: string) => (score.find((s) => (s as any)?.type === t) as any)?.value;
+  return byType("reRank") ?? byType("rrf") ?? byType("embedding") ?? (score[0] as any)?.value ?? 0;
+}
+
+// —— 检索（已对接 FastGPT 4.8.22 `POST /api/core/dataset/searchTest`，2026-06-10 实测）——
+// 返回 chunk+来源元数据；retrieval-only，不生成答案（ADR-006）。失败抛 Unavailable，由调用方回退本地。
+export async function search(query: string, topK = 5): Promise<KbChunk[]> {
   if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，检索请回退本地 memory_search");
-  // TODO(Gate-B)：对接已部署实例的检索 API（路径/字段按实测版本确认），返回 chunk+来源元数据（含注入的 doc_id/version）。
-  throw new KnowledgeUnavailableError("FastGPT 检索 API 待实例就绪后接通（#40）");
+  let res: Response;
+  try {
+    res = await fgFetch("/api/core/dataset/searchTest", {
+      method: "POST",
+      body: JSON.stringify({
+        datasetId: FASTGPT_KB_ID,
+        text: query,
+        limit: Math.max(1500, topK * 600), // FastGPT 用 token 预算而非条数；下方再按 topK 截断
+        similarity: 0,
+        searchMode: "embedding",
+      }),
+    });
+  } catch (err) {
+    throw new KnowledgeUnavailableError(`FastGPT 不可达（${(err as Error).name}）`);
+  }
+  if (!res.ok) throw new KnowledgeUnavailableError(`FastGPT 检索返回 ${res.status}`);
+  const json = (await res.json()) as { data?: { list?: any[] } };
+  const list = json?.data?.list ?? [];
+  return list.slice(0, topK).map((it) => ({
+    text: it.q || it.a || "",
+    score: pickScore(it.score),
+    source: {
+      filename: it.sourceName || "",
+      // doc_id/version：web 导入未注入自定义元数据 → undefined（路A best-effort 省略）；
+      // #38 导入代理注入后，由 collection 元数据回填。
+      doc_id: it.doc_id || undefined,
+      version: it.version || undefined,
+      collectionId: it.collectionId,
+    },
+  }));
 }
 export async function importDocument(
   _buf: Buffer,
