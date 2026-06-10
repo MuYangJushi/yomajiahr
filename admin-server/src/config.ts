@@ -70,6 +70,14 @@ export const BOOTSTRAP_ADMINS = (env.PLATFORM_BOOTSTRAP_ADMINS || "")
 export const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
 export const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 
+// —— 知识库平台（ADR-006 / FastGPT 集成）——
+// fastgpt | local（local=纯现状 doc-chunker + memory_search 回退）。
+export const KNOWLEDGE_PLATFORM = (env.KNOWLEDGE_PLATFORM || "local").trim();
+export const FASTGPT_BASE_URL = (env.FASTGPT_BASE_URL || "").replace(/\/$/, "");
+export const FASTGPT_API_KEY = env.FASTGPT_API_KEY || "";
+export const FASTGPT_KB_ID = env.FASTGPT_KB_ID || "";
+export const FASTGPT_EMBEDDING_MODEL = env.FASTGPT_EMBEDDING_MODEL || "";
+
 /** 确保知识库目录存在（迁自 server.mjs 启动段）。 */
 export function ensureDirs(): void {
   for (const dir of [

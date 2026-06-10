@@ -186,6 +186,10 @@ function buildChunkFrontmatter(meta) {
   lines.push(`doc_id: "${meta.doc_id}"`);
   lines.push(`chunk_id: "${meta.chunk_id}"`);
   lines.push(`title: "${meta.title}"`);
+  // version 透传到 chunk，供 ADR-006 路A 引用格式（文档编号+版本）尽量可填。
+  if (meta.version) {
+    lines.push(`version: "${meta.version}"`);
+  }
   lines.push(`category: "${meta.category}"`);
   if (meta.source_category && meta.source_category !== meta.category) {
     lines.push(`source_category: "${meta.source_category}"`);
@@ -215,6 +219,7 @@ export function chunkDocument(markdown, options = {}) {
   const frontmatter = parseFrontmatter(markdown);
   const docId = frontmatter.doc_id || "UNKNOWN";
   const title = frontmatter.title || "";
+  const version = frontmatter.version || "";
   const sourceCategory = frontmatter.category || "general";
 
   // Strip frontmatter from body
@@ -267,6 +272,7 @@ export function chunkDocument(markdown, options = {}) {
       doc_id: docId,
       chunk_id: `${docId}_c${chunkIndex}`,
       title,
+      version,
       category,
       source_category: sourceCategory,
       section: sectionLabel.trim(),

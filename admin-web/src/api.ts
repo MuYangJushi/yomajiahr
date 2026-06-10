@@ -94,3 +94,63 @@ export async function fetchAgentOnboarding(id: string): Promise<OnboardingSessio
 export async function cancelAgentOnboarding(id: string): Promise<void> {
   await api.delete(`/config/agent-onboarding/${id}`);
 }
+
+// —— 知识库平台（ADR-006 / FastGPT 集成）——
+export interface KnowledgeHealth {
+  platform: "fastgpt" | "local";
+  configured: boolean;
+  reachable: boolean;
+  kbId?: string;
+  embeddingModel?: string;
+  baseUrlHint?: string;
+  indexStatus: "ready" | "indexing" | "error" | "unknown";
+  fallback: "local-memory-search";
+  message?: string;
+  checkedAt: string;
+}
+export interface KbCollection {
+  externalDocId: string;
+  title: string;
+  category?: string;
+  doc_id?: string;
+  version?: string;
+  chunkCount?: number;
+  indexStatus: "ready" | "indexing" | "error" | "unknown" | "local-archive";
+  source: "fastgpt" | "local";
+}
+export interface KbChunk {
+  text: string;
+  score: number;
+  source: { filename: string; doc_id?: string; version?: string; collectionId?: string };
+}
+export interface KnowledgeBinding {
+  id: string;
+  name: string;
+  provider: "fastgpt" | "local";
+  externalKbId?: string;
+  boundAgents: string[];
+}
+export interface KnowledgeStore {
+  platform: "fastgpt" | "local";
+  knowledgeBases: KnowledgeBinding[];
+}
+
+export async function fetchKnowledgeHealth(): Promise<KnowledgeHealth> {
+  return (await api.get("/knowledge/health")).data;
+}
+export async function fetchKnowledgeCollections(): Promise<{
+  collections: KbCollection[];
+  source: "fastgpt" | "local";
+  notice?: string;
+}> {
+  return (await api.get("/knowledge/collections")).data;
+}
+export async function searchTest(query: string, topK = 5): Promise<KbChunk[]> {
+  return (await api.post("/knowledge/search-test", { query, topK })).data.chunks;
+}
+export async function fetchKnowledgeBindings(): Promise<{ store: KnowledgeStore; agents: AgentRow[] }> {
+  return (await api.get("/knowledge/bindings")).data;
+}
+export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<KnowledgeStore> {
+  return (await api.put("/knowledge/bindings", store)).data.store;
+}
