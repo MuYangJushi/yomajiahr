@@ -16,6 +16,7 @@ import { auditRouter } from "./routes/audit.js";
 import { configRouter } from "./routes/config.js";
 import { agentsRouter } from "./routes/agents.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
+import { mountMcp } from "./mcp.js";
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,9 @@ export function createApp() {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "hr-admin-server" });
   });
+
+  // MCP 端点（架构 I）：自带 Bearer 鉴权，独立于 /api 的 cookie/RBAC，故挂在 authMiddleware 之外。
+  mountMcp(app);
 
   // 平台登录路由：公开（鉴权之前），供 OAuth 登录/回调/me/logout
   app.use("/api", authRouter);

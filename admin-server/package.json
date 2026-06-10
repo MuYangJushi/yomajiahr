@@ -14,10 +14,12 @@
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.66.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.2.1",
     "mammoth": "^1.9.0",
     "multer": "^2.0.1",
-    "pdfjs-dist": "^5.5.207"
+    "pdfjs-dist": "^5.5.207",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

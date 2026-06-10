@@ -77,6 +77,10 @@ export const FASTGPT_BASE_URL = (env.FASTGPT_BASE_URL || "").replace(/\/$/, "");
 export const FASTGPT_API_KEY = env.FASTGPT_API_KEY || "";
 export const FASTGPT_KB_ID = env.FASTGPT_KB_ID || "";
 export const FASTGPT_EMBEDDING_MODEL = env.FASTGPT_EMBEDDING_MODEL || "";
+/** MCP 端点（/mcp）的 Bearer 令牌：供 openclaw `mcp add --header` 鉴权。
+ *  必须强随机、与 OPENCLAW_WEB_AUTH_TOKEN 不同；未配置则 /mcp fail-closed（拒绝全部）。
+ *  admin-server 在公网主机绑 0.0.0.0 时，此令牌即 /mcp 的唯一守卫——务必当真密钥对待。 */
+export const KNOWLEDGE_MCP_TOKEN = env.KNOWLEDGE_MCP_TOKEN || "";
 
 /** 确保知识库目录存在（迁自 server.mjs 启动段）。 */
 export function ensureDirs(): void {
