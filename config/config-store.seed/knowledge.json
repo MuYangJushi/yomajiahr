@@ -1,0 +1,12 @@
+{
+  "platform": "local",
+  "knowledgeBases": [
+    {
+      "id": "kb_hr_policy",
+      "name": "HR 制度知识库",
+      "provider": "local",
+      "externalKbId": "",
+      "boundAgents": ["hr-assistant"]
+    }
+  ]
+}

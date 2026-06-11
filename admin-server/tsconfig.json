@@ -12,5 +12,9 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "lib/**/*.mjs"]
+  "include": [
+    "src/**/*.ts",
+    "lib/**/*.mjs",
+    "lib/**/*.ts"
+  ]
 }

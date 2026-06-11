@@ -2,15 +2,26 @@
 
 ## 可用工具
 
+- `fastgpt__knowledge_search`：主知识库检索工具，优先调用 FastGPT；不可用或未命中时回退 `memory_search`
 - `memory_search`：语义检索知识库，用于回答政策问题
 - `memory_get`：按路径读取知识库文档片段
 
-## `memory_search` 结果使用规则
+## 检索顺序
 
-- `memory_search` 返回结果中的 `title`、`path`、`startLine`、`endLine`、`snippet` 可直接用于组织回答和拼接引用
-- 引用优先使用 `title`；如果结果里没有可用标题，再退化为文件名
-- 引用格式统一为：`[来源: {title或文件名}, 第{startLine}-{endLine}行]`
-- 不要自行补造 `doc_id`、`version`、`effective_date` 或其他结果中没有的字段
+1. 政策问题先调用 `fastgpt__knowledge_search`
+2. 工具明确提示平台不可用、要求回退，或未命中相关内容时，再调用 `memory_search`
+3. 不要因为 FastGPT 暂时不可用而直接拒答；必须尝试本地回退
+4. 两条链路都未命中时，才按未命中规则如实告知
+
+## 检索结果使用规则
+
+- `fastgpt__knowledge_search` 返回命中片段、score 和已拼好的来源；直接依据片段回答并保留来源，不要编造缺失字段
+- `memory_search` 回退结果中的 `title`、`path`、`snippet`、可能的 `doc_id`/`version` 等可用于组织回答和拼接引用
+- 引用格式统一为：`[来源: {title或文件名}, 文档编号: {doc_id}, 版本: {version}]`（ADR-006 路 A，已去掉行号）
+- **`title`（或文件名）必有，是引用锚点**；优先用 `title`，没有就退化为文件名。最简引用即 `[来源: {title或文件名}]`
+- `文档编号` **可选**：结果有 `doc_id`、或 `path`/文件名能看出 `HR-XXX` 前缀时才带上；取不到整段省略，不要留空或编造
+- `版本` **可选**：结果含 `version` 时才带上；取不到整段省略，绝不编造版本号
+- 不要自行补造结果中没有的字段；**不再使用 `第N-M行` 行号**
 - 即使答案只是说明"知识库未明确说明"，也要附上最相关命中文档的引用
 - 不要为了凑格式改成无引用裸答
 - 当前运行时直接检索的是 `../../data/hr-chunks/` 下的预切片 chunk 文件，而不是 `../data/hr-policies/` 下的整篇源文档

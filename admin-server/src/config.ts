@@ -70,6 +70,27 @@ export const BOOTSTRAP_ADMINS = (env.PLATFORM_BOOTSTRAP_ADMINS || "")
 export const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
 export const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 
+// —— 知识库平台（ADR-006 / FastGPT 集成）——
+// fastgpt | local（local=纯现状 doc-chunker + memory_search 回退）。
+export const KNOWLEDGE_PLATFORM = (env.KNOWLEDGE_PLATFORM || "local").trim();
+export const FASTGPT_BASE_URL = (env.FASTGPT_BASE_URL || "").replace(/\/$/, "");
+export const FASTGPT_API_KEY = env.FASTGPT_API_KEY || "";
+export const FASTGPT_KB_ID = env.FASTGPT_KB_ID || "";
+export const FASTGPT_EMBEDDING_MODEL = env.FASTGPT_EMBEDDING_MODEL || "";
+/** MCP 端点（/mcp）的 Bearer 令牌：供 openclaw `mcp add --header` 鉴权。
+ *  必须强随机、与 OPENCLAW_WEB_AUTH_TOKEN 不同；未配置则 /mcp fail-closed（拒绝全部）。
+ *  admin-server 在公网主机绑 0.0.0.0 时，此令牌即 /mcp 的唯一守卫——务必当真密钥对待。 */
+export const KNOWLEDGE_MCP_TOKEN = env.KNOWLEDGE_MCP_TOKEN || "";
+
+// —— #46 FastGPT 反向代理（独立端口，把 FastGPT 整套 UI 嵌进平台）——
+// ⚠️ 外露：该端口能打到 FastGPT 全套 admin API。守卫=平台 RBAC（fail-closed，仅会话 ops+ 可达）。
+export const FASTGPT_PROXY_PORT = Number(env.FASTGPT_PROXY_PORT || 19450);
+// 0=关；非 0 才起反代监听。未配置默认关，需显式开（避免无意开端口）。
+export const FASTGPT_PROXY_ENABLED = env.FASTGPT_PROXY_ENABLED === "1";
+// SSO 接缝：配齐 web 登录凭据则服务端登录注入会话，免二次登录；否则 iframe 内走 FastGPT 自带登录一次。
+export const FASTGPT_WEB_USERNAME = env.FASTGPT_WEB_USERNAME || "";
+export const FASTGPT_WEB_PASSWORD = env.FASTGPT_WEB_PASSWORD || "";
+
 /** 确保知识库目录存在（迁自 server.mjs 启动段）。 */
 export function ensureDirs(): void {
   for (const dir of [

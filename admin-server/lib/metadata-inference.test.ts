@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { inferDocumentMetadata } from "./metadata-inference.mjs";
+import { inferDocumentMetadata } from "./metadata-inference.js";
 
 void test("classifies handbook-style documents as general before leave keywords", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hr-admin-metadata-"));
@@ -37,7 +37,7 @@ category: ""
   });
 
   assert.equal(metadata.category, "general");
-  assert.equal(metadata.doc_id, "HR-GEN-001");
+  assert.equal(metadata.doc_id, ""); // #43 降级：无显式编号即留空，不再自动生成
   assert.equal(metadata.source, "heuristic");
 });
 
@@ -73,7 +73,7 @@ category: ""
   });
 
   assert.equal(metadata.category, "general");
-  assert.equal(metadata.doc_id, "HR-GEN-001");
+  assert.equal(metadata.doc_id, ""); // #43 降级：无显式编号即留空，不再自动生成
   assert.equal(metadata.source, "heuristic");
 });
 
@@ -107,7 +107,7 @@ category: ""
   });
 
   assert.equal(metadata.category, "performance");
-  assert.equal(metadata.doc_id, "HR-PERF-001");
+  assert.equal(metadata.doc_id, ""); // #43 降级：无显式编号即留空，不再自动生成
   assert.equal(metadata.source, "heuristic");
 });
 
@@ -141,7 +141,7 @@ category: ""
   });
 
   assert.equal(metadata.category, "performance");
-  assert.equal(metadata.doc_id, "HR-PERF-001");
+  assert.equal(metadata.doc_id, ""); // #43 降级：无显式编号即留空，不再自动生成
   assert.equal(metadata.source, "heuristic");
 });
 
@@ -174,6 +174,39 @@ category: ""
   });
 
   assert.equal(metadata.category, "attendance");
-  assert.equal(metadata.doc_id, "HR-ATT-001");
+  assert.equal(metadata.doc_id, ""); // #43 降级：无显式编号即留空，不再自动生成
   assert.equal(metadata.source, "heuristic");
+});
+
+void test("preserves an explicit doc_id from frontmatter (demotion keeps explicit, drops auto-gen)", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hr-admin-metadata-"));
+  const policiesDir = path.join(root, "hr-policies");
+  await fs.mkdir(path.join(policiesDir, "attendance"), { recursive: true });
+
+  const markdown = `---
+title: "考勤管理办法"
+source_file: "考勤管理办法.pdf"
+source_format: "PDF"
+doc_id: "HR-ATT-007"
+version: "2.0"
+effective_date: ""
+category: "attendance"
+---
+
+# 考勤管理办法
+
+员工请假、加班、考勤打卡均按本办法执行。
+`;
+
+  const metadata = await inferDocumentMetadata({
+    markdown,
+    originalName: "考勤管理办法.pdf",
+    sourceFormat: "PDF",
+    policiesDir,
+    stateDir: root,
+  });
+
+  // #43：文档自带的正式编号必须保留（降级只砍自动生成，不砍显式声明）。
+  assert.equal(metadata.doc_id, "HR-ATT-007");
+  assert.equal(metadata.category, "attendance");
 });
