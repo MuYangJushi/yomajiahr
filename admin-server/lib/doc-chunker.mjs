@@ -8,9 +8,24 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
-import { classifyCategoryByScore } from "./metadata-inference.mjs";
+import { classifyCategoryByScore } from "./metadata-inference.js";
+
+/**
+ * Fallback chunk-id stem for documents without an explicit doc_id (#43 文档编号降级：
+ * 不再自动生成 HR-XXX 序号)。派生自 source_file/title 的稳定短哈希，保证：同一文档重传
+ * 得到同一 id（writeChunks 幂等替换正确）、不同无编号文档互不撞名（不再都落 "UNKNOWN" 互相清除）。
+ */
+function fallbackDocId(frontmatter) {
+  const seed = String(frontmatter.source_file || frontmatter.title || "").trim();
+  if (!seed) {
+    return "DOC-UNKNOWN";
+  }
+  const hash = createHash("sha1").update(seed).digest("hex").slice(0, 8).toUpperCase();
+  return `DOC-${hash}`;
+}
 
 const MIN_CHUNK_CHARS = 200;
 const MAX_CHUNK_CHARS = 1200;
@@ -217,7 +232,7 @@ export function chunkDocument(markdown, options = {}) {
   const warnings = [];
 
   const frontmatter = parseFrontmatter(markdown);
-  const docId = frontmatter.doc_id || "UNKNOWN";
+  const docId = frontmatter.doc_id || fallbackDocId(frontmatter);
   const title = frontmatter.title || "";
   const version = frontmatter.version || "";
   const sourceCategory = frontmatter.category || "general";

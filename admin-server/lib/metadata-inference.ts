@@ -8,7 +8,7 @@
  *   - Use deterministic heuristics so uploads still succeed if model inference fails.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { env } from "node:process";
 import { CATEGORIES as KNOWN_CATEGORIES, CATEGORY_DOC_ID_PREFIX } from "./categories.mjs";
@@ -106,7 +106,7 @@ function buildTitleCorpus(markdown, originalName) {
 }
 
 /** Keyword lists for each category — shared by first-match and scored classifiers. */
-export const CATEGORY_KEYWORDS = [
+export const CATEGORY_KEYWORDS: [string, string[]][] = [
   [
     "attendance",
     ["考勤", "打卡", "加班", "排班", "调班", "attendance", "overtime",
@@ -184,7 +184,41 @@ export function classifyCategoryByScore(text) {
   return bestScore >= 2 ? bestCategory : "general";
 }
 
-function inferHeuristics({ markdown, originalName }) {
+export interface InferDocumentParams {
+  markdown: string;
+  originalName: string;
+  sourceFormat?: string;
+  policiesDir?: string;
+  stateDir: string;
+}
+
+interface InferredMeta {
+  title: string;
+  category: string;
+  doc_id_explicit: string;
+  version: string;
+  effective_date: string;
+  notes?: string;
+  source: string;
+  provider?: string;
+  model?: string;
+  warnings?: string[];
+}
+
+export interface DocumentMetadata {
+  title: string;
+  category: string;
+  doc_id: string;
+  version: string;
+  effective_date: string;
+  notes: string;
+  source: string;
+  provider: string;
+  model: string;
+  warnings: string[];
+}
+
+function inferHeuristics({ markdown, originalName }: InferDocumentParams): InferredMeta {
   const title =
     extractFrontmatterValue(markdown, "title") ||
     extractHeading(markdown) ||
@@ -335,7 +369,7 @@ function resolveModelConfig({ stateDir }) {
   }
 }
 
-async function inferWithModel({ markdown, originalName, sourceFormat, stateDir }) {
+async function inferWithModel({ markdown, originalName, sourceFormat, stateDir }: InferDocumentParams): Promise<InferredMeta | null> {
   const modelConfig = resolveModelConfig({ stateDir });
   if (!modelConfig) {
     return null;
@@ -405,35 +439,11 @@ async function inferWithModel({ markdown, originalName, sourceFormat, stateDir }
   };
 }
 
-function nextGeneratedDocId({ category, policiesDir }) {
-  const prefix = CATEGORY_DOC_ID_PREFIX[category] || CATEGORY_DOC_ID_PREFIX.general;
-  const categoryDir = join(policiesDir, category);
-  let maxSeq = 0;
-  if (existsSync(categoryDir) && statSync(categoryDir).isDirectory()) {
-    for (const file of readdirSync(categoryDir)) {
-      if (!file.endsWith(".md")) {
-        continue;
-      }
-      try {
-        const content = readFileSync(join(categoryDir, file), "utf-8");
-        const existingDocId = normalizeDocId(content.match(/^doc_id:\s*"?(.*?)"?$/m)?.[1] ?? "");
-        const match = existingDocId.match(new RegExp(`^${prefix}-(\\d{3})$`));
-        if (match) {
-          maxSeq = Math.max(maxSeq, Number.parseInt(match[1], 10));
-        }
-      } catch {
-        // Ignore malformed files and continue scanning.
-      }
-    }
-  }
-  return `${prefix}-${String(maxSeq + 1).padStart(3, "0")}`;
-}
-
-export async function inferDocumentMetadata(params) {
+export async function inferDocumentMetadata(params: InferDocumentParams): Promise<DocumentMetadata> {
   const heuristic = inferHeuristics(params);
-  const warnings = [];
+  const warnings: string[] = [];
 
-  let inferred = null;
+  let inferred: InferredMeta | null = null;
   try {
     inferred = await inferWithModel(params);
   } catch (err) {
@@ -444,8 +454,12 @@ export async function inferDocumentMetadata(params) {
   const category = inferred?.category || heuristic.category || "general";
   const version = inferred?.version || heuristic.version || "1.0";
   const effectiveDate = inferred?.effective_date || heuristic.effective_date || "";
-  const explicitDocId = inferred?.doc_id_explicit || heuristic.doc_id_explicit || "";
-  const docId = explicitDocId || nextGeneratedDocId({ category, policiesDir: params.policiesDir });
+  // 文档编号降级（#43，2026-06-11）：不再自动生成序号（消除「扫本地目录 +1」的撞号根因）。
+  // doc_id 只取文档显式声明的编号；缺失即留空，由路 A 引用 best-effort 省略、管理员可在导入前手填。
+  const docId = inferred?.doc_id_explicit || heuristic.doc_id_explicit || "";
+  if (!docId) {
+    warnings.push("未检出文档编号（HR-XXX）：已置空，引用将省略文档编号；如需可在导入前手动填写");
+  }
 
   return {
     title,

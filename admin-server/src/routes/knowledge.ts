@@ -10,15 +10,20 @@ import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
 import {
   KnowledgeUnavailableError,
+  createKnowledgeBase,
   health,
   importDocument,
   listCollections,
+  listKnowledgeBases,
   readKnowledgeStore,
   removeCollection,
   search,
+  updateKnowledgeConfig,
+  validateKnowledgeStore,
   writeKnowledgeStore,
+  type CreateKbInput,
   type KbCollection,
-  type KnowledgeStore,
+  type KnowledgeConfigInput,
 } from "../services/knowledge.js";
 
 export const knowledgeRouter = Router();
@@ -55,6 +60,20 @@ knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Reques
   }
 });
 
+// PUT /knowledge/config —— 值只键级 upsert 到 $STATE_DIR/.env；不进 config-store、不回传值。
+knowledgeRouter.put("/knowledge/config", requireRole("admin"), (req: Request, res: Response) => {
+  try {
+    const updatedKeys = updateKnowledgeConfig(req.body as KnowledgeConfigInput);
+    appendAuditLog("CONFIG_KNOWLEDGE", "knowledge-platform", {
+      operator: req.user?.platformUserId || "",
+      updatedKeys,
+    });
+    res.json({ success: true, updatedKeys, restartRequired: true });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
 // GET /knowledge/collections —— FastGPT 优先；不可用回退本地归档列表。
 knowledgeRouter.get("/knowledge/collections", requireRole("ops"), async (_req: Request, res: Response) => {
   try {
@@ -73,12 +92,21 @@ knowledgeRouter.get("/knowledge/collections", requireRole("ops"), async (_req: R
 knowledgeRouter.post("/knowledge/search-test", requireRole("ops"), async (req: Request, res: Response) => {
   const query = String(req.body?.query || "").trim();
   const topK = Math.min(20, Math.max(1, Number(req.body?.topK) || 5));
+  // #45：可指定某个库做召回测试；省略则走默认。
+  const datasetId = req.body?.datasetId ? String(req.body.datasetId) : undefined;
   if (!query) {
     res.status(400).json({ error: "query 不能为空" });
     return;
   }
+  if (
+    datasetId &&
+    !readKnowledgeStore().knowledgeBases.some((kb) => kb.provider === "fastgpt" && kb.externalKbId === datasetId)
+  ) {
+    res.status(400).json({ error: "目标知识库未在平台登记" });
+    return;
+  }
   try {
-    res.json({ chunks: await search(query, topK) });
+    res.json({ chunks: await search(query, topK, datasetId ? [datasetId] : undefined) });
   } catch (err) {
     if (err instanceof KnowledgeUnavailableError) {
       res.status(503).json({ error: err.message });
@@ -117,14 +145,49 @@ knowledgeRouter.get("/knowledge/bindings", requireRole("ops"), (_req: Request, r
   }
 });
 
+// GET /knowledge/bases —— #45 多库列表（平台登记 + 可绑定数字员工）。
+knowledgeRouter.get("/knowledge/bases", requireRole("ops"), (_req: Request, res: Response) => {
+  try {
+    res.json({ bases: listKnowledgeBases(), agents: listAgents() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /knowledge/bases —— #45 原生新建知识库（FastGPT dataset/create + 写 knowledge.json）。审计 CREATE_KB。
+knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Request, res: Response) => {
+  try {
+    const input = req.body as CreateKbInput;
+    const validAgents = new Set(listAgents().map((agent) => agent.id));
+    if (
+      input.boundAgents !== undefined &&
+      (!Array.isArray(input.boundAgents) ||
+        input.boundAgents.some((agentId) => typeof agentId !== "string" || !validAgents.has(agentId)))
+    ) {
+      res.status(400).json({ error: "boundAgents 必须只包含已登记的 Agent ID" });
+      return;
+    }
+    const binding = await createKnowledgeBase(input);
+    appendAuditLog("CREATE_KB", binding.id, {
+      operator: req.user?.platformUserId || "",
+      name: binding.name,
+      externalKbId: binding.externalKbId,
+      boundAgents: binding.boundAgents,
+    });
+    res.json({ success: true, base: binding });
+  } catch (err) {
+    if (err instanceof KnowledgeUnavailableError) {
+      res.status(503).json({ error: err.message });
+      return;
+    }
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
 // PUT /knowledge/bindings —— 改 KB↔Agent 绑定（写 config-store，原子）。审计 BIND_KB。
 knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), (req: Request, res: Response) => {
   try {
-    const next = req.body as KnowledgeStore;
-    if (!next || !Array.isArray(next.knowledgeBases)) {
-      res.status(400).json({ error: "请求体应含 knowledgeBases[]" });
-      return;
-    }
+    const next = validateKnowledgeStore(req.body, listAgents().map((agent) => agent.id));
     writeKnowledgeStore(next);
     appendAuditLog("BIND_KB", "knowledge.json", {
       operator: req.user?.platformUserId || "",
@@ -132,6 +195,6 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), (req: Request, 
     });
     res.json({ success: true, store: readKnowledgeStore() });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    res.status(400).json({ error: (err as Error).message });
   }
 });

@@ -154,3 +154,55 @@ export async function fetchKnowledgeBindings(): Promise<{ store: KnowledgeStore;
 export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<KnowledgeStore> {
   return (await api.put("/knowledge/bindings", store)).data.store;
 }
+
+// —— 审计（#44 vanilla→React）——
+export interface AuditEntry {
+  timestamp: string;
+  action: string;
+  file: string;
+  details?: {
+    doc_id?: string;
+    version?: string;
+    category?: string;
+    reason?: string;
+    source_format?: string;
+    status?: string;
+    collectionId?: string;
+    operator?: { id?: string; name?: string };
+    [k: string]: unknown;
+  };
+}
+export interface AuditFilters {
+  action?: string;
+  doc_id?: string;
+  from?: string;
+  to?: string;
+}
+export interface AuditPage {
+  logs: AuditEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+function auditParams(filters: AuditFilters): Record<string, string> {
+  const p: Record<string, string> = {};
+  if (filters.action) p.action = filters.action;
+  if (filters.doc_id) p.doc_id = filters.doc_id;
+  if (filters.from) p.from = filters.from;
+  if (filters.to) p.to = filters.to;
+  return p;
+}
+export async function fetchAuditLog(
+  filters: AuditFilters,
+  page: number,
+  pageSize: number,
+): Promise<AuditPage> {
+  return (
+    await api.get("/audit-log", { params: { ...auditParams(filters), page, page_size: pageSize } })
+  ).data;
+}
+/** 导出走浏览器原生下载（带 cookie 会话）：返回带 query 的相对 URL。 */
+export function auditExportUrl(filters: AuditFilters): string {
+  const qs = new URLSearchParams(auditParams(filters)).toString();
+  return `/api/audit-log/export${qs ? `?${qs}` : ""}`;
+}

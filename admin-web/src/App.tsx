@@ -5,19 +5,20 @@ import { Dropdown, Spin, Tag } from "antd";
 import { RobotOutlined, BookOutlined, UploadOutlined, AuditOutlined, LogoutOutlined } from "@ant-design/icons";
 import Agents from "./Agents";
 import Knowledge from "./Knowledge";
+import Audit from "./Audit";
 import Login from "./Login";
 import { fetchMe, logout, type Me, type PlatformRole } from "./api";
 
 const MENU = [
   { path: "/agents", name: "数字员工", icon: <RobotOutlined /> },
   { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
-  // 上传/文档仍走旧 vanilla 页：local 模式下这是当前可用的上传链路，FastGPT 导入接通（#38）后才并入知识库页，届时再退。
+  // 上传/文档仍走旧 vanilla 页：将随多库知识库页（#41/#45）并入「知识库」单库详情的原生写 Tab，届时退役老门户。
   { path: "/upload", name: "上传文档（迁移中）", icon: <UploadOutlined /> },
-  { path: "/audit-log", name: "审计（迁移中）", icon: <AuditOutlined /> },
+  { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
 ];
 
 // 在 ProLayout 壳内渲染的页面；不在此表的菜单项跳旧 vanilla 页。
-const SHELL_PAGES = new Set(["/agents", "/knowledge"]);
+const SHELL_PAGES = new Set(["/agents", "/knowledge", "/audit-log"]);
 
 const ROLE_LABEL: Record<PlatformRole, string> = { admin: "管理员", ops: "运营", audit: "审计只读" };
 
@@ -93,6 +94,7 @@ export default function App() {
     >
       {path === "/agents" && <Agents />}
       {path === "/knowledge" && <Knowledge />}
+      {path === "/audit-log" && <Audit />}
     </ProLayout>
   );
 }

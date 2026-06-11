@@ -58,9 +58,14 @@ set_runtime_permissions() {
   chown --reference="$STATE_DIR" "$RUNTIME" 2>/dev/null || true
 }
 
-restart_gateway() {
-  has_systemctl || { log "no systemd; skip restart (dev)"; return 0; }
-  systemctl restart "$GATEWAY_SVC"
+stop_gateway() {
+  has_systemctl || { log "no systemd; skip stop (dev)"; return 0; }
+  systemctl stop "$GATEWAY_SVC"
+}
+
+start_gateway() {
+  has_systemctl || { log "no systemd; skip start (dev)"; return 0; }
+  systemctl start "$GATEWAY_SVC"
 }
 
 # 探活判别器：观测窗内须持续 active、NRestarts 不增长，且 GET /health 连续 200 ≥ READY_SUSTAIN 秒。
@@ -103,8 +108,9 @@ probe() {
 rollback() { # reason
   log "回滚中：$1"
   if [ -f "$LASTGOOD" ]; then
+    stop_gateway || true
     cp "$LASTGOOD" "$RUNTIME"; set_runtime_permissions
-    restart_gateway || true
+    start_gateway || true
     fail "$1（已回滚至 last-good）"
   fi
   # 首次 apply 无 last-good：坏配置已在 $RUNTIME 且网关在其上 crash-loop。
@@ -140,12 +146,16 @@ mkdir -p "$VERSIONS/$TS"
 cp "$STORE_DIR"/*.json "$VERSIONS/$TS/" 2>/dev/null || true
 log "已快照 last-good + store 版本 $TS"
 
-# —— 3. 原子应用 ——
-mv "$STAGING" "$RUNTIME"; set_runtime_permissions
+# —— 3. 停旧进程 + 原子应用 ——
+# OpenClaw 退出时会校验并可能自动恢复它观察到的配置替换。必须先停旧进程，
+# 否则 systemctl restart 的 stop 阶段可能把刚生成的新配置覆盖回 backup。
+stop_gateway || fail "停止旧 Gateway 失败（未改动运行时配置）"
+mv "$STAGING" "$RUNTIME" || { start_gateway || true; fail "应用运行时配置失败（已尝试恢复启动旧 Gateway）"; }
+set_runtime_permissions
 log "已应用 → $RUNTIME"
 
-# —— 4. 重启 ——
-restart_gateway || rollback "重启失败"
+# —— 4. 启动 ——
+start_gateway || rollback "启动失败"
 
 # —— 5. 探活（失败则回滚）——
 probe || rollback "健康探活失败"

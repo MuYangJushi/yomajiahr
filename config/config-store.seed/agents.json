@@ -8,7 +8,7 @@
     "skills": ["hr-policy-qa", "hr-general"],
     "heartbeat": {},
     "tools": {
-      "allow": ["memory_search", "memory_get"],
+      "allow": ["fastgpt__knowledge_search", "memory_search", "memory_get"],
       "deny": ["memory_write", "memory_delete", "exec"]
     }
   },

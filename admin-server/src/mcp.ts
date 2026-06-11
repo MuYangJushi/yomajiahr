@@ -1,9 +1,9 @@
 // MCP 端点（架构 I，ADR-006）：把 knowledge_search 暴露给 openclaw 数字员工。
 // openclaw 侧注册（yomakit，纯配置无需改源码，守 ADR-002）：
-//   openclaw mcp add knowledge --url http://127.0.0.1:18790/mcp \
+//   openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-assistant \
 //     --transport streamable-http --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" \
 //     --include knowledge_search
-// 工具在 openclaw 侧命名空间化为 `knowledge__knowledge_search`——hr-assistant 的 tools.allow 用此名。
+// 工具在 openclaw 侧命名空间化为 `fastgpt__knowledge_search`——hr-assistant 的 tools.allow 用此名。
 // 传输：streamable-http stateless（每请求新建 server+transport，无会话生命周期，最省心）。
 // 鉴权：Bearer 令牌，fail-closed；与 /api 的 cookie/RBAC 是两套，故挂在 /api 鉴权之外。
 import type { Express, Request, Response } from "express";
@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { KNOWLEDGE_MCP_TOKEN } from "./config.js";
-import { KnowledgeUnavailableError, search, type KbChunk } from "./services/knowledge.js";
+import { KnowledgeUnavailableError, resolveDatasetIdsForAgent, search, type KbChunk } from "./services/knowledge.js";
 import { log } from "./util.js";
 
 // 路A引用：title 必有锚点，文档编号/版本 best-effort（无则省略，绝不编造）。
@@ -22,7 +22,9 @@ function citation(src: KbChunk["source"]): string {
   return `[来源: ${parts.join(", ")}]`;
 }
 
-function buildServer(): McpServer {
+// #45 多库路由：每 agent 一个 MCP 注册，agentId 走 URL 路径 `/mcp/:agentId`；据 knowledge.json 绑定
+// 解析出该 agent 应检索的 datasetIds 传入 search。无 agentId 的旧调用方走默认单库，仅用于向后兼容。
+function buildServer(datasetIds?: string[]): McpServer {
   const server = new McpServer({ name: "yomajia-knowledge", version: "1.0.0" });
   server.registerTool(
     "knowledge_search",
@@ -38,7 +40,7 @@ function buildServer(): McpServer {
     },
     async ({ query, topK }) => {
       try {
-        const chunks = await search(query, topK ?? 5);
+        const chunks = await search(query, topK ?? 5, datasetIds);
         if (chunks.length === 0) {
           return { content: [{ type: "text", text: "知识库未命中相关内容。" }] };
         }
@@ -66,14 +68,17 @@ function buildServer(): McpServer {
 }
 
 export function mountMcp(app: Express): void {
-  app.all("/mcp", async (req: Request, res: Response) => {
+  app.all(["/mcp", "/mcp/:agentId"], async (req: Request, res: Response) => {
     // fail-closed：未配置令牌或不匹配一律拒绝。
     const expected = KNOWLEDGE_MCP_TOKEN ? `Bearer ${KNOWLEDGE_MCP_TOKEN}` : "";
     if (!expected || req.headers.authorization !== expected) {
       res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "unauthorized" }, id: null });
       return;
     }
-    const server = buildServer();
+    // 路径带 agentId → 按其 knowledge.json 绑定解析 datasetIds；不带 → undefined（默认单库，向后兼容）。
+    const agentId = typeof req.params.agentId === "string" ? req.params.agentId : undefined;
+    const datasetIds = agentId ? resolveDatasetIdsForAgent(agentId) : undefined;
+    const server = buildServer(datasetIds);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       transport.close();
