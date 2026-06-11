@@ -9,6 +9,7 @@
 // SSO 接缝（#46 验证：dataset Bearer key 认证不了 SPA 的 user-session 闸 tokenLogin）：
 //   配齐 FASTGPT_WEB_USERNAME/PASSWORD → 服务端登录 FastGPT、缓存会话 token、注入每个代理请求 →
 //   管理员免二次登录。未配 → 透明代理，iframe 内走 FastGPT 自带登录一次（功能可用，仅多一次登录）。
+import { createHash } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import {
@@ -22,23 +23,20 @@ import { authMiddleware } from "./middleware.js";
 import { requireRole } from "./auth/rbac.js";
 import { log } from "./util.js";
 
-const READ_ONLY_POST_PATHS = new Set([
-  "/api/common/system/getInitData",
-  "/api/core/dataset/list",
-  "/api/core/dataset/detail",
-  "/api/core/dataset/searchTest",
-  "/api/core/dataset/collection/list",
-  "/api/core/dataset/collection/detail",
-  "/api/core/dataset/data/list",
-  "/api/support/user/account/loginByPassword",
-]);
+// 反代只用于读/检视：写操作（建/删/改/导入）必须走平台原生接口（守 doc_id 治理 + 审计）。
+// FastGPT SPA 的读端点繁多且带版本（collection/listV2、data/v2/list 等），严格读白名单注定漏拦，
+// 故改用「写模式黑名单」——放行读、按路径词拒绝变更。
+const MUTATION_PATTERNS: RegExp[] = [
+  /\/(create|delete|update|insert|remove|edit|import|transfer|move|pushData|push)(\/|$)/i,
+];
 
-/** 反代只用于读/检视。未明确列入的 POST 及所有写方法一律 fail-closed。 */
+/** 反代只读：GET/HEAD/OPTIONS 全放行；写方法（DELETE/PUT/PATCH 等）一律拒；POST 命中写模式拒、其余放行。 */
 export function isAllowedFastgptProxyRequest(method: string, path: string): boolean {
-  const normalizedMethod = method.toUpperCase();
-  const normalizedPath = path.split("?", 1)[0].replace(/\/+$/, "") || "/";
-  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || normalizedMethod === "OPTIONS") return true;
-  return normalizedMethod === "POST" && READ_ONLY_POST_PATHS.has(normalizedPath);
+  const m = method.toUpperCase();
+  const p = path.split("?", 1)[0].replace(/\/+$/, "") || "/";
+  if (m === "GET" || m === "HEAD" || m === "OPTIONS") return true;
+  if (m !== "POST") return false; // DELETE/PUT/PATCH 等写方法一律 fail-closed
+  return !MUTATION_PATTERNS.some((re) => re.test(p));
 }
 
 function requireReadOnlyProxy(req: Request, res: Response, next: NextFunction): void {
@@ -60,18 +58,22 @@ async function fetchFastgptToken(): Promise<string | null> {
     const res = await fetch(`${FASTGPT_BASE_URL}/api/support/user/account/loginByPassword`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: FASTGPT_WEB_USERNAME, password: FASTGPT_WEB_PASSWORD }),
+      // FastGPT 期望 password 为 sha256 哈希（web 前端登录时客户端先哈希；发明文会 account_psw_error）。实测确认。
+      body: JSON.stringify({
+        username: FASTGPT_WEB_USERNAME,
+        password: createHash("sha256").update(FASTGPT_WEB_PASSWORD).digest("hex"),
+      }),
     });
     if (!res.ok) {
       log("WARN", `FastGPT SSO 登录失败 ${res.status}（回退 login-once）`);
       return null;
     }
-    // token 落点按 4.8.x：优先响应体 data.token，回退 Set-Cookie 的 token=。
+    // token 落点实测：响应体 data.token（Set-Cookie 名为 fastgpt_token，作回退）。
     const body = (await res.json().catch(() => null)) as { data?: { token?: string } } | null;
     let token = body?.data?.token || "";
     if (!token) {
       const setCookie = res.headers.get("set-cookie") || "";
-      token = setCookie.match(/(?:^|[;,\s])token=([^;]+)/)?.[1] || "";
+      token = setCookie.match(/(?:^|[;,\s])fastgpt_token=([^;]+)/)?.[1] || "";
     }
     if (!token) {
       log("WARN", "FastGPT SSO 登录成功但未取到 token（回退 login-once）");
@@ -119,11 +121,14 @@ export function startFastgptProxy(): void {
       ws: false,
       on: {
         proxyReq: (proxyReq, req) => {
+          // 平台 RBAC 凭据（Authorization Bearer / 平台会话 cookie）只用于本反代鉴权，绝不下发 FastGPT
+          // （FastGPT 见到无效 Bearer 会按 unAuthorization 拒绝）。
+          proxyReq.removeHeader("authorization");
           const token = (req as Request & { __fgToken?: string }).__fgToken;
           if (token) {
-            // 注入 FastGPT 会话（覆盖浏览器侧 cookie 的 token；其余 cookie 对 FastGPT 无意义）。
-            proxyReq.setHeader("cookie", `token=${token}`);
+            // FastGPT API 认证经实测取 `token` 请求头；cookie 名为 fastgpt_token，一并带上以利 SPA 客户端判定。
             proxyReq.setHeader("token", token);
+            proxyReq.setHeader("cookie", `fastgpt_token=${token}`);
           }
         },
         proxyRes: (proxyRes) => {
@@ -141,8 +146,9 @@ export function startFastgptProxy(): void {
     }),
   );
 
-  app.listen(FASTGPT_PROXY_PORT, "0.0.0.0", () => {
+  // 绑 127.0.0.1：不直接公网裸 HTTP，由 nginx 在高位端口终结 TLS 后转发到此（与 admin/gateway 同模式）。
+  app.listen(FASTGPT_PROXY_PORT, "127.0.0.1", () => {
     const sso = FASTGPT_WEB_USERNAME && FASTGPT_WEB_PASSWORD ? "SSO 注入" : "login-once";
-    log("INFO", `FastGPT 只读反代监听 :${FASTGPT_PROXY_PORT} → ${FASTGPT_BASE_URL}（${sso}，仅 ≥ops 会话可达）`);
+    log("INFO", `FastGPT 只读反代监听 127.0.0.1:${FASTGPT_PROXY_PORT} → ${FASTGPT_BASE_URL}（${sso}，仅 ≥ops 会话可达；经 nginx TLS 暴露）`);
   });
 }

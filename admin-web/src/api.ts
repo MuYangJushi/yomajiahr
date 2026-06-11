@@ -145,14 +145,34 @@ export async function fetchKnowledgeCollections(): Promise<{
 }> {
   return (await api.get("/knowledge/collections")).data;
 }
-export async function searchTest(query: string, topK = 5): Promise<KbChunk[]> {
-  return (await api.post("/knowledge/search-test", { query, topK })).data.chunks;
+export async function searchTest(query: string, topK = 5, datasetId?: string): Promise<KbChunk[]> {
+  return (await api.post("/knowledge/search-test", { query, topK, datasetId })).data.chunks;
 }
 export async function fetchKnowledgeBindings(): Promise<{ store: KnowledgeStore; agents: AgentRow[] }> {
   return (await api.get("/knowledge/bindings")).data;
 }
 export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<KnowledgeStore> {
   return (await api.put("/knowledge/bindings", store)).data.store;
+}
+
+// —— #41 多库 ——
+export async function fetchKnowledgeBases(): Promise<{ bases: KnowledgeBinding[]; agents: AgentRow[] }> {
+  return (await api.get("/knowledge/bases")).data;
+}
+export interface CreateKbInput {
+  name: string;
+  intro?: string;
+  boundAgents?: string[];
+}
+export async function createKnowledgeBase(input: CreateKbInput): Promise<KnowledgeBinding> {
+  return (await api.post("/knowledge/bases", input)).data.base;
+}
+/** #46 反代入口：FastGPT 整套 UI 经 yomakit:19450（同主机、独立端口）嵌入。
+ *  datasetId 给定则深链到该库详情页（按库限定检视）。 */
+export function fastgptConsoleUrl(datasetId?: string): string {
+  const port = 19450;
+  const base = `${window.location.protocol}//${window.location.hostname}:${port}`;
+  return datasetId ? `${base}/dataset/detail?datasetId=${encodeURIComponent(datasetId)}` : base;
 }
 
 // —— 审计（#44 vanilla→React）——
