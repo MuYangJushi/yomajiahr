@@ -365,20 +365,42 @@ export interface KnowledgeStore {
 }
 
 const STORE_PATH = join(STORE_DIR, "knowledge.json");
-const DEFAULT_STORE: KnowledgeStore = {
-  platform: "local",
-  knowledgeBases: [
-    { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-assistant"] },
-  ],
-};
+
+/**
+ * 缺省知识库（无 knowledge.json 时）。fastgpt 已配 → 默认库即真实 FastGPT 默认库
+ * （带 externalKbId、绑 hr-assistant），使多库列表能显示它 + iframe，且首次写入会把它持久化，
+ * 与 resolveDatasetIdsForAgent 一致；否则退本地归档库。
+ */
+function defaultStore(): KnowledgeStore {
+  if (isFastgpt() && FASTGPT_KB_ID) {
+    return {
+      platform: "fastgpt",
+      knowledgeBases: [
+        {
+          id: "kb_hr_policy",
+          name: "HR 制度知识库（默认）",
+          provider: "fastgpt",
+          externalKbId: FASTGPT_KB_ID,
+          boundAgents: ["hr-assistant"],
+        },
+      ],
+    };
+  }
+  return {
+    platform: "local",
+    knowledgeBases: [
+      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-assistant"] },
+    ],
+  };
+}
 
 /** 读绑定；文件缺失（旧部署未播种）时返回默认，不抛错。 */
 export function readKnowledgeStore(): KnowledgeStore {
-  if (!existsSync(STORE_PATH)) return structuredClone(DEFAULT_STORE);
+  if (!existsSync(STORE_PATH)) return defaultStore();
   try {
     return JSON.parse(readFileSync(STORE_PATH, "utf-8")) as KnowledgeStore;
   } catch {
-    return structuredClone(DEFAULT_STORE);
+    return defaultStore();
   }
 }
 
