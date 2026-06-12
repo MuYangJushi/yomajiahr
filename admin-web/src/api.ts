@@ -78,6 +78,7 @@ export interface UpdateAgentInput {
     accountId?: string;
     credentials: { clientId: string; clientSecret: string };
   };
+  removeChannels?: Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>;
 }
 export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
   await api.put(`/config/agents/${encodeURIComponent(id)}`, input);
@@ -110,6 +111,9 @@ export interface OnboardingSession {
 }
 export async function startAgentOnboarding(body: unknown): Promise<OnboardingSession> {
   return (await api.post("/config/agent-onboarding", body)).data;
+}
+export async function startAgentChannelOnboarding(id: string, body: unknown): Promise<OnboardingSession> {
+  return (await api.post(`/config/agents/${encodeURIComponent(id)}/channel-onboarding`, body)).data;
 }
 export async function fetchAgentOnboarding(id: string): Promise<OnboardingSession> {
   return (await api.get(`/config/agent-onboarding/${id}`)).data;

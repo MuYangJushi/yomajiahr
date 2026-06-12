@@ -102,7 +102,7 @@
     "servers": {
       "fastgpt": {
         "enabled": true,
-        "url": "http://127.0.0.1:18790/mcp/hr-assistant",
+        "url": "http://127.0.0.1:18790/mcp/hr-employee",
         "transport": "streamable-http",
         "headers": {
           "Authorization": "Bearer ${KNOWLEDGE_MCP_TOKEN}",

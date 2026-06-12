@@ -1,7 +1,7 @@
 // 数字员工配置路由（P1 支柱一）：列表 / 新建 / 修改 / 删除 / 技能 / 渠道。
 import { Router, type Request, type Response } from "express";
 import { deleteAgent, listAgents, updateAgent } from "../services/orchestrator.js";
-import { cancelOnboarding, getOnboarding, startOnboarding } from "../services/onboarding.js";
+import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
@@ -40,6 +40,7 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
       added_account_id: req.body?.addChannel
         ? req.body.addChannel.accountId || id
         : undefined,
+      removed_channels: req.body?.removeChannels || [],
       operator: req.user?.platformUserId || "",
     });
     res.json(result);
@@ -69,6 +70,15 @@ agentsRouter.post("/config/agent-onboarding", requireRole("ops"), onboardingLimi
     res.status(202).json(startOnboarding(req.user!.platformUserId, req.body));
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+agentsRouter.post("/config/agents/:id/channel-onboarding", requireRole("ops"), onboardingLimiter, (req: Request, res: Response) => {
+  try {
+    res.status(202).json(startChannelOnboarding(req.user!.platformUserId, String(req.params.id), req.body));
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
   }
 });
 

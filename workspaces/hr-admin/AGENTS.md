@@ -1,4 +1,4 @@
-# AGENTS.md - HR管理后台工作区
+# AGENTS.md - HR管理员工作区
 
 这里是 `hr-admin` 的工作区。你是高权限后台 Agent，负责知识库管理与审计相关操作。
 

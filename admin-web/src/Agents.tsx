@@ -16,9 +16,10 @@ import CreateAgentWizard from "./CreateAgentWizard";
 import EditAgentModal from "./EditAgentModal";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
-  employee: { color: "blue", label: "员工面（只读）" },
-  admin: { color: "red", label: "管理面（可写）" },
+  employee: { color: "blue", label: "员工" },
+  admin: { color: "red", label: "管理员" },
 };
+const DOMAIN_LABEL: Record<string, string> = { feishu: "飞书", "dingtalk-connector": "钉钉" };
 
 export default function Agents() {
   const actionRef = useRef<ActionType>();
@@ -67,7 +68,7 @@ export default function Agents() {
         <Space wrap>
           {r.channels.map((c) => (
             <Tag key={`${c.domain}/${c.accountId}`} color="geekblue">
-              {c.domain}/{c.accountId}
+              {DOMAIN_LABEL[c.domain] || c.domain}/{c.accountId}
             </Tag>
           ))}
         </Space>
@@ -77,15 +78,13 @@ export default function Agents() {
       title: "操作",
       valueType: "option",
       render: (_, r) => {
-        const protectedAgent = r.default || r.id === "hr-assistant" || r.id === "hr-admin";
+        const protectedAgent = r.default || r.id === "hr-employee" || r.id === "hr-admin";
         return [
           <Button
             key="edit"
             type="link"
             size="small"
             icon={<EditOutlined />}
-            disabled={protectedAgent}
-            title={protectedAgent ? "内置数字员工由仓库配置维护" : undefined}
             onClick={() => setEditingAgent(r)}
           >
             修改

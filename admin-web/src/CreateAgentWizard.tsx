@@ -108,8 +108,8 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
           label="岗位"
           initialValue="employee"
           options={[
-            { label: "员工面（只读）", value: "employee" },
-            { label: "管理面（可写）", value: "admin" },
+            { label: "员工", value: "employee" },
+            { label: "管理员", value: "admin" },
           ]}
           rules={[{ required: true }]}
         />
@@ -173,7 +173,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
   );
 }
 
-function OnboardingProgress({
+export function OnboardingProgress({
   session,
   onRetry,
   onClose,

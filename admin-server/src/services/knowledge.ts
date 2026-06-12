@@ -381,7 +381,7 @@ function defaultStore(): KnowledgeStore {
           name: "HR 制度知识库（默认）",
           provider: "fastgpt",
           externalKbId: FASTGPT_KB_ID,
-          boundAgents: ["hr-assistant"],
+          boundAgents: ["hr-employee"],
         },
       ],
     };
@@ -389,7 +389,7 @@ function defaultStore(): KnowledgeStore {
   return {
     platform: "local",
     knowledgeBases: [
-      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-assistant"] },
+      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-employee"] },
     ],
   };
 }

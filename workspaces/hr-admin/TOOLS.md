@@ -1,4 +1,4 @@
-# TOOLS.md - HR管理后台环境备忘
+# TOOLS.md - HR管理员环境备忘
 
 ## 可用工具
 
@@ -24,8 +24,8 @@
 
 ## 渠道
 
-- 飞书 Bot「HR管理后台」— 仅 HR 管理员
-- 钉钉 Bot「HR管理后台」— 仅 HR 管理员，Stream 长连接
+- 飞书 Bot「HR管理员」— 仅 HR 管理员
+- 钉钉 Bot「HR管理员」— 仅 HR 管理员，Stream 长连接
 - Admin Portal — `http://<server>:18790`，文档管理 Web 界面
 - Yoma+HR Web Portal — web 界面
 

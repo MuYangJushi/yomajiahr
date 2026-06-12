@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   ModalForm,
   ProFormDependency,
@@ -6,8 +7,18 @@ import {
   ProFormText,
   ProFormTextArea,
 } from "@ant-design/pro-components";
-import { Alert, Divider, Space, Tag, message } from "antd";
-import { updateAgent, type AgentRow, type ChannelsInfo, type Skill } from "./api";
+import { Alert, Collapse, Divider, Space, Tag, message } from "antd";
+import {
+  cancelAgentOnboarding,
+  fetchAgentOnboarding,
+  startAgentChannelOnboarding,
+  updateAgent,
+  type AgentRow,
+  type ChannelsInfo,
+  type OnboardingSession,
+  type Skill,
+} from "./api";
+import { OnboardingProgress } from "./CreateAgentWizard";
 
 interface Props {
   agent: AgentRow | null;
@@ -23,8 +34,39 @@ const DOMAIN_LABEL: Record<string, string> = {
 };
 
 export default function EditAgentModal({ agent, skills, channels, onClose, onUpdated }: Props) {
-  const connectedDomains = new Set(agent?.channels.map((channel) => channel.domain) || []);
+  const [removedChannels, setRemovedChannels] = useState<AgentRow["channels"]>([]);
+  const [session, setSession] = useState<OnboardingSession | null>(null);
+  const connectedDomains = new Set(agent?.channels.filter((channel) => !removedChannels.some(
+    (removed) => removed.domain === channel.domain && removed.accountId === channel.accountId,
+  )).map((channel) => channel.domain) || []);
   const availableDomains = channels.supported.filter((domain) => !connectedDomains.has(domain));
+  useEffect(() => {
+    setRemovedChannels([]);
+    setSession(null);
+  }, [agent?.id]);
+  useEffect(() => {
+    if (!session || ["success", "failed", "expired", "cancelled"].includes(session.status)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await fetchAgentOnboarding(session.id);
+        setSession(next);
+        if (next.status === "success") {
+          message.success("数字员工及新渠道已更新");
+          onUpdated();
+        }
+      } catch (err: any) {
+        setSession((current) => current ? { ...current, status: "failed", message: err?.response?.data?.error || "状态查询失败" } : current);
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [session?.id, session?.status]);
+  async function closeModal() {
+    if (session && !["success", "failed", "expired", "cancelled"].includes(session.status)) {
+      await cancelAgentOnboarding(session.id).catch(() => {});
+    }
+    setSession(null);
+    onClose();
+  }
   return (
     <ModalForm
       key={agent?.id || "closed"}
@@ -32,17 +74,30 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
       open={Boolean(agent)}
       initialValues={agent || undefined}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) void closeModal();
       }}
       modalProps={{ destroyOnClose: true }}
       onFinish={async (values) => {
         if (!agent) return false;
         try {
-          await updateAgent(agent.id, {
+          const body = {
             name: values.name,
             role: values.role,
             persona: values.persona,
             skills: values.skills,
+            removeChannels: removedChannels,
+          };
+          if (values.addChannelDomain && values.addChannelMode !== "manual") {
+            setSession(await startAgentChannelOnboarding(agent.id, {
+              ...body,
+              domain: values.addChannelDomain,
+              accountId: values.addChannelAccountId || undefined,
+              mode: "scan",
+            }));
+            return false;
+          }
+          await updateAgent(agent.id, {
+            ...body,
             addChannel: values.addChannelDomain
               ? {
                   domain: values.addChannelDomain,
@@ -63,14 +118,17 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
         }
       }}
     >
+      {session ? (
+        <OnboardingProgress session={session} onRetry={() => setSession(null)} onClose={closeModal} />
+      ) : <>
       <ProFormText name="id" label="ID" disabled />
       <ProFormText name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]} />
       <ProFormRadio.Group
         name="role"
         label="岗位"
         options={[
-          { label: "员工面（只读）", value: "employee" },
-          { label: "管理面（可写）", value: "admin" },
+          { label: "员工", value: "employee" },
+          { label: "管理员", value: "admin" },
         ]}
         rules={[{ required: true }]}
       />
@@ -84,8 +142,15 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
       />
       <Divider orientation="left">渠道接入</Divider>
       <Space wrap style={{ marginBottom: 16 }}>
-        {agent?.channels.map((channel) => (
-          <Tag key={`${channel.domain}/${channel.accountId}`} color="geekblue">
+        {agent?.channels.filter((channel) => !removedChannels.some(
+          (removed) => removed.domain === channel.domain && removed.accountId === channel.accountId,
+        )).map((channel) => (
+          <Tag
+            key={`${channel.domain}/${channel.accountId}`}
+            color="geekblue"
+            closable
+            onClose={() => setRemovedChannels((current) => [...current, channel])}
+          >
             {DOMAIN_LABEL[channel.domain] || channel.domain}/{channel.accountId}
           </Tag>
         ))}
@@ -106,11 +171,14 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
           <ProFormDependency name={["addChannelDomain"]}>
             {({ addChannelDomain }) => addChannelDomain ? (
               <>
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message="使用已有应用凭据接入；保存后将应用配置并验证渠道连接。"
+                <ProFormRadio.Group
+                  name="addChannelMode"
+                  label="接入方式"
+                  initialValue="scan"
+                  options={[
+                    { label: "扫码创建新应用", value: "scan" },
+                    { label: "使用已有应用", value: "manual" },
+                  ]}
                 />
                 <ProFormText
                   name="addChannelAccountId"
@@ -118,21 +186,28 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
                   tooltip="留空则使用数字员工 ID"
                   placeholder={agent?.id}
                 />
-                <ProFormText
-                  name="addChannelClientId"
-                  label={addChannelDomain === "feishu" ? "App ID" : "Client ID"}
-                  rules={[{ required: true, message: "请输入应用 ID" }]}
-                />
-                <ProFormText.Password
-                  name="addChannelClientSecret"
-                  label={addChannelDomain === "feishu" ? "App Secret" : "Client Secret"}
-                  rules={[{ required: true, message: "请输入应用密钥" }]}
-                />
+                <ProFormDependency name={["addChannelMode"]}>
+                  {({ addChannelMode }) => addChannelMode === "manual" ? (
+                    <Collapse items={[{ key: "credentials", label: "已有应用凭证", children: <>
+                      <ProFormText
+                        name="addChannelClientId"
+                        label={addChannelDomain === "feishu" ? "App ID" : "Client ID"}
+                        rules={[{ required: true, message: "请输入应用 ID" }]}
+                      />
+                      <ProFormText.Password
+                        name="addChannelClientSecret"
+                        label={addChannelDomain === "feishu" ? "App Secret" : "Client Secret"}
+                        rules={[{ required: true, message: "请输入应用密钥" }]}
+                      />
+                    </> }]} />
+                  ) : <Alert type="info" showIcon message="保存后显示二维码；扫码授权成功后自动更新。" />}
+                </ProFormDependency>
               </>
             ) : null}
           </ProFormDependency>
         </>
       )}
+      </>}
     </ModalForm>
   );
 }

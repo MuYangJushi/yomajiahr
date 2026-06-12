@@ -30,8 +30,8 @@ function toolsForRole(role: "employee" | "admin"): { allow: string[]; deny: stri
     : { allow: ["memory_search", "memory_get"], deny: ["memory_write", "memory_delete", "exec"] };
 }
 
-const ROLE_LABEL = { employee: "员工面（只读）", admin: "管理面（可写）" } as const;
-const BUILTIN_AGENT_IDS = new Set(["hr-assistant", "hr-admin"]);
+const ROLE_LABEL = { employee: "员工", admin: "管理员" } as const;
+const BUILTIN_AGENT_IDS = new Set(["hr-employee", "hr-admin"]);
 
 function isProtectedAgent(agent: AgentEntry): boolean {
   return Boolean(agent.default) || BUILTIN_AGENT_IDS.has(agent.id);
@@ -85,6 +85,10 @@ export interface UpdateAgentInput {
     accountId?: string;
     credentials: ChannelCredentials;
   };
+  removeChannels?: Array<{
+    domain: SupportedChannel;
+    accountId: string;
+  }>;
 }
 
 function validateSkills(skills: unknown): asserts skills is string[] {
@@ -336,6 +340,11 @@ function validateUpdateInput(input: UpdateAgentInput): void {
       throw new Error("新增渠道凭证不能为空");
     }
   }
+  if (input.removeChannels !== undefined && !Array.isArray(input.removeChannels)) throw new Error("解绑渠道格式非法");
+  for (const channel of input.removeChannels || []) {
+    if (channel.domain !== "feishu" && channel.domain !== "dingtalk-connector") throw new Error("解绑渠道非法");
+    if (typeof channel.accountId !== "string" || !channel.accountId.trim()) throw new Error("解绑渠道账号 ID 不能为空");
+  }
 }
 
 function workspaceVars(id: string, input: UpdateAgentInput): Record<string, string> {
@@ -349,7 +358,7 @@ function workspaceVars(id: string, input: UpdateAgentInput): Record<string, stri
   };
 }
 
-/** 修改数字员工资料与权限配置；ID、渠道账号和 MEMORY.md 保持不变。 */
+/** 修改数字员工资料、权限与渠道配置；ID 和 MEMORY.md 保持不变。 */
 export async function updateAgent(
   id: string,
   input: UpdateAgentInput,
@@ -359,16 +368,34 @@ export async function updateAgent(
     const store = readStore();
     const index = store.agents.findIndex((a) => a.id === id);
     if (index < 0) throw new Error(`agent 不存在：${id}`);
-    if (isProtectedAgent(store.agents[index])) throw new Error("内置数字员工不能修改");
     const wsDir = workspaceDir(id);
     if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
     let addedChannel: CreateAgentInput["channels"][number] | undefined;
+    const removeKeys = new Set((input.removeChannels || []).map((channel) => `${channel.domain}/${channel.accountId}`));
+    for (const channel of input.removeChannels || []) {
+      if (!store.bindings.some(
+        (binding) =>
+          binding.agentId === id &&
+          binding.match.channel === channel.domain &&
+          binding.match.accountId === channel.accountId,
+      )) {
+        throw new Error(`数字员工未接入渠道账号：${channel.domain}/${channel.accountId}`);
+      }
+    }
     if (input.addChannel) {
       const accountId = input.addChannel.accountId || id;
-      if (store.bindings.some((b) => b.agentId === id && b.match.channel === input.addChannel!.domain)) {
+      if (store.bindings.some(
+        (b) =>
+          b.agentId === id &&
+          b.match.channel === input.addChannel!.domain &&
+          !removeKeys.has(`${b.match.channel}/${b.match.accountId}`),
+      )) {
         throw new Error(`数字员工已接入渠道：${input.addChannel.domain}`);
       }
-      if (store.channels[input.addChannel.domain]?.[accountId]) {
+      if (
+        store.channels[input.addChannel.domain]?.[accountId] &&
+        !removeKeys.has(`${input.addChannel.domain}/${accountId}`)
+      ) {
         throw new Error(`渠道账号已存在：${input.addChannel.domain}/${accountId}`);
       }
       const assembled = assembleChannel(
@@ -403,6 +430,22 @@ export async function updateAgent(
       };
       store.agents[index] = next;
       renderWorkspace(id, workspaceVars(id, input), { preserveMemory: true });
+      const removedSecretKeys = new Set<string>();
+      if (removeKeys.size > 0) {
+        store.bindings = store.bindings.filter((binding) => {
+          return binding.agentId !== id || !removeKeys.has(`${binding.match.channel}/${binding.match.accountId}`);
+        });
+        for (const channel of input.removeChannels || []) {
+          const stillUsed = store.bindings.some(
+            (binding) => binding.match.channel === channel.domain && binding.match.accountId === channel.accountId,
+          );
+          if (stillUsed) continue;
+          const account = store.channels[channel.domain]?.[channel.accountId];
+          if (account) secretKeysIn(account, removedSecretKeys);
+          delete store.channels[channel.domain]?.[channel.accountId];
+        }
+        removeEnv(removedSecretKeys);
+      }
       if (addedChannel) {
         upsertEnv(addedChannel.secrets || {});
         store.channels[addedChannel.domain] ??= {};
@@ -485,6 +528,7 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`删除失败：${apply.message || apply.status}`);
+      rmSync(join(STATE_DIR, "agents", id), { recursive: true, force: true });
       rmSync(snap, { recursive: true, force: true });
       return { apply };
     } catch (err) {
