@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchProviders, type Providers } from "./api";
+import { fetchProviders, loginWithDemoAccessCode, type Providers } from "./api";
 
 const ERROR_MSG: Record<string, string> = {
   unauthorized: "账号不在授权名单，请联系管理员",
@@ -173,6 +173,38 @@ const STYLES = `
     color: #94a3b8;
     cursor: not-allowed;
   }
+  .demo-access {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #e8edf3;
+  }
+  .demo-access-label {
+    display: block;
+    margin-bottom: 8px;
+    color: #64748b;
+    font-size: 12px;
+  }
+  .demo-access-row { display: flex; gap: 8px; }
+  .demo-access-input {
+    min-width: 0;
+    flex: 1;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  .demo-access-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+  .demo-access-submit {
+    border: none;
+    border-radius: 10px;
+    padding: 0 16px;
+    background: #1a2a3a;
+    color: white;
+    cursor: pointer;
+  }
+  .demo-access-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+  .demo-access-error { margin-top: 7px; color: #b91c1c; font-size: 12px; }
 
   .btn-tag {
     font-size: 10px;
@@ -271,6 +303,9 @@ function DingIcon({ disabled }: { disabled: boolean }) {
 export default function Login() {
   const [providers, setProviders] = useState<Providers | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoCode, setDemoCode] = useState("");
+  const [demoSubmitting, setDemoSubmitting] = useState(false);
+  const [demoError, setDemoError] = useState("");
   const styleRef = useRef<HTMLStyleElement | null>(null);
 
   useEffect(() => {
@@ -295,6 +330,24 @@ export default function Login() {
   const feishuDisabled = !feishuOn || sessionDisabled;
   const dingtalkOn = Boolean(providers?.providers.dingtalk);
   const dingtalkDisabled = !dingtalkOn || sessionDisabled;
+  const demoOpenLogin = Boolean(providers?.demo_open_login.enabled);
+  const demoRole = providers?.demo_open_login.role;
+  const demoAccessEnabled = Boolean(providers?.demo_access_code.enabled);
+  const demoAccessRole = providers?.demo_access_code.role;
+
+  async function submitDemoAccess() {
+    if (!demoCode || demoSubmitting) return;
+    setDemoSubmitting(true);
+    setDemoError("");
+    try {
+      await loginWithDemoAccessCode(demoCode);
+      window.location.href = "/console";
+    } catch (err: any) {
+      setDemoError(err?.response?.data?.error || "访问码登录失败");
+    } finally {
+      setDemoSubmitting(false);
+    }
+  }
 
   return (
     <div className="login-root">
@@ -326,6 +379,12 @@ export default function Login() {
           </div>
         )}
 
+        {demoOpenLogin && (
+          <div className="alert alert-warn" role="alert">
+            比赛展示期间临时开放：任意完成认证的飞书或钉钉账号可进入平台（临时角色：{demoRole}）
+          </div>
+        )}
+
         {loading ? (
           <div className="spinner-wrap">
             <span className="spinner" aria-label="加载中" />
@@ -354,11 +413,39 @@ export default function Login() {
               使用钉钉登录
               {!dingtalkOn && <span className="btn-tag">未配置</span>}
             </button>
+
+            {demoAccessEnabled && (
+              <div className="demo-access">
+                <label className="demo-access-label" htmlFor="demo-access-code">
+                  比赛访客可使用临时访问码进入（角色：{demoAccessRole}）
+                </label>
+                <div className="demo-access-row">
+                  <input
+                    id="demo-access-code"
+                    className="demo-access-input"
+                    type="password"
+                    autoComplete="one-time-code"
+                    placeholder="输入比赛访问码"
+                    value={demoCode}
+                    onChange={(e) => setDemoCode(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void submitDemoAccess(); }}
+                  />
+                  <button
+                    className="demo-access-submit"
+                    disabled={!demoCode || demoSubmitting}
+                    onClick={() => void submitDemoAccess()}
+                  >
+                    {demoSubmitting ? "验证中" : "进入"}
+                  </button>
+                </div>
+                {demoError && <div className="demo-access-error" role="alert">{demoError}</div>}
+              </div>
+            )}
           </div>
         )}
 
         <footer className="login-footer">
-          <span>仅限授权员工访问</span>
+          <span>{demoOpenLogin || demoAccessEnabled ? "比赛展示临时开放" : "仅限授权员工访问"}</span>
           <span className="footer-dot">·</span>
           <span>如需帮助请联系管理员</span>
         </footer>

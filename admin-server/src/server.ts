@@ -6,6 +6,9 @@ import {
   AUDIT_LOG_PATH,
   AUTH_TOKEN,
   BIND_HOST,
+  DEMO_ACCESS_ENABLED,
+  DEMO_ACCESS_ROLE,
+  DEMO_OPEN_LOGIN_ROLE,
   MAX_UPLOAD_FILE_MB,
   POLICIES_DIR,
   PORT,
@@ -35,6 +38,12 @@ app.listen(PORT, bindHost, () => {
     "INFO",
     `  Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
   );
+  if (DEMO_OPEN_LOGIN_ROLE) {
+    log("WARN", `  Demo open login: enabled for every authenticated Feishu/DingTalk account as ${DEMO_OPEN_LOGIN_ROLE}`);
+  }
+  if (DEMO_ACCESS_ENABLED) {
+    log("WARN", `  Demo access code login: enabled as ${DEMO_ACCESS_ROLE}`);
+  }
   log("INFO", `  Max upload size: ${MAX_UPLOAD_FILE_MB}MB`);
   log("INFO", `  Supported formats: ${supportedFormats().join(", ")}`);
 });
