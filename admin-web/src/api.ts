@@ -73,6 +73,11 @@ export interface UpdateAgentInput {
   role: "employee" | "admin";
   persona?: string;
   skills: string[];
+  addChannel?: {
+    domain: "feishu" | "dingtalk-connector";
+    accountId?: string;
+    credentials: { clientId: string; clientSecret: string };
+  };
 }
 export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
   await api.put(`/config/agents/${encodeURIComponent(id)}`, input);

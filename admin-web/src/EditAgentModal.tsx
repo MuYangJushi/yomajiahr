@@ -1,21 +1,30 @@
 import {
   ModalForm,
+  ProFormDependency,
   ProFormRadio,
   ProFormSelect,
   ProFormText,
   ProFormTextArea,
 } from "@ant-design/pro-components";
-import { message } from "antd";
-import { updateAgent, type AgentRow, type Skill } from "./api";
+import { Alert, Divider, Space, Tag, message } from "antd";
+import { updateAgent, type AgentRow, type ChannelsInfo, type Skill } from "./api";
 
 interface Props {
   agent: AgentRow | null;
   skills: Skill[];
+  channels: ChannelsInfo;
   onClose: () => void;
   onUpdated: () => void;
 }
 
-export default function EditAgentModal({ agent, skills, onClose, onUpdated }: Props) {
+const DOMAIN_LABEL: Record<string, string> = {
+  feishu: "飞书",
+  "dingtalk-connector": "钉钉",
+};
+
+export default function EditAgentModal({ agent, skills, channels, onClose, onUpdated }: Props) {
+  const connectedDomains = new Set(agent?.channels.map((channel) => channel.domain) || []);
+  const availableDomains = channels.supported.filter((domain) => !connectedDomains.has(domain));
   return (
     <ModalForm
       key={agent?.id || "closed"}
@@ -34,6 +43,16 @@ export default function EditAgentModal({ agent, skills, onClose, onUpdated }: Pr
             role: values.role,
             persona: values.persona,
             skills: values.skills,
+            addChannel: values.addChannelDomain
+              ? {
+                  domain: values.addChannelDomain,
+                  accountId: values.addChannelAccountId || undefined,
+                  credentials: {
+                    clientId: values.addChannelClientId,
+                    clientSecret: values.addChannelClientSecret,
+                  },
+                }
+              : undefined,
           });
           message.success("数字员工已更新");
           onUpdated();
@@ -63,6 +82,57 @@ export default function EditAgentModal({ agent, skills, onClose, onUpdated }: Pr
         rules={[{ required: true, message: "至少分配一个技能" }]}
         options={skills.map((s) => ({ label: s.name, value: s.name, title: s.description }))}
       />
+      <Divider orientation="left">渠道接入</Divider>
+      <Space wrap style={{ marginBottom: 16 }}>
+        {agent?.channels.map((channel) => (
+          <Tag key={`${channel.domain}/${channel.accountId}`} color="geekblue">
+            {DOMAIN_LABEL[channel.domain] || channel.domain}/{channel.accountId}
+          </Tag>
+        ))}
+      </Space>
+      {availableDomains.length === 0 ? (
+        <Alert type="info" showIcon message="该数字员工已接入所有支持的渠道" />
+      ) : (
+        <>
+          <ProFormSelect
+            name="addChannelDomain"
+            label="同时新增渠道（可选）"
+            placeholder="不新增渠道"
+            options={availableDomains.map((domain) => ({
+              label: DOMAIN_LABEL[domain] || domain,
+              value: domain,
+            }))}
+          />
+          <ProFormDependency name={["addChannelDomain"]}>
+            {({ addChannelDomain }) => addChannelDomain ? (
+              <>
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message="使用已有应用凭据接入；保存后将应用配置并验证渠道连接。"
+                />
+                <ProFormText
+                  name="addChannelAccountId"
+                  label="账号 ID"
+                  tooltip="留空则使用数字员工 ID"
+                  placeholder={agent?.id}
+                />
+                <ProFormText
+                  name="addChannelClientId"
+                  label={addChannelDomain === "feishu" ? "App ID" : "Client ID"}
+                  rules={[{ required: true, message: "请输入应用 ID" }]}
+                />
+                <ProFormText.Password
+                  name="addChannelClientSecret"
+                  label={addChannelDomain === "feishu" ? "App Secret" : "Client Secret"}
+                  rules={[{ required: true, message: "请输入应用密钥" }]}
+                />
+              </>
+            ) : null}
+          </ProFormDependency>
+        </>
+      )}
     </ModalForm>
   );
 }

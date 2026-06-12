@@ -21,7 +21,7 @@ const fakeBin = join(stateDir, "test-bin");
 mkdirSync(fakeBin, { recursive: true });
 const fakeOpenclaw = join(fakeBin, "openclaw");
 writeFileSync(fakeOpenclaw, `#!/bin/sh
-printf '%s\\n' '{"channelAccounts":{"feishu":[{"accountId":"integration-agent","configured":true,"running":true,"probe":{"ok":true}}]}}'
+printf '%s\\n' '{"channelAccounts":{"feishu":[{"accountId":"integration-agent","configured":true,"running":true,"probe":{"ok":true}},{"accountId":"attach-rollback-agent","configured":true,"running":true,"probe":{"ok":true}}],"dingtalk-connector":[{"accountId":"integration-agent","configured":true,"running":true,"connected":true}]}}'
 `);
 chmodSync(fakeOpenclaw, 0o755);
 const fakeSystemctl = join(fakeBin, "systemctl");
@@ -107,7 +107,7 @@ test("完整成功路径写入 Agent、技能、渠道、binding、密钥并通�
   assert.match(readFileSync(join(stateDir, ".env"), "utf-8"), /FEISHU_INTEGRATION_AGENT_APP_SECRET=integration-secret/);
 });
 
-test("修改数字员工同步配置与 workspace，并保留 MEMORY.md", async () => {
+test("修改数字员工时可同时新增另一渠道，并保留 MEMORY.md", async () => {
   const memoryPath = join(stateDir, "workspaces", "integration-agent", "MEMORY.md");
   writeFileSync(memoryPath, "custom memory\n");
   const result = await updateAgent("integration-agent", {
@@ -115,14 +115,31 @@ test("修改数字员工同步配置与 workspace，并保留 MEMORY.md", async 
     role: "admin",
     persona: "负责集成测试",
     skills: ["hr-general"],
+    addChannel: {
+      domain: "dingtalk-connector",
+      credentials: { clientId: "ding-integration", clientSecret: "ding-integration-secret" },
+    },
   });
   assert.equal(result.agent.role, "admin");
   const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
+  const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   assert.equal(agents[0].name, "更新后的助手");
   assert.equal(agents[0].persona, "负责集成测试");
   assert.ok(agents[0].tools.allow.includes("memory_write"));
   assert.match(readFileSync(join(stateDir, "workspaces", "integration-agent", "SOUL.md"), "utf-8"), /负责集成测试/);
   assert.equal(readFileSync(memoryPath, "utf-8"), "custom memory\n");
+  assert.equal(channels["dingtalk-connector"]["integration-agent"].clientId, "${DINGTALK_INTEGRATION_AGENT_CLIENT_ID}");
+  assert.equal(
+    bindings.some(
+      (b: any) =>
+        b.agentId === "integration-agent" &&
+        b.match.channel === "dingtalk-connector" &&
+        b.match.accountId === "integration-agent",
+    ),
+    true,
+  );
+  assert.match(readFileSync(join(stateDir, ".env"), "utf-8"), /DINGTALK_INTEGRATION_AGENT_CLIENT_SECRET=ding-integration-secret/);
 });
 
 test("内置数字员工不能修改或删除", async () => {
@@ -137,6 +154,48 @@ test("内置数字员工不能修改或删除", async () => {
   await assert.rejects(deleteAgent("integration-agent"), /内置数字员工不能删除/);
   agents[0].default = false;
   writeFileSync(agentsPath, JSON.stringify(agents, null, 2) + "\n");
+});
+
+test("修改时新增渠道失败会恢复渠道、binding 和密钥", async () => {
+  await createAgentFromCredentials(
+    {
+      id: "attach-rollback-agent",
+      name: "渠道回滚助手",
+      role: "employee",
+      skills: ["hr-general"],
+      domain: "feishu",
+    },
+    { clientId: "cli-attach-rollback", clientSecret: "attach-rollback-secret" },
+  );
+  const envBefore = readFileSync(join(stateDir, ".env"), "utf-8");
+  process.env.PROBE_FORCE_FAIL = "1";
+  try {
+    await assert.rejects(
+      updateAgent("attach-rollback-agent", {
+        name: "渠道回滚助手",
+        role: "employee",
+        skills: ["hr-general"],
+        addChannel: {
+          domain: "dingtalk-connector",
+          credentials: { clientId: "ding-rollback", clientSecret: "ding-rollback-secret" },
+        },
+      }),
+      /更新失败/,
+    );
+  } finally {
+    delete process.env.PROBE_FORCE_FAIL;
+  }
+  const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
+  const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
+  assert.equal(Boolean(channels["dingtalk-connector"]["attach-rollback-agent"]), false);
+  assert.equal(
+    bindings.some(
+      (b: any) => b.agentId === "attach-rollback-agent" && b.match.channel === "dingtalk-connector",
+    ),
+    false,
+  );
+  assert.equal(readFileSync(join(stateDir, ".env"), "utf-8"), envBefore);
+  await deleteAgent("attach-rollback-agent");
 });
 
 test("删除数字员工清理独占渠道、密钥、workspace 和知识库绑定", async () => {
@@ -158,6 +217,7 @@ test("删除数字员工清理独占渠道、密钥、workspace 和知识库绑�
   assert.equal(bindings.some((b: any) => b.agentId === "integration-agent"), false);
   assert.deepEqual(knowledge.knowledgeBases[0].boundAgents, []);
   assert.doesNotMatch(readFileSync(join(stateDir, ".env"), "utf-8"), /FEISHU_INTEGRATION_AGENT_/);
+  assert.doesNotMatch(readFileSync(join(stateDir, ".env"), "utf-8"), /DINGTALK_INTEGRATION_AGENT_/);
   assert.equal(existsSync(join(stateDir, "workspaces", "integration-agent")), false);
 });
 

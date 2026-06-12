@@ -80,6 +80,11 @@ export interface UpdateAgentInput {
   role: "employee" | "admin";
   persona?: string;
   skills: string[];
+  addChannel?: {
+    domain: SupportedChannel;
+    accountId?: string;
+    credentials: ChannelCredentials;
+  };
 }
 
 function validateSkills(skills: unknown): asserts skills is string[] {
@@ -112,47 +117,48 @@ export function validateAgentDraft(input: AgentDraft): void {
 export function assembleCreateInput(draft: AgentDraft, credentials: ChannelCredentials): CreateAgentInput {
   validateAgentDraft(draft);
   if (!credentials.clientId?.trim() || !credentials.clientSecret?.trim()) throw new Error("渠道凭证不能为空");
+  return { ...draft, channels: [assembleChannel(draft, credentials)] };
+}
+
+function assembleChannel(
+  draft: AgentDraft,
+  credentials: ChannelCredentials,
+): CreateAgentInput["channels"][number] {
   const up = draft.id.toUpperCase().replace(/-/g, "_");
   const accountId = draft.accountId || draft.id;
   if (draft.domain === "feishu") {
     return {
-      ...draft,
-      channels: [{
-        domain: draft.domain,
-        accountId,
-        account: {
-          appId: `\${FEISHU_${up}_APP_ID}`,
-          appSecret: `\${FEISHU_${up}_APP_SECRET}`,
-          dmPolicy: "open",
-          groupPolicy: "open",
-          requireMention: true,
-        },
-        secrets: {
-          [`FEISHU_${up}_APP_ID`]: credentials.clientId,
-          [`FEISHU_${up}_APP_SECRET`]: credentials.clientSecret,
-        },
-      }],
-    };
-  }
-  return {
-    ...draft,
-    channels: [{
       domain: draft.domain,
       accountId,
       account: {
-        enabled: true,
-        name: draft.name,
-        clientId: `\${DINGTALK_${up}_CLIENT_ID}`,
-        clientSecret: `\${DINGTALK_${up}_CLIENT_SECRET}`,
+        appId: `\${FEISHU_${up}_APP_ID}`,
+        appSecret: `\${FEISHU_${up}_APP_SECRET}`,
         dmPolicy: "open",
         groupPolicy: "open",
         requireMention: true,
       },
       secrets: {
-        [`DINGTALK_${up}_CLIENT_ID`]: credentials.clientId,
-        [`DINGTALK_${up}_CLIENT_SECRET`]: credentials.clientSecret,
+        [`FEISHU_${up}_APP_ID`]: credentials.clientId,
+        [`FEISHU_${up}_APP_SECRET`]: credentials.clientSecret,
       },
-    }],
+    };
+  }
+  return {
+    domain: draft.domain,
+    accountId,
+    account: {
+      enabled: true,
+      name: draft.name,
+      clientId: `\${DINGTALK_${up}_CLIENT_ID}`,
+      clientSecret: `\${DINGTALK_${up}_CLIENT_SECRET}`,
+      dmPolicy: "open",
+      groupPolicy: "open",
+      requireMention: true,
+    },
+    secrets: {
+      [`DINGTALK_${up}_CLIENT_ID`]: credentials.clientId,
+      [`DINGTALK_${up}_CLIENT_SECRET`]: credentials.clientSecret,
+    },
   };
 }
 
@@ -313,6 +319,23 @@ function validateUpdateInput(input: UpdateAgentInput): void {
   if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
   if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
   validateSkills(input.skills);
+  if (input.addChannel) {
+    if (input.addChannel.domain !== "feishu" && input.addChannel.domain !== "dingtalk-connector") {
+      throw new Error("新增渠道非法");
+    }
+    if (
+      input.addChannel.accountId !== undefined &&
+      (typeof input.addChannel.accountId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(input.addChannel.accountId))
+    ) {
+      throw new Error("新增渠道账号 ID 非法");
+    }
+    if (
+      !input.addChannel.credentials?.clientId?.trim() ||
+      !input.addChannel.credentials?.clientSecret?.trim()
+    ) {
+      throw new Error("新增渠道凭证不能为空");
+    }
+  }
 }
 
 function workspaceVars(id: string, input: UpdateAgentInput): Record<string, string> {
@@ -339,10 +362,35 @@ export async function updateAgent(
     if (isProtectedAgent(store.agents[index])) throw new Error("内置数字员工不能修改");
     const wsDir = workspaceDir(id);
     if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
+    let addedChannel: CreateAgentInput["channels"][number] | undefined;
+    if (input.addChannel) {
+      const accountId = input.addChannel.accountId || id;
+      if (store.bindings.some((b) => b.agentId === id && b.match.channel === input.addChannel!.domain)) {
+        throw new Error(`数字员工已接入渠道：${input.addChannel.domain}`);
+      }
+      if (store.channels[input.addChannel.domain]?.[accountId]) {
+        throw new Error(`渠道账号已存在：${input.addChannel.domain}/${accountId}`);
+      }
+      const assembled = assembleChannel(
+        {
+          id,
+          name: input.name.trim(),
+          role: input.role,
+          persona: input.persona,
+          skills: input.skills,
+          domain: input.addChannel.domain,
+          accountId,
+        },
+        input.addChannel.credentials,
+      );
+      addedChannel = assembled;
+    }
 
     const snap = mkdtempSync(join(tmpdir(), "orch-update-"));
     cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
     cpSync(wsDir, join(snap, "workspace"), { recursive: true });
+    const envExisted = existsSync(ENV_PATH);
+    if (envExisted) cpSync(ENV_PATH, join(snap, ".env"));
     try {
       const current = store.agents[index];
       const next: AgentEntry = {
@@ -355,16 +403,28 @@ export async function updateAgent(
       };
       store.agents[index] = next;
       renderWorkspace(id, workspaceVars(id, input), { preserveMemory: true });
+      if (addedChannel) {
+        upsertEnv(addedChannel.secrets || {});
+        store.channels[addedChannel.domain] ??= {};
+        store.channels[addedChannel.domain][addedChannel.accountId] = addedChannel.account;
+        store.bindings.push({
+          agentId: id,
+          match: { channel: addedChannel.domain, accountId: addedChannel.accountId },
+        });
+      }
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
+      if (addedChannel) await verifyChannel(addedChannel.domain, addedChannel.accountId);
       rmSync(snap, { recursive: true, force: true });
       return { agent: next, apply };
     } catch (err) {
       let rollbackMessage = "已恢复原配置";
       try {
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
+        else rmSync(ENV_PATH, { force: true });
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;

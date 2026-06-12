@@ -36,6 +36,10 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
       name: result.agent.name,
       role: result.agent.role,
       skills: result.agent.skills,
+      added_channel: req.body?.addChannel?.domain || undefined,
+      added_account_id: req.body?.addChannel
+        ? req.body.addChannel.accountId || id
+        : undefined,
       operator: req.user?.platformUserId || "",
     });
     res.json(result);

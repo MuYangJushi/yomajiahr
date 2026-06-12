@@ -165,6 +165,7 @@ export default function Agents() {
       <EditAgentModal
         agent={editingAgent}
         skills={skills}
+        channels={channels || { supported: [], channels: {}, env_keys: [] }}
         onClose={() => setEditingAgent(null)}
         onUpdated={() => {
           setEditingAgent(null);
