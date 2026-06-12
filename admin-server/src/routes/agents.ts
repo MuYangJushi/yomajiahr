@@ -27,7 +27,7 @@ agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, r
   res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
 });
 
-agentsRouter.put("/config/agents/:id", requireRole("admin"), async (req: Request, res: Response) => {
+agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
     const result = await updateAgent(id, req.body);
@@ -45,7 +45,7 @@ agentsRouter.put("/config/agents/:id", requireRole("admin"), async (req: Request
   }
 });
 
-agentsRouter.delete("/config/agents/:id", requireRole("admin"), async (req: Request, res: Response) => {
+agentsRouter.delete("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
     const result = await deleteAgent(id);
