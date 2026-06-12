@@ -131,7 +131,7 @@ export interface KnowledgeHealth {
   embeddingModel?: string;
   baseUrlHint?: string;
   indexStatus: "ready" | "indexing" | "error" | "unknown";
-  fallback: "local-memory-search";
+  fallback: "none"; // ADR-010：已弃本地回退，FastGPT 为唯一知识源
   message?: string;
   checkedAt: string;
 }
@@ -156,6 +156,7 @@ export interface KnowledgeBinding {
   provider: "fastgpt" | "local";
   externalKbId?: string;
   boundAgents: string[];
+  restricted?: boolean; // ADR-010：受限库，文档列表/切片预览仅 admin 可见
 }
 export interface KnowledgeStore {
   platform: "fastgpt" | "local";
@@ -190,6 +191,7 @@ export interface CreateKbInput {
   name: string;
   intro?: string;
   boundAgents?: string[];
+  restricted?: boolean;
 }
 export async function createKnowledgeBase(input: CreateKbInput): Promise<KnowledgeBinding> {
   return (await api.post("/knowledge/bases", input)).data.base;

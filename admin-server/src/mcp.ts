@@ -50,12 +50,15 @@ function buildServer(datasetIds?: string[]): McpServer {
         return { content: [{ type: "text", text }] };
       } catch (err) {
         if (err instanceof KnowledgeUnavailableError) {
-          // 回退信号：明确告知不可用，让 hr-policy-qa 退回本地 memory_search（回退链不能断）。
+          // ADR-010：已弃本地回退（FastGPT 为唯一知识源）。不可达时诚实告知不可用、不要编造，
+          // 引导用户稍后重试或联系 HR。
           return {
             content: [
               {
                 type: "text",
-                text: `知识库平台暂不可用（${err.message}）。请改用本地 memory_search 检索，不要因此拒答。`,
+                text:
+                  `知识库平台暂时不可用（${err.message}）。请如实告知用户：` +
+                  `「知识库平台暂时不可用，请稍后重试，或直接联系 HR」；不要编造政策内容。`,
               },
             ],
           };

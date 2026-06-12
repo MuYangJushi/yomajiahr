@@ -1,7 +1,7 @@
 // 知识库平台适配（ADR-006 / FastGPT 集成）。
 // admin-server 是唯一对 FastGPT 说话的人：持 API Key、做探活、做回退、记审计（审计在路由层）。
 // #37 范围：health 完整可用 + 骨架；import/search/collections 在 FastGPT 实例就绪（Gate-B）后接通。
-// 硬约束（CLAUDE.md / ADR-006）：FastGPT 不可用/未配置时必须能回退本地 memory_search / 本地归档，链路不能断。
+// ADR-010：FastGPT 为唯一知识源，已弃本地 memory_search/归档回退；不可用时诚实报「不可用」，不兜底作答。
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -18,12 +18,12 @@ import { STORE_DIR } from "./store.js";
 export interface KbHealth {
   platform: "fastgpt" | "local";
   configured: boolean; // 必需 env 是否齐全（不回传值）
-  reachable: boolean; // 探活结果（local 恒为 false，但 fallback 永远可用）
+  reachable: boolean; // 探活结果
   kbId?: string;
   embeddingModel?: string;
   baseUrlHint?: string; // 仅回主机名提示，不回完整地址/凭据
   indexStatus: "ready" | "indexing" | "error" | "unknown";
-  fallback: "local-memory-search";
+  fallback: "none"; // ADR-010：已弃本地回退，FastGPT 为唯一知识源
   message?: string;
   checkedAt: string;
 }
@@ -41,6 +41,12 @@ export interface KbCollection {
   chunkCount?: number;
   indexStatus: "ready" | "indexing" | "error" | "unknown" | "local-archive";
   source: "fastgpt" | "local";
+}
+export interface KbChunkPreview {
+  id: string;
+  q: string; // 切片正文（FastGPT 主字段）
+  a: string; // QA 模式下的答案侧，普通切片为空
+  chunkIndex: number;
 }
 export interface KnowledgeConfigInput {
   platform?: "fastgpt" | "local";
@@ -137,15 +143,15 @@ export async function health(): Promise<KbHealth> {
     embeddingModel: FASTGPT_EMBEDDING_MODEL || undefined,
     baseUrlHint: baseUrlHint(),
     indexStatus: "unknown",
-    fallback: "local-memory-search",
+    fallback: "none",
     checkedAt: new Date().toISOString(),
   };
 
   if (!isFastgpt()) {
-    return { ...base, message: "当前使用本地知识库（memory_search / hr-chunks）" };
+    return { ...base, message: "知识库平台未启用 FastGPT（ADR-010：已无本地回退）" };
   }
   if (!isConfigured()) {
-    return { ...base, message: "FastGPT 未配置完整（缺 BASE_URL/API_KEY/KB_ID）—— 已回退本地检索" };
+    return { ...base, message: "FastGPT 未配置完整（缺 BASE_URL/API_KEY/KB_ID）—— 知识库不可用" };
   }
   // 可达性探活：用确认存在的轻量端点（4.8.22 实测 200）。
   try {
@@ -156,7 +162,7 @@ export async function health(): Promise<KbHealth> {
     base.message = res.ok ? "FastGPT 可达" : `FastGPT 可达，但探活返回 ${res.status}`;
   } catch (err) {
     base.reachable = false;
-    base.message = `FastGPT 不可达（${(err as Error).name}）—— 已回退本地检索`;
+    base.message = `FastGPT 不可达（${(err as Error).name}）—— 知识库暂时不可用`;
   }
   return base;
 }
@@ -168,6 +174,7 @@ interface CollectionMeta {
   version?: string;
   category?: string;
   filename?: string;
+  datasetId?: string; // 归属库（用于 KB 级受限判定，ADR-010）
 }
 const COLLECTION_META_TTL_MS = 5 * 60_000;
 const collectionMetaCache = new Map<string, { meta: CollectionMeta; expiresAt: number }>();
@@ -186,7 +193,7 @@ async function resolveCollectionMeta(collectionId: string): Promise<CollectionMe
   try {
     const res = await fgFetch(`/api/core/dataset/collection/detail?id=${encodeURIComponent(collectionId)}`, { method: "GET" });
     if (res.ok) {
-      const json = (await res.json()) as { data?: { name?: string; sourceName?: string; metadata?: Record<string, unknown> } };
+      const json = (await res.json()) as { data?: { name?: string; sourceName?: string; datasetId?: string; metadata?: Record<string, unknown> } };
       const m = json?.data?.metadata ?? {};
       const rawName = json?.data?.sourceName || json?.data?.name || "";
       meta = {
@@ -194,6 +201,7 @@ async function resolveCollectionMeta(collectionId: string): Promise<CollectionMe
         version: typeof m.version === "string" ? m.version : undefined,
         category: typeof m.category === "string" ? m.category : undefined,
         filename: (typeof m.source_file === "string" && m.source_file) || stripDocIdPrefix(rawName) || undefined,
+        datasetId: typeof json?.data?.datasetId === "string" ? json.data.datasetId : undefined,
       };
     }
   } catch {
@@ -266,7 +274,7 @@ async function searchOneDataset(datasetId: string, query: string, topK: number):
  * 多库容错：用 allSettled——部分库挂不影响其余；**全部失败才抛**（触发上层回退本地，回退链不能断）。
  */
 export async function search(query: string, topK = 5, datasetIds?: string[]): Promise<KbChunk[]> {
-  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，检索请回退本地 memory_search");
+  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，知识库不可用");
   // undefined 表示旧调用方，兼容默认单库；显式 [] 表示该 agent 没有任何绑定，必须返回空而非越权回退默认库。
   const ids = datasetIds === undefined ? [FASTGPT_KB_ID] : datasetIds;
   if (ids.length === 0) return [];
@@ -283,54 +291,32 @@ export async function search(query: string, topK = 5, datasetIds?: string[]): Pr
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }
-export interface ImportMeta {
-  title?: string;
-  doc_id?: string;
-  version?: string;
-  category?: string;
-  datasetId?: string; // #45：多库目标；省略则导入默认 FASTGPT_KB_ID
-}
-
 /**
- * 把一篇文档（已带 frontmatter 的 Markdown 全文）导入 FastGPT，作为一个 text collection。
- * 切片交给 FastGPT（ADR-006 路 A，自研预切片仅作 fallback）。
- * doc_id/version 双通道注入：① collection 级 metadata；② collection name 前缀 `[doc_id] title`
- *   —— name 必经 searchTest 的 sourceName 回吐，是引用回填的兜底通道（#40 探针核实落点）。
- * 返回 { externalDocId, collectionId }：FastGPT 中该文档的稳定标识 = collectionId。
+ * ADR-010 原生解析导入：把**原始文件**直传 FastGPT，由其解析 / 切片 / 向量化
+ * （`POST /api/core/dataset/collection/create/localFile`，multipart：file + data）。
+ * 平台不再自研转换、不注入元数据——实测 localFile **不采纳**自定义 name/metadata
+ * （collection 名 = 上传文件名），故 doc_id/version 治理已取消（ADR-010）。
+ * `datasetId` 省略时退默认 `FASTGPT_KB_ID`。返回 { externalDocId, collectionId }（= FastGPT collectionId）。
  */
 export async function importDocument(
-  text: string,
-  name: string,
-  meta: ImportMeta = {},
+  file: Buffer,
+  filename: string,
+  datasetId?: string,
 ): Promise<{ externalDocId: string; collectionId: string }> {
-  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，导入请走本地 doc-chunker");
-  const title = meta.title || name;
-  const collectionName = meta.doc_id ? `[${meta.doc_id}] ${title}` : title;
+  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，无法导入");
+  const dsId = datasetId || FASTGPT_KB_ID;
+  const fd = new FormData();
+  fd.append("file", new Blob([new Uint8Array(file)]), filename);
+  fd.append("data", JSON.stringify({ datasetId: dsId, parentId: null, trainingType: "chunk", chunkSize: 512 }));
   let res: Response;
   try {
-    res = await fgFetch(
-      "/api/core/dataset/collection/create/text",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          datasetId: meta.datasetId || FASTGPT_KB_ID,
-          parentId: null,
-          name: collectionName,
-          text,
-          trainingType: "chunk",
-          chunkSize: 512,
-          chunkSplitter: "",
-          qaPrompt: "",
-          metadata: {
-            doc_id: meta.doc_id,
-            version: meta.version,
-            category: meta.category,
-            source_file: name,
-          },
-        }),
-      },
-      30_000, // 创建 + 入队训练可能较慢
-    );
+    // 不能用 fgFetch（它强制 application/json）；FormData 自带 multipart 边界。
+    res = await fetch(`${FASTGPT_BASE_URL}/api/core/dataset/collection/create/localFile`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${FASTGPT_API_KEY}` },
+      body: fd,
+      signal: AbortSignal.timeout(60_000), // 解析 + 入队训练较慢
+    });
   } catch (err) {
     throw new KnowledgeUnavailableError(`FastGPT 导入不可达（${(err as Error).name}）`);
   }
@@ -341,14 +327,124 @@ export async function importDocument(
   if (!collectionId) throw new KnowledgeUnavailableError("FastGPT 导入未返回 collectionId");
   return { externalDocId: collectionId, collectionId };
 }
-export async function listCollections(): Promise<KbCollection[]> {
-  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
-  // TODO(Gate-B)：列 FastGPT collection + 切片数 + 索引状态。
-  throw new KnowledgeUnavailableError("FastGPT 集合列表待实例就绪后接通（#38）");
+// listV2 每项的训练计数 → 索引状态（ADR-009 §2，2026-06-12 yomakit 实测：trainingAmount=训练队列剩余）。
+function deriveIndexStatus(dataAmount: number, trainingAmount: number): KbCollection["indexStatus"] {
+  if (trainingAmount > 0) return "indexing"; // 还有切片在训练队列
+  if (dataAmount > 0) return "ready"; // 已训练完且有切片
+  return "unknown"; // 空集合 / 计数缺失
 }
-export async function removeCollection(_externalDocId: string): Promise<void> {
+
+/**
+ * 列某库的 FastGPT 集合（ADR-009 原生文档管理：`collection/listV2`，2026-06-12 实测接通）。
+ * `datasetId` 省略时退默认 `FASTGPT_KB_ID`。索引状态由 dataAmount/trainingAmount 派生（无专用进度端点）。
+ * doc_id/version 不在 listV2 回吐（路 A best-effort，按需经 collection/detail 取），列表此处省略不编造。
+ */
+export async function listCollections(datasetId?: string): Promise<KbCollection[]> {
   if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
-  throw new KnowledgeUnavailableError("FastGPT 删除 API 待实例就绪后接通（#38）");
+  const dsId = datasetId || FASTGPT_KB_ID;
+  const out: KbCollection[] = [];
+  const pageSize = 50;
+  for (let offset = 0; offset < 1000; offset += pageSize) {
+    // 安全上限 1000，防异常分页死循环
+    let res: Response;
+    try {
+      res = await fgFetch("/api/core/dataset/collection/listV2", {
+        method: "POST",
+        body: JSON.stringify({ offset, pageSize, datasetId: dsId, parentId: null, searchText: "" }),
+      });
+    } catch (err) {
+      throw new KnowledgeUnavailableError(`FastGPT 集合列表不可达（${(err as Error).name}）`);
+    }
+    if (!res.ok) throw new KnowledgeUnavailableError(`FastGPT 集合列表返回 ${res.status}`);
+    const json = (await res.json()) as { data?: { list?: any[]; total?: number } };
+    const list = json?.data?.list ?? [];
+    for (const it of list) {
+      const dataAmount = Number(it.dataAmount) || 0;
+      const trainingAmount = Number(it.trainingAmount) || 0;
+      out.push({
+        externalDocId: it._id || it.id || "",
+        title: stripDocIdPrefix(it.name || "") || it.name || "",
+        chunkCount: dataAmount,
+        indexStatus: deriveIndexStatus(dataAmount, trainingAmount),
+        source: "fastgpt",
+      });
+    }
+    const total = Number(json?.data?.total) || 0;
+    if (list.length < pageSize || out.length >= total) break;
+  }
+  return out;
+}
+
+/** 删除 FastGPT 集合（ADR-009 原生删除：`collection/delete?id=`，2026-06-12 实测写删闭环通）。审计在路由层落。 */
+export async function removeCollection(collectionId: string): Promise<void> {
+  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
+  if (!collectionId) throw new Error("collectionId 不能为空");
+  let res: Response;
+  try {
+    res = await fgFetch(`/api/core/dataset/collection/delete?id=${encodeURIComponent(collectionId)}`, {
+      method: "DELETE",
+    });
+  } catch (err) {
+    throw new KnowledgeUnavailableError(`FastGPT 删除不可达（${(err as Error).name}）`);
+  }
+  if (!res.ok) throw new KnowledgeUnavailableError(`FastGPT 删除返回 ${res.status}`);
+}
+
+/**
+ * 列某集合的切片正文（ADR-009 切片预览：`data/v2/list`，2026-06-12 实测：项含 _id/q/a/chunkIndex）。
+ * ⚠️ 暴露整段 chunk 正文 → 受限分类内容只读但敏感，调用方必须先过 isCollectionRestricted 的角色闸。
+ */
+export async function listChunks(
+  collectionId: string,
+  offset = 0,
+  pageSize = 20,
+): Promise<{ chunks: KbChunkPreview[]; total: number }> {
+  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
+  if (!collectionId) throw new Error("collectionId 不能为空");
+  let res: Response;
+  try {
+    res = await fgFetch("/api/core/dataset/data/v2/list", {
+      method: "POST",
+      body: JSON.stringify({ offset, pageSize, collectionId, searchText: "" }),
+    });
+  } catch (err) {
+    throw new KnowledgeUnavailableError(`FastGPT 切片列表不可达（${(err as Error).name}）`);
+  }
+  if (!res.ok) throw new KnowledgeUnavailableError(`FastGPT 切片列表返回 ${res.status}`);
+  const json = (await res.json()) as { data?: { list?: any[]; total?: number } };
+  const list = json?.data?.list ?? [];
+  return {
+    chunks: list.map((it) => ({
+      id: it._id || it.id || "",
+      q: it.q || "",
+      a: it.a || "",
+      chunkIndex: Number(it.chunkIndex) || 0,
+    })),
+    total: Number(json?.data?.total) || list.length,
+  };
+}
+
+/**
+ * 某库是否受限（ADR-010：受限标记从分类迁到 **per-KB `restricted` 字段**，存 knowledge.json）。
+ * **fail-closed**：未在平台登记的库一律按受限处理（宁拒勿漏）。
+ */
+export function isKbRestricted(datasetId: string): boolean {
+  if (!datasetId) return true;
+  const kb = readKnowledgeStore().knowledgeBases.find(
+    (k) => k.provider === "fastgpt" && k.externalKbId === datasetId,
+  );
+  if (!kb) return true; // 未登记 → fail-closed
+  return kb.restricted === true;
+}
+
+/**
+ * 该集合是否受限（内容仅 admin 可见，ADR-009 Gate-3 / ADR-010）。
+ * 解析 collection 归属的库 → 查该 KB 的 `restricted` 标记。**fail-closed**：解析不到归属库即按受限处理。
+ */
+export async function isCollectionRestricted(collectionId: string): Promise<boolean> {
+  const meta = await resolveCollectionMeta(collectionId);
+  if (!meta.datasetId) return true; // 无法解析归属库 → fail-closed
+  return isKbRestricted(meta.datasetId);
 }
 
 // —— KB↔数字员工绑定（存自有平台 config-store/knowledge.json，守 ADR-002 边界）——
@@ -358,6 +454,7 @@ export interface KnowledgeBinding {
   provider: "fastgpt" | "local";
   externalKbId?: string;
   boundAgents: string[];
+  restricted?: boolean; // ADR-010：受限库（薪酬/绩效等），其文档列表/切片预览仅 admin 可见
 }
 export interface KnowledgeStore {
   platform: "fastgpt" | "local";
@@ -456,6 +553,7 @@ export interface CreateKbInput {
   name: string;
   intro?: string;
   boundAgents?: string[];
+  restricted?: boolean;
 }
 
 /** 校验并规范化平台提交的绑定配置，拒绝畸形数据、重复 ID 和未知 Agent。 */
@@ -482,7 +580,14 @@ export function validateKnowledgeStore(input: unknown, validAgentIds: string[]):
     const boundAgents = [...new Set(kb.boundAgents)];
     const unknownAgent = boundAgents.find((agentId) => !validAgents.has(agentId));
     if (unknownAgent) throw new Error(`知识库 ${id} 绑定了未知 Agent：${unknownAgent}`);
-    return { id, name, provider: kb.provider, ...(externalKbId ? { externalKbId } : {}), boundAgents };
+    return {
+      id,
+      name,
+      provider: kb.provider,
+      ...(externalKbId ? { externalKbId } : {}),
+      boundAgents,
+      ...(kb.restricted === true ? { restricted: true } : {}),
+    };
   });
   return { platform: raw.platform, knowledgeBases };
 }
@@ -540,6 +645,7 @@ export async function createKnowledgeBase(input: CreateKbInput): Promise<Knowled
     provider: "fastgpt",
     externalKbId: datasetId,
     boundAgents: input.boundAgents ?? [],
+    ...(input.restricted === true ? { restricted: true } : {}),
   };
   const store = readKnowledgeStore();
   store.platform = "fastgpt";

@@ -4,7 +4,7 @@
 //          ② 召回测试（原生，按本库 datasetId）；③ 绑定数字员工。
 import { useEffect, useState } from "react";
 import {
-  Alert, Button, Card, Empty, Form, Input, List, Modal, Select, Space, Spin, Tabs, Tag, message,
+  Alert, Button, Card, Empty, Form, Input, List, Modal, Select, Space, Spin, Switch, Tabs, Tag, message,
 } from "antd";
 import { ArrowLeftOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
@@ -29,8 +29,8 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
   const title = ok
     ? `● FastGPT 已连接 · 默认 KB ${health.kbId ?? "—"} · 索引 ${health.indexStatus}`
     : health.platform === "local"
-      ? "● 当前使用本地知识库（memory_search / hr-chunks）"
-      : "● FastGPT 不可用 · 已回退本地检索";
+      ? "● 知识库平台未启用 FastGPT"
+      : "● FastGPT 不可用 · 知识库暂时不可用（无本地回退）";
   return (
     <Alert
       type={type}
@@ -40,7 +40,7 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
         <Space size="large" wrap>
           <span>地址 {health.baseUrlHint ?? "（未配置）"}</span>
           <span>embedding {health.embeddingModel ?? "—"}</span>
-          <span>回退 本地 memory_search</span>
+          <span>回退 无（FastGPT 唯一知识源）</span>
           {health.message && <span style={{ color: "#888" }}>{health.message}</span>}
         </Space>
       }
@@ -104,6 +104,14 @@ function NewKbModal({
             options={agents.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` }))}
           />
         </Form.Item>
+        <Form.Item
+          name="restricted"
+          label="受限库"
+          valuePropName="checked"
+          tooltip="受限库（薪酬/绩效等）的文档列表与切片预览仅管理员可见"
+        >
+          <Switch />
+        </Form.Item>
       </Form>
       <Alert
         type="info"
@@ -133,7 +141,16 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
   useEffect(load, []);
 
   const columns: ProColumns<KnowledgeBinding>[] = [
-    { title: "名称", dataIndex: "name", render: (_, r) => <a onClick={() => onSelect(r)}>{r.name}</a> },
+    {
+      title: "名称",
+      dataIndex: "name",
+      render: (_, r) => (
+        <Space>
+          <a onClick={() => onSelect(r)}>{r.name}</a>
+          {r.restricted && <Tag color="volcano">受限</Tag>}
+        </Space>
+      ),
+    },
     {
       title: "平台",
       dataIndex: "provider",
@@ -322,6 +339,7 @@ function KbDetail({ kb, onBack }: { kb: KnowledgeBinding; onBack: () => void }) 
         </Button>
         <strong style={{ fontSize: 16 }}>{kb.name}</strong>
         <Tag color={kb.provider === "fastgpt" ? "blue" : "default"}>{kb.provider}</Tag>
+        {kb.restricted && <Tag color="volcano">受限（仅管理员可见内容）</Tag>}
         {kb.externalKbId && <span style={{ color: "#888" }}>KB ID: {kb.externalKbId}</span>}
       </Space>
       <Tabs
