@@ -28,6 +28,8 @@ export interface Me {
 export interface Providers {
   session_enabled: boolean;
   providers: { feishu: boolean; dingtalk: boolean };
+  demo_open_login: { enabled: boolean; role: "ops" | "audit" | null };
+  demo_access_code: { enabled: boolean; role: "ops" | "audit" | null };
 }
 
 export async function fetchMe(): Promise<Me> {
@@ -35,6 +37,9 @@ export async function fetchMe(): Promise<Me> {
 }
 export async function fetchProviders(): Promise<Providers> {
   return (await api.get("/auth/providers")).data;
+}
+export async function loginWithDemoAccessCode(code: string): Promise<void> {
+  await api.post("/auth/demo/login", { code });
 }
 export async function logout(): Promise<void> {
   await api.post("/auth/logout");

@@ -3,7 +3,7 @@
 // 不 glob config-store/*.json，故此处新增 users.json 不会被生成器/校验器绊到。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BOOTSTRAP_ADMINS } from "../config.js";
+import { BOOTSTRAP_ADMINS, DEMO_OPEN_LOGIN_ROLE } from "../config.js";
 import { STORE_DIR } from "../services/store.js";
 import { isPlatformRole } from "./types.js";
 import type { IdpIdentity, PlatformRole, PlatformUser } from "./types.js";
@@ -34,6 +34,7 @@ export function readUsers(): StoredUser[] {
 
 /** 用同一 IdP 的 unionId 命中。 */
 function matchByUnionId(users: StoredUser[], idp: IdpIdentity["idp"], unionId: string): StoredUser | undefined {
+  if (idp === "demo") return undefined;
   const key = idp === "feishu" ? "feishuUnionId" : "dingtalkUnionId";
   return users.find((u) => u[key] && u[key] === unionId);
 }
@@ -57,7 +58,8 @@ function inBootstrap(id: IdpIdentity): boolean {
  *   ① users.json 命中（先同 IdP unionId，再连接键）→ 用其角色
  *   ② 引导管理员名单（env）→ admin
  *   ③ 组织架构自动判定（③ 阶段接入，本步留空）
- *   ④ 默认拒绝（返回 null，调用方提示联系管理员）
+ *   ④ 比赛展示临时开放角色（env，仅 ops/audit）
+ *   ⑤ 默认拒绝（返回 null，调用方提示联系管理员）
  */
 export function resolveUser(id: IdpIdentity): PlatformUser | null {
   const users = readUsers();
@@ -79,6 +81,15 @@ export function resolveUser(id: IdpIdentity): PlatformUser | null {
       platformUserId: `${id.idp}:${id.unionId}`,
       name: id.name,
       platformRole: "admin",
+      type: "human",
+      idp: id.idp,
+    };
+  }
+  if (DEMO_OPEN_LOGIN_ROLE) {
+    return {
+      platformUserId: `${id.idp}:${id.unionId}`,
+      name: id.name,
+      platformRole: DEMO_OPEN_LOGIN_ROLE,
       type: "human",
       idp: id.idp,
     };

@@ -1,9 +1,18 @@
 // 平台登录路由（决策六 ①）：飞书 OAuth 登录 + session 颁发 + me/logout。
 // 本路由公开（挂在 authMiddleware 之前）。
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { Router, type Request, type Response } from "express";
-import { DEV_LOCALHOST_ADMIN, PUBLIC_BASE_URL, SESSION_SECRET } from "../config.js";
-import { isLocalhost } from "../middleware.js";
+import {
+  DEMO_ACCESS_CODE,
+  DEMO_ACCESS_ENABLED,
+  DEMO_ACCESS_ROLE,
+  DEMO_OPEN_LOGIN_ROLE,
+  DEV_LOCALHOST_ADMIN,
+  PUBLIC_BASE_URL,
+  SESSION_SECRET,
+} from "../config.js";
+import { isLocalhost, rateLimit } from "../middleware.js";
 import { feishuAuthorizeUrl, feishuConfigured, feishuExchangeCode } from "../auth/feishu.js";
 import { dingtalkAuthorizeUrl, dingtalkConfigured, dingtalkExchangeCode } from "../auth/dingtalk.js";
 import {
@@ -18,6 +27,16 @@ import { resolveUser } from "../auth/users.js";
 import { log } from "../util.js";
 
 export const authRouter = Router();
+const demoLoginLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "访问码尝试过于频繁，请稍后再试" });
+
+/** 恒定时间校验访问码；长度不同时仍执行一次 timingSafeEqual。 */
+export function verifyDemoAccessCode(candidate: unknown): boolean {
+  if (!DEMO_ACCESS_ENABLED || typeof candidate !== "string") return false;
+  const actual = Buffer.from(DEMO_ACCESS_CODE);
+  const input = Buffer.from(candidate);
+  const comparable = input.length === actual.length ? input : Buffer.alloc(actual.length);
+  return timingSafeEqual(actual, comparable) && input.length === actual.length;
+}
 
 /** 计算回调基址：优先 PUBLIC_BASE_URL，否则按请求头推导（反代需正确转发协议/host）。 */
 function baseUrl(req: Request): string {
@@ -34,6 +53,14 @@ authRouter.get("/auth/providers", (_req: Request, res: Response) => {
     providers: {
       feishu: feishuConfigured() && Boolean(SESSION_SECRET),
       dingtalk: dingtalkConfigured() && Boolean(SESSION_SECRET),
+    },
+    demo_open_login: {
+      enabled: Boolean(DEMO_OPEN_LOGIN_ROLE),
+      role: DEMO_OPEN_LOGIN_ROLE || null,
+    },
+    demo_access_code: {
+      enabled: DEMO_ACCESS_ENABLED,
+      role: DEMO_ACCESS_ENABLED ? DEMO_ACCESS_ROLE : null,
     },
   });
 });
@@ -54,6 +81,25 @@ authRouter.get("/auth/me", (req: Request, res: Response) => {
 authRouter.post("/auth/logout", (_req: Request, res: Response) => {
   clearSession(res);
   res.json({ ok: true });
+});
+
+/** 比赛访问码登录：绕过企业 IdP，但仅签发 ops/audit 临时会话。 */
+authRouter.post("/auth/demo/login", demoLoginLimiter, (req: Request, res: Response) => {
+  if (!DEMO_ACCESS_ENABLED) return res.status(404).json({ error: "比赛访问码登录未启用" });
+  if (!verifyDemoAccessCode(req.body?.code)) {
+    log("WARN", `比赛访问码登录失败：ip=${req.ip || req.socket.remoteAddress || "unknown"}`);
+    return res.status(401).json({ error: "访问码错误" });
+  }
+
+  const visitorId = randomUUID();
+  issueSession(res, {
+    platformUserId: `demo:${visitorId}`,
+    name: "比赛访客",
+    platformRole: DEMO_ACCESS_ROLE as "ops" | "audit",
+    idp: "demo",
+  });
+  log("INFO", `比赛访问码登录成功：visitor=${visitorId}（${DEMO_ACCESS_ROLE}）`);
+  return res.json({ ok: true });
 });
 
 /** 飞书登录入口：生成 state，跳转飞书授权页。 */

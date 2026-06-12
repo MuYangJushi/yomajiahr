@@ -22,7 +22,7 @@ export const ROLE_RANK: Record<PlatformRole, number> = {
 };
 
 /** IdP 来源。 */
-export type IdpKind = "feishu" | "dingtalk";
+export type IdpKind = "feishu" | "dingtalk" | "demo";
 
 /** 经 IdP 认证 + 归一化后的平台用户。 */
 export interface PlatformUser {

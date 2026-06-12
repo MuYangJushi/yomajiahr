@@ -67,6 +67,22 @@ export const BOOTSTRAP_ADMINS = (env.PLATFORM_BOOTSTRAP_ADMINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+/**
+ * 比赛展示临时开放：未命中名单的已认证 IdP 用户获得指定最低权限角色。
+ * 空值/非法值/admin 均关闭该通道，避免误配置把任意外部账号提升为管理员。
+ */
+const DEMO_OPEN_LOGIN_ROLE_RAW = (env.PLATFORM_DEMO_OPEN_LOGIN_ROLE || "").trim();
+export const DEMO_OPEN_LOGIN_ROLE: "ops" | "audit" | "" =
+  DEMO_OPEN_LOGIN_ROLE_RAW === "ops" || DEMO_OPEN_LOGIN_ROLE_RAW === "audit" ? DEMO_OPEN_LOGIN_ROLE_RAW : "";
+/**
+ * 比赛访问码登录：独立于企业 IdP，供外部评委/体验用户临时进入。
+ * 访问码至少 16 字符，角色只允许 ops/audit；任一条件不满足即关闭。
+ */
+export const DEMO_ACCESS_CODE = env.PLATFORM_DEMO_ACCESS_CODE || "";
+const DEMO_ACCESS_ROLE_RAW = (env.PLATFORM_DEMO_ACCESS_ROLE || "ops").trim();
+export const DEMO_ACCESS_ROLE: "ops" | "audit" | "" =
+  DEMO_ACCESS_ROLE_RAW === "ops" || DEMO_ACCESS_ROLE_RAW === "audit" ? DEMO_ACCESS_ROLE_RAW : "";
+export const DEMO_ACCESS_ENABLED = Boolean(SESSION_SECRET && DEMO_ACCESS_CODE.length >= 16 && DEMO_ACCESS_ROLE);
 export const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
 export const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 
