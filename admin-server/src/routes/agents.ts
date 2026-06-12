@@ -23,7 +23,7 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
   }
 });
 
-agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, res: Response) => {
+agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res: Response) => {
   res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
 });
 
@@ -60,7 +60,7 @@ agentsRouter.delete("/config/agents/:id", requireRole("ops"), async (req: Reques
   }
 });
 
-agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLimiter, (req: Request, res: Response) => {
+agentsRouter.post("/config/agent-onboarding", requireRole("ops"), onboardingLimiter, (req: Request, res: Response) => {
   try {
     res.status(202).json(startOnboarding(req.user!.platformUserId, req.body));
   } catch (err) {
@@ -68,13 +68,13 @@ agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLi
   }
 });
 
-agentsRouter.get("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+agentsRouter.get("/config/agent-onboarding/:id", requireRole("ops"), (req: Request, res: Response) => {
   const session = getOnboarding(req.user!.platformUserId, String(req.params.id));
   if (!session) return res.status(404).json({ error: "会话不存在或已过期" });
   res.json(session);
 });
 
-agentsRouter.delete("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+agentsRouter.delete("/config/agent-onboarding/:id", requireRole("ops"), (req: Request, res: Response) => {
   try {
     const session = cancelOnboarding(req.user!.platformUserId, String(req.params.id));
     if (!session) return res.status(404).json({ error: "会话不存在或已过期" });
