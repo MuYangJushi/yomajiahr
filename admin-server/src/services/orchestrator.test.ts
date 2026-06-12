@@ -130,6 +130,8 @@ test("修改数字员工时可同时新增另一渠道，并保留 MEMORY.md", a
   assert.match(readFileSync(join(stateDir, "workspaces", "integration-agent", "SOUL.md"), "utf-8"), /负责集成测试/);
   assert.equal(readFileSync(memoryPath, "utf-8"), "custom memory\n");
   assert.equal(channels["dingtalk-connector"]["integration-agent"].clientId, "${DINGTALK_INTEGRATION_AGENT_CLIENT_ID}");
+  const runtime = JSON.parse(readFileSync(join(stateDir, "openclaw.json"), "utf-8"));
+  assert.equal("persona" in runtime.agents.list[0], false);
   assert.equal(
     bindings.some(
       (b: any) =>

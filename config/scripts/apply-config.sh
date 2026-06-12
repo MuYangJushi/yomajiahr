@@ -139,6 +139,12 @@ node "$CONFIG_DIR/dist/generate-config.js" \
   --check-fs --skills-dir "$SKILLS_DIR" \
   || fail "生成/校验失败（未改动运行时配置）"
 
+# 平台校验只覆盖本仓库约束；停止现有 Gateway 前再用 OpenClaw 原生 schema 校验 staging，
+# 避免平台新增字段意外进入运行时配置后导致 Gateway 启动失败。
+OPENCLAW_STATE_DIR="$STATE_DIR" OPENCLAW_CONFIG_PATH="$STAGING" \
+  openclaw config validate --json >/dev/null \
+  || fail "OpenClaw 原生配置校验失败（未改动运行时配置）"
+
 # —— 2. 快照 last-good + store 版本 ——
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 [ -f "$RUNTIME" ] && cp "$RUNTIME" "$LASTGOOD"

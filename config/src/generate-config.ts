@@ -90,9 +90,9 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
     config.channels[domain] = { ...(config.channels[domain] ?? {}), accounts };
   }
 
-  // —— agents.list：整体替换；剥离平台专用的 role 字段（不进运行时配置）——
+  // —— agents.list：整体替换；剥离平台专用字段（不进 OpenClaw 运行时配置）——
   config.agents ??= {};
-  config.agents.list = store.agents.map(({ role, ...agent }) => agent);
+  config.agents.list = store.agents.map(({ role, persona, ...agent }) => agent);
 
   // —— bindings：整体替换 ——
   config.bindings = store.bindings;
