@@ -9,6 +9,7 @@ export interface AgentEntry {
   id: string;
   role: "employee" | "admin";
   name?: string;
+  persona?: string;
   default?: boolean;
   workspace: string;
   skills: string[];

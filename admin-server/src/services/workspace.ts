@@ -19,8 +19,12 @@ export function workspaceDir(id: string): string {
   return join(WS_ROOT, id);
 }
 
-/** 渲染并写入 workspace 文件；返回目录与已写文件列表。 */
-export function renderWorkspace(id: string, vars: Record<string, string>): {
+/** 渲染并写入 workspace 文件；修改时可保留 MEMORY.md。 */
+export function renderWorkspace(
+  id: string,
+  vars: Record<string, string>,
+  options: { preserveMemory?: boolean } = {},
+): {
   dir: string;
   written: string[];
 } {
@@ -28,6 +32,7 @@ export function renderWorkspace(id: string, vars: Record<string, string>): {
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];
   for (const f of FILES) {
+    if (f === "MEMORY.md" && options.preserveMemory && existsSync(join(dir, f))) continue;
     let text = readFileSync(join(TPL_DIR, f), "utf-8");
     for (const [k, v] of Object.entries(vars)) {
       text = text.replaceAll(`{{${k}}}`, v);

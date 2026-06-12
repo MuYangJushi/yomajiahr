@@ -1,17 +1,19 @@
 // 数字员工列表（ProTable）+ 新建入口。
 import { useEffect, useRef, useState } from "react";
-import { Button, Space, Tag } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Button, Modal, Space, Tag, message } from "antd";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-components";
 import {
   fetchAgents,
   fetchChannels,
   fetchSkills,
+  deleteAgent,
   type AgentRow,
   type ChannelsInfo,
   type Skill,
 } from "./api";
 import CreateAgentWizard from "./CreateAgentWizard";
+import EditAgentModal from "./EditAgentModal";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
   employee: { color: "blue", label: "员工面（只读）" },
@@ -21,6 +23,7 @@ const ROLE_TAG: Record<string, { color: string; label: string }> = {
 export default function Agents() {
   const actionRef = useRef<ActionType>();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<AgentRow | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [channels, setChannels] = useState<ChannelsInfo | null>(null);
 
@@ -70,6 +73,56 @@ export default function Agents() {
         </Space>
       ),
     },
+    {
+      title: "操作",
+      valueType: "option",
+      render: (_, r) => {
+        const protectedAgent = r.default || r.id === "hr-assistant" || r.id === "hr-admin";
+        return [
+          <Button
+            key="edit"
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            disabled={protectedAgent}
+            title={protectedAgent ? "内置数字员工由仓库配置维护" : undefined}
+            onClick={() => setEditingAgent(r)}
+          >
+            修改
+          </Button>,
+          <Button
+            key="delete"
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            disabled={protectedAgent}
+            title={protectedAgent ? "内置数字员工不能删除" : undefined}
+            onClick={() => {
+              Modal.confirm({
+                title: `删除数字员工“${r.name}”？`,
+                content: "将同时删除其 workspace、独占渠道账号和知识库绑定。此操作上线后立即生效。",
+                okText: "确认删除",
+                okButtonProps: { danger: true },
+                cancelText: "取消",
+                async onOk() {
+                  try {
+                    await deleteAgent(r.id);
+                    message.success("数字员工已删除");
+                    actionRef.current?.reload();
+                  } catch (err: any) {
+                    message.error(err?.response?.data?.error || err.message || "删除失败");
+                    throw err;
+                  }
+                },
+              });
+            }}
+          >
+            删除
+          </Button>,
+        ];
+      },
+    },
   ];
 
   return (
@@ -109,6 +162,15 @@ export default function Agents() {
           channels={channels}
         />
       )}
+      <EditAgentModal
+        agent={editingAgent}
+        skills={skills}
+        onClose={() => setEditingAgent(null)}
+        onUpdated={() => {
+          setEditingAgent(null);
+          actionRef.current?.reload();
+        }}
+      />
     </>
   );
 }

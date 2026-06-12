@@ -411,6 +411,21 @@ export function writeKnowledgeStore(s: KnowledgeStore): void {
   renameSync(tmp, STORE_PATH);
 }
 
+/** 删除数字员工时同步移除所有知识库绑定。 */
+export function unbindAgentFromKnowledge(agentId: string): void {
+  if (!existsSync(STORE_PATH)) return;
+  const store = readKnowledgeStore();
+  let changed = false;
+  for (const kb of store.knowledgeBases) {
+    const next = kb.boundAgents.filter((id) => id !== agentId);
+    if (next.length !== kb.boundAgents.length) {
+      kb.boundAgents = next;
+      changed = true;
+    }
+  }
+  if (changed) writeKnowledgeStore(store);
+}
+
 /**
  * #45 多库检索路由：解析某 agent 应检索的 FastGPT datasetId 集合（按 knowledge.json 绑定）。
  * 仅取 provider=fastgpt 且 boundAgents 含该 agent、且有 externalKbId 的库。

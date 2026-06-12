@@ -1,12 +1,13 @@
-// 数字员工配置路由（P1 支柱一）：列表 / 新建（原子编排上线）/ 技能 / 渠道。
+// 数字员工配置路由（P1 支柱一）：列表 / 新建 / 修改 / 删除 / 技能 / 渠道。
 import { Router, type Request, type Response } from "express";
-import { listAgents } from "../services/orchestrator.js";
+import { deleteAgent, listAgents, updateAgent } from "../services/orchestrator.js";
 import { cancelOnboarding, getOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
 import { requireRole } from "../auth/rbac.js";
 import { rateLimit } from "../middleware.js";
+import { appendAuditLog } from "../util.js";
 
 export const agentsRouter = Router();
 
@@ -24,6 +25,39 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
 
 agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, res: Response) => {
   res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
+});
+
+agentsRouter.put("/config/agents/:id", requireRole("admin"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    const result = await updateAgent(id, req.body);
+    appendAuditLog("agent.update", id, {
+      agent_id: id,
+      name: result.agent.name,
+      role: result.agent.role,
+      skills: result.agent.skills,
+      operator: req.user?.platformUserId || "",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
+  }
+});
+
+agentsRouter.delete("/config/agents/:id", requireRole("admin"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    const result = await deleteAgent(id);
+    appendAuditLog("agent.delete", id, {
+      agent_id: id,
+      operator: req.user?.platformUserId || "",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 409).json({ error: message });
+  }
 });
 
 agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLimiter, (req: Request, res: Response) => {

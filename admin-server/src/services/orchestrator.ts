@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { triggerApply } from "../../lib/config-apply.mjs";
-import { ENV_PATH, runtimeEnv, upsertEnv } from "./secrets.js";
+import { unbindAgentFromKnowledge } from "./knowledge.js";
+import { ENV_PATH, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type AgentEntry } from "./store.js";
 import { renderWorkspace, workspaceDir } from "./workspace.js";
 
@@ -30,6 +31,11 @@ function toolsForRole(role: "employee" | "admin"): { allow: string[]; deny: stri
 }
 
 const ROLE_LABEL = { employee: "员工面（只读）", admin: "管理面（可写）" } as const;
+const BUILTIN_AGENT_IDS = new Set(["hr-assistant", "hr-admin"]);
+
+function isProtectedAgent(agent: AgentEntry): boolean {
+  return Boolean(agent.default) || BUILTIN_AGENT_IDS.has(agent.id);
+}
 
 export interface CreateAgentInput {
   id: string;
@@ -67,6 +73,13 @@ export interface ApplyResult {
   message?: string;
   version?: string;
   mode?: string;
+}
+
+export interface UpdateAgentInput {
+  name: string;
+  role: "employee" | "admin";
+  persona?: string;
+  skills: string[];
 }
 
 function validateSkills(skills: unknown): asserts skills is string[] {
@@ -184,6 +197,7 @@ export function listAgents() {
     id: a.id,
     role: a.role,
     name: a.name || a.id,
+    persona: typeof a.persona === "string" ? a.persona : "",
     default: Boolean(a.default),
     skills: a.skills || [],
     channels: bindings
@@ -242,6 +256,7 @@ export async function createAgent(
         id: input.id,
         role: input.role,
         name: input.name,
+        persona: input.persona || "",
         workspace: `~/.openclaw/workspaces/${input.id}`,
         skills: input.skills,
         heartbeat: {},
@@ -291,4 +306,143 @@ export async function createAgentFromCredentials(
   onApplied?: () => void,
 ): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
   return createAgent(assembleCreateInput(draft, credentials), onApplied);
+}
+
+function validateUpdateInput(input: UpdateAgentInput): void {
+  if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
+  if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
+  if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
+  validateSkills(input.skills);
+}
+
+function workspaceVars(id: string, input: UpdateAgentInput): Record<string, string> {
+  return {
+    ID: id,
+    NAME: input.name.trim(),
+    ROLE: input.role,
+    ROLE_LABEL: ROLE_LABEL[input.role],
+    PERSONA: input.persona?.trim() || "（未填写人设）",
+    SKILLS: input.skills.map((s) => `- ${s}`).join("\n"),
+  };
+}
+
+/** 修改数字员工资料与权限配置；ID、渠道账号和 MEMORY.md 保持不变。 */
+export async function updateAgent(
+  id: string,
+  input: UpdateAgentInput,
+): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
+  return withLock(async () => {
+    validateUpdateInput(input);
+    const store = readStore();
+    const index = store.agents.findIndex((a) => a.id === id);
+    if (index < 0) throw new Error(`agent 不存在：${id}`);
+    if (isProtectedAgent(store.agents[index])) throw new Error("内置数字员工不能修改");
+    const wsDir = workspaceDir(id);
+    if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-update-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    cpSync(wsDir, join(snap, "workspace"), { recursive: true });
+    try {
+      const current = store.agents[index];
+      const next: AgentEntry = {
+        ...current,
+        name: input.name.trim(),
+        role: input.role,
+        persona: input.persona?.trim() || "",
+        skills: input.skills,
+        tools: toolsForRole(input.role),
+      };
+      store.agents[index] = next;
+      renderWorkspace(id, workspaceVars(id, input), { preserveMemory: true });
+      writeStore(store);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
+      rmSync(snap, { recursive: true, force: true });
+      return { agent: next, apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        rmSync(wsDir, { recursive: true, force: true });
+        cpSync(join(snap, "workspace"), wsDir, { recursive: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+function secretKeysIn(value: unknown, out = new Set<string>()): Set<string> {
+  if (typeof value === "string") {
+    const match = value.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+    if (match) out.add(match[1]);
+  } else if (Array.isArray(value)) {
+    for (const item of value) secretKeysIn(item, out);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) secretKeysIn(item, out);
+  }
+  return out;
+}
+
+/** 删除非内置数字员工，并清理其独占渠道、凭据、workspace 与知识库绑定。 */
+export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
+  return withLock(async () => {
+    const store = readStore();
+    const agent = store.agents.find((a) => a.id === id);
+    if (!agent) throw new Error(`agent 不存在：${id}`);
+    if (isProtectedAgent(agent)) throw new Error("内置数字员工不能删除");
+    const wsDir = workspaceDir(id);
+    const snap = mkdtempSync(join(tmpdir(), "orch-delete-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    const envExisted = existsSync(ENV_PATH);
+    if (envExisted) cpSync(ENV_PATH, join(snap, ".env"));
+    if (existsSync(wsDir)) cpSync(wsDir, join(snap, "workspace"), { recursive: true });
+
+    try {
+      const removedBindings = store.bindings.filter((b) => b.agentId === id);
+      store.agents = store.agents.filter((a) => a.id !== id);
+      store.bindings = store.bindings.filter((b) => b.agentId !== id);
+      const removedSecretKeys = new Set<string>();
+      for (const binding of removedBindings) {
+        const { channel, accountId } = binding.match;
+        const stillUsed = store.bindings.some((b) => b.match.channel === channel && b.match.accountId === accountId);
+        if (stillUsed) continue;
+        const account = store.channels[channel]?.[accountId];
+        if (account) secretKeysIn(account, removedSecretKeys);
+        delete store.channels[channel]?.[accountId];
+      }
+      writeStore(store);
+      unbindAgentFromKnowledge(id);
+      removeEnv(removedSecretKeys);
+      rmSync(wsDir, { recursive: true, force: true });
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`删除失败：${apply.message || apply.status}`);
+      rmSync(snap, { recursive: true, force: true });
+      return { apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
+        else rmSync(ENV_PATH, { force: true });
+        rmSync(wsDir, { recursive: true, force: true });
+        if (existsSync(join(snap, "workspace"))) cpSync(join(snap, "workspace"), wsDir, { recursive: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
 }

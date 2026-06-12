@@ -39,7 +39,13 @@ process.env.PATH = `${fakeBin}:${process.env.PATH}`;
 process.env.PROBE_WINDOW = "1";
 process.env.READY_SUSTAIN = "1";
 
-const { assembleCreateInput, createAgentFromCredentials, validateAgentDraft } = await import("./orchestrator.js");
+const {
+  assembleCreateInput,
+  createAgentFromCredentials,
+  deleteAgent,
+  updateAgent,
+  validateAgentDraft,
+} = await import("./orchestrator.js");
 const { runtimeEnv } = await import("./secrets.js");
 
 const baseDraft = {
@@ -99,6 +105,60 @@ test("完整成功路径写入 Agent、技能、渠道、binding、密钥并通�
     match: { channel: "feishu", accountId: "integration-agent" },
   });
   assert.match(readFileSync(join(stateDir, ".env"), "utf-8"), /FEISHU_INTEGRATION_AGENT_APP_SECRET=integration-secret/);
+});
+
+test("修改数字员工同步配置与 workspace，并保留 MEMORY.md", async () => {
+  const memoryPath = join(stateDir, "workspaces", "integration-agent", "MEMORY.md");
+  writeFileSync(memoryPath, "custom memory\n");
+  const result = await updateAgent("integration-agent", {
+    name: "更新后的助手",
+    role: "admin",
+    persona: "负责集成测试",
+    skills: ["hr-general"],
+  });
+  assert.equal(result.agent.role, "admin");
+  const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  assert.equal(agents[0].name, "更新后的助手");
+  assert.equal(agents[0].persona, "负责集成测试");
+  assert.ok(agents[0].tools.allow.includes("memory_write"));
+  assert.match(readFileSync(join(stateDir, "workspaces", "integration-agent", "SOUL.md"), "utf-8"), /负责集成测试/);
+  assert.equal(readFileSync(memoryPath, "utf-8"), "custom memory\n");
+});
+
+test("内置数字员工不能修改或删除", async () => {
+  const agentsPath = join(stateDir, "config-store", "agents.json");
+  const agents = JSON.parse(readFileSync(agentsPath, "utf-8"));
+  agents[0].default = true;
+  writeFileSync(agentsPath, JSON.stringify(agents, null, 2) + "\n");
+  await assert.rejects(
+    updateAgent("integration-agent", { name: "禁止修改", role: "employee", skills: ["hr-general"] }),
+    /内置数字员工不能修改/,
+  );
+  await assert.rejects(deleteAgent("integration-agent"), /内置数字员工不能删除/);
+  agents[0].default = false;
+  writeFileSync(agentsPath, JSON.stringify(agents, null, 2) + "\n");
+});
+
+test("删除数字员工清理独占渠道、密钥、workspace 和知识库绑定", async () => {
+  writeFileSync(
+    join(stateDir, "config-store", "knowledge.json"),
+    JSON.stringify({
+      platform: "local",
+      knowledgeBases: [{ id: "kb", name: "测试库", provider: "local", boundAgents: ["integration-agent"] }],
+    }),
+  );
+  const result = await deleteAgent("integration-agent");
+  assert.equal(result.apply.status, "success");
+  const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
+  const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
+  const knowledge = JSON.parse(readFileSync(join(stateDir, "config-store", "knowledge.json"), "utf-8"));
+  assert.equal(agents.some((a: any) => a.id === "integration-agent"), false);
+  assert.equal(Boolean(channels.feishu["integration-agent"]), false);
+  assert.equal(bindings.some((b: any) => b.agentId === "integration-agent"), false);
+  assert.deepEqual(knowledge.knowledgeBases[0].boundAgents, []);
+  assert.doesNotMatch(readFileSync(join(stateDir, ".env"), "utf-8"), /FEISHU_INTEGRATION_AGENT_/);
+  assert.equal(existsSync(join(stateDir, "workspaces", "integration-agent")), false);
 });
 
 test("配置应用失败时恢复 Agent、渠道、binding、密钥和 workspace", async () => {
