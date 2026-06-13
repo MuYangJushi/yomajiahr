@@ -2,7 +2,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
-import { CATEGORIES } from "../lib/categories.mjs";
 
 // 运行文件位于 dist/server.js；据此推导目录。
 const ADMIN_DIR = join(import.meta.dirname, ".."); // admin-server/
@@ -11,9 +10,8 @@ export const PUBLIC_DIR = join(ADMIN_DIR, "public");
 
 export const PORT = Number(env.ADMIN_PORTAL_PORT || env.PORT || 18790);
 export const STATE_DIR = env.OPENCLAW_STATE_DIR || join(env.HOME!, ".openclaw");
-export const POLICIES_DIR = join(STATE_DIR, "data", "hr-policies");
 export const AUDIT_LOG_PATH = join(STATE_DIR, "data", "hr-admin", "audit-log.jsonl");
-export const CHUNKS_DIR = join(STATE_DIR, "data", "hr-chunks");
+// ADR-010：文档存于 FastGPT，平台不再本地归档/切片，故移除 POLICIES_DIR / CHUNKS_DIR。
 export const AUTH_TOKEN = env.OPENCLAW_WEB_AUTH_TOKEN || "";
 /** 机器/服务 token 的能力档（显式覆盖）。合法值 admin|ops|audit。 */
 export const AUTH_TOKEN_ROLE = (env.OPENCLAW_WEB_AUTH_TOKEN_ROLE || "").trim();
@@ -87,7 +85,7 @@ export const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD
 export const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 
 // —— 知识库平台（ADR-006 / FastGPT 集成）——
-// fastgpt | local（local=纯现状 doc-chunker + memory_search 回退）。
+// fastgpt | local。ADR-010：FastGPT 为唯一知识源（已弃本地 doc-chunker/memory_search 回退）；local 仅作未配置态标记。
 export const KNOWLEDGE_PLATFORM = (env.KNOWLEDGE_PLATFORM || "local").trim();
 export const FASTGPT_BASE_URL = (env.FASTGPT_BASE_URL || "").replace(/\/$/, "");
 export const FASTGPT_API_KEY = env.FASTGPT_API_KEY || "";
@@ -107,15 +105,7 @@ export const FASTGPT_PROXY_ENABLED = env.FASTGPT_PROXY_ENABLED === "1";
 export const FASTGPT_WEB_USERNAME = env.FASTGPT_WEB_USERNAME || "";
 export const FASTGPT_WEB_PASSWORD = env.FASTGPT_WEB_PASSWORD || "";
 
-/** 确保知识库目录存在（迁自 server.mjs 启动段）。 */
+/** 确保运行所需目录存在。ADR-010：不再本地归档/切片，仅保留审计日志目录。 */
 export function ensureDirs(): void {
-  for (const dir of [
-    POLICIES_DIR,
-    ...CATEGORIES.map((cat: string) => join(POLICIES_DIR, cat)),
-    CHUNKS_DIR,
-    ...CATEGORIES.map((cat: string) => join(CHUNKS_DIR, cat)),
-    join(STATE_DIR, "data", "hr-admin"),
-  ]) {
-    mkdirSync(dir, { recursive: true });
-  }
+  mkdirSync(join(STATE_DIR, "data", "hr-admin"), { recursive: true });
 }

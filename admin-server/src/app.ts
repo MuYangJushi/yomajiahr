@@ -4,14 +4,11 @@ import { join } from "node:path";
 import {
   AUTH_TOKEN,
   MAX_UPLOAD_FILE_MB,
-  POLICIES_DIR,
   PUBLIC_DIR,
 } from "./config.js";
-import { supportedFormats } from "../lib/doc-converter.mjs";
-import { authMiddleware, requestLog, uploadErrorHandler } from "./middleware.js";
+import { authMiddleware, requestLog, supportedFormats, uploadErrorHandler } from "./middleware.js";
 import { authRouter } from "./routes/auth.js";
 import { uploadRouter } from "./routes/upload.js";
-import { documentsRouter } from "./routes/documents.js";
 import { auditRouter } from "./routes/audit.js";
 import { configRouter } from "./routes/config.js";
 import { agentsRouter } from "./routes/agents.js";
@@ -42,7 +39,6 @@ export function createApp() {
 
   // 业务路由（挂在 /api）
   app.use("/api", uploadRouter);
-  app.use("/api", documentsRouter);
   app.use("/api", auditRouter);
   app.use("/api", configRouter);
   app.use("/api", agentsRouter);
@@ -54,7 +50,6 @@ export function createApp() {
       name: "HR Admin Portal",
       version: "1.0.0",
       supported_formats: supportedFormats(),
-      policies_dir: POLICIES_DIR,
       auth_enabled: Boolean(AUTH_TOKEN),
       max_upload_mb: MAX_UPLOAD_FILE_MB,
     });

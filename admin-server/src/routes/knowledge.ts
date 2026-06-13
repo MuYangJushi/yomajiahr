@@ -1,10 +1,6 @@
 // 知识库平台路由（ADR-006 / FastGPT 集成，#37 骨架）。
 // RBAC：读=ops；改绑定（影响员工检索）=admin。审计：导入/删除/绑定变更进 audit-log.jsonl。
 import { Router, type Request, type Response } from "express";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { parseFrontmatter } from "../../lib/frontmatter.mjs";
-import { POLICIES_DIR } from "../config.js";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
@@ -12,7 +8,6 @@ import {
   KnowledgeUnavailableError,
   createKnowledgeBase,
   health,
-  importDocument,
   isCollectionRestricted,
   isKbRestricted,
   listChunks,
@@ -25,34 +20,10 @@ import {
   validateKnowledgeStore,
   writeKnowledgeStore,
   type CreateKbInput,
-  type KbCollection,
   type KnowledgeConfigInput,
 } from "../services/knowledge.js";
 
 export const knowledgeRouter = Router();
-
-// 本地归档列表（FastGPT 不可用时的回退数据源，复用 documents 的读法）。
-function listLocalCollections(): KbCollection[] {
-  const out: KbCollection[] = [];
-  if (!existsSync(POLICIES_DIR)) return out;
-  for (const cat of readdirSync(POLICIES_DIR)) {
-    const catDir = join(POLICIES_DIR, cat);
-    if (!statSync(catDir).isDirectory()) continue;
-    for (const file of readdirSync(catDir).filter((f) => f.endsWith(".md"))) {
-      const meta = parseFrontmatter(readFileSync(join(catDir, file), "utf-8"));
-      out.push({
-        externalDocId: meta.doc_id || file,
-        title: meta.title || file,
-        category: cat,
-        doc_id: meta.doc_id || undefined,
-        version: meta.version || undefined,
-        indexStatus: "local-archive",
-        source: "local",
-      });
-    }
-  }
-  return out;
-}
 
 // GET /knowledge/health —— 平台类型/可达/回退态（#37 核心，不依赖实例）。
 knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Request, res: Response) => {
@@ -97,8 +68,9 @@ knowledgeRouter.get("/knowledge/collections", requireRole("ops"), async (req: Re
     const collections = await listCollections(datasetId);
     res.json({ collections, source: "fastgpt" });
   } catch (err) {
+    // ADR-010：无本地归档回退；FastGPT 不可用即如实返回 503。
     if (err instanceof KnowledgeUnavailableError) {
-      res.json({ collections: listLocalCollections(), source: "local", notice: err.message });
+      res.status(503).json({ error: err.message });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
