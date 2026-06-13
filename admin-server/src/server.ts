@@ -1,6 +1,5 @@
 // 入口：装配并监听（迁自 server.mjs 启动段，行为不变）。
 import { createApp } from "./app.js";
-import { startFastgptProxy } from "./fastgpt-proxy.js";
 import { supportedFormats } from "./middleware.js";
 import {
   AUDIT_LOG_PATH,
@@ -46,6 +45,3 @@ app.listen(PORT, bindHost, () => {
   log("INFO", `  Max upload size: ${MAX_UPLOAD_FILE_MB}MB`);
   log("INFO", `  Supported formats: ${supportedFormats().join(", ")}`);
 });
-
-// #46 FastGPT 反向代理（独立端口，默认关；FASTGPT_PROXY_ENABLED=1 才起）。
-startFastgptProxy();

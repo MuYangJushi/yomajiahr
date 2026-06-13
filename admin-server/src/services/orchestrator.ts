@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
-import { triggerApply } from "../../lib/config-apply.mjs";
+import { triggerApply } from "./config-apply.js";
 import { unbindAgentFromKnowledge } from "./knowledge.js";
 import { ENV_PATH, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type AgentEntry } from "./store.js";

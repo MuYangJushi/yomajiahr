@@ -13,6 +13,7 @@ import {
 } from "../config.js";
 import { upsertEnv } from "./secrets.js";
 import { STORE_DIR } from "./store.js";
+import { normalizeUploadedFilename } from "../util.js";
 
 // —— 类型 ——
 export interface KbHealth {
@@ -181,7 +182,7 @@ const collectionMetaCache = new Map<string, { meta: CollectionMeta; expiresAt: n
 
 /** 去掉导入时注入的 `[doc_id] ` name 前缀，还原可读文件名。 */
 function stripDocIdPrefix(name: string): string {
-  return name.replace(/^\[[^\]]+\]\s*/, "");
+  return normalizeUploadedFilename(name).replace(/^\[[^\]]+\]\s*/, "");
 }
 
 /** 取单个 collection 的结构化元数据；任何失败返回 {}（best-effort，绝不抛、绝不断检索）。 */
@@ -200,7 +201,10 @@ async function resolveCollectionMeta(collectionId: string): Promise<CollectionMe
         doc_id: typeof m.doc_id === "string" ? m.doc_id : undefined,
         version: typeof m.version === "string" ? m.version : undefined,
         category: typeof m.category === "string" ? m.category : undefined,
-        filename: (typeof m.source_file === "string" && m.source_file) || stripDocIdPrefix(rawName) || undefined,
+        filename:
+          (typeof m.source_file === "string" && normalizeUploadedFilename(m.source_file)) ||
+          stripDocIdPrefix(rawName) ||
+          undefined,
         datasetId: typeof json?.data?.datasetId === "string" ? json.data.datasetId : undefined,
       };
     }
@@ -259,7 +263,7 @@ async function searchOneDataset(datasetId: string, query: string, topK: number):
       text: it.q || it.a || "",
       score: pickScore(it.score),
       source: {
-        filename: meta.filename || it.sourceName || "",
+        filename: meta.filename || normalizeUploadedFilename(it.sourceName || ""),
         doc_id: meta.doc_id || undefined, // 路A：导入注入则回填；UI 导入/解析失败则省略，绝不编造。
         version: meta.version || undefined,
         collectionId: it.collectionId,
@@ -465,7 +469,7 @@ const STORE_PATH = join(STORE_DIR, "knowledge.json");
 
 /**
  * 缺省知识库（无 knowledge.json 时）。fastgpt 已配 → 默认库即真实 FastGPT 默认库
- * （带 externalKbId、绑 hr-assistant），使多库列表能显示它 + iframe，且首次写入会把它持久化，
+ * （带 externalKbId、绑 hr-assistant），使多库列表能显示它，且首次写入会把它持久化，
  * 与 resolveDatasetIdsForAgent 一致；否则退本地归档库。
  */
 function defaultStore(): KnowledgeStore {

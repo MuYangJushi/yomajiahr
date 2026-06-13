@@ -96,15 +96,6 @@ export const FASTGPT_EMBEDDING_MODEL = env.FASTGPT_EMBEDDING_MODEL || "";
  *  admin-server 在公网主机绑 0.0.0.0 时，此令牌即 /mcp 的唯一守卫——务必当真密钥对待。 */
 export const KNOWLEDGE_MCP_TOKEN = env.KNOWLEDGE_MCP_TOKEN || "";
 
-// —— #46 FastGPT 反向代理（独立端口，把 FastGPT 整套 UI 嵌进平台）——
-// ⚠️ 外露：该端口能打到 FastGPT 全套 admin API。守卫=平台 RBAC（fail-closed，仅会话 ops+ 可达）。
-export const FASTGPT_PROXY_PORT = Number(env.FASTGPT_PROXY_PORT || 19450);
-// 0=关；非 0 才起反代监听。未配置默认关，需显式开（避免无意开端口）。
-export const FASTGPT_PROXY_ENABLED = env.FASTGPT_PROXY_ENABLED === "1";
-// SSO 接缝：配齐 web 登录凭据则服务端登录注入会话，免二次登录；否则 iframe 内走 FastGPT 自带登录一次。
-export const FASTGPT_WEB_USERNAME = env.FASTGPT_WEB_USERNAME || "";
-export const FASTGPT_WEB_PASSWORD = env.FASTGPT_WEB_PASSWORD || "";
-
 /** 确保运行所需目录存在。ADR-010：不再本地归档/切片，仅保留审计日志目录。 */
 export function ensureDirs(): void {
   mkdirSync(join(STATE_DIR, "data", "hr-admin"), { recursive: true });

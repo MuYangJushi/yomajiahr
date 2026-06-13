@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts lib/**/*.test.ts",
+    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts",
     "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
     "start": "node dist/server.js"
   },
@@ -16,7 +16,6 @@
     "@larksuiteoapi/node-sdk": "^1.66.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.2.1",
-    "http-proxy-middleware": "^3.0.6",
     "mammoth": "^1.9.0",
     "multer": "^2.0.1",
     "pdfjs-dist": "^5.5.207",

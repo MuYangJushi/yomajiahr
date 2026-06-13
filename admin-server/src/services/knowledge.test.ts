@@ -282,7 +282,7 @@ test("listCollections maps listV2 + derives index status from trainingAmount (AD
           total: 3,
           list: [
             { _id: "c1", name: "[HR-LEAVE-001] 年假制度", dataAmount: 9, trainingAmount: 0 }, // 训练完 → ready
-            { _id: "c2", name: "考勤制度", dataAmount: 5, trainingAmount: 2 }, // 队列剩余 → indexing
+            { _id: "c2", name: "ä¸ªäººç»©æç®¡çåæ³_1.3.pdf", dataAmount: 5, trainingAmount: 2 }, // FastGPT listV2 可能回传 mojibake
             { _id: "c3", name: "空集合", dataAmount: 0, trainingAmount: 0 }, // 无切片 → unknown
           ],
         },
@@ -296,7 +296,7 @@ test("listCollections maps listV2 + derives index status from trainingAmount (AD
     cols.map((c) => [c.externalDocId, c.title, c.chunkCount, c.indexStatus, c.source]),
     [
       ["c1", "年假制度", 9, "ready", "fastgpt"], // doc_id 前缀已剥离
-      ["c2", "考勤制度", 5, "indexing", "fastgpt"],
+      ["c2", "个人绩效管理办法_1.3.pdf", 5, "indexing", "fastgpt"],
       ["c3", "空集合", 0, "unknown", "fastgpt"],
     ],
   );
