@@ -50,6 +50,7 @@ export interface AgentRow {
   id: string;
   role: "employee" | "admin";
   name: string;
+  persona: string;
   default: boolean;
   skills: string[];
   channels: Array<{ domain: string; accountId: string }>;
@@ -66,6 +67,24 @@ export interface ChannelsInfo {
 
 export async function fetchAgents(): Promise<AgentRow[]> {
   return (await api.get("/config/agents")).data.agents;
+}
+export interface UpdateAgentInput {
+  name: string;
+  role: "employee" | "admin";
+  persona?: string;
+  skills: string[];
+  addChannel?: {
+    domain: "feishu" | "dingtalk-connector";
+    accountId?: string;
+    credentials: { clientId: string; clientSecret: string };
+  };
+  removeChannels?: Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>;
+}
+export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
+  await api.put(`/config/agents/${encodeURIComponent(id)}`, input);
+}
+export async function deleteAgent(id: string): Promise<void> {
+  await api.delete(`/config/agents/${encodeURIComponent(id)}`);
 }
 export async function fetchSkills(): Promise<Skill[]> {
   return (await api.get("/config/skills")).data.skills;
@@ -92,6 +111,9 @@ export interface OnboardingSession {
 }
 export async function startAgentOnboarding(body: unknown): Promise<OnboardingSession> {
   return (await api.post("/config/agent-onboarding", body)).data;
+}
+export async function startAgentChannelOnboarding(id: string, body: unknown): Promise<OnboardingSession> {
+  return (await api.post(`/config/agents/${encodeURIComponent(id)}/channel-onboarding`, body)).data;
 }
 export async function fetchAgentOnboarding(id: string): Promise<OnboardingSession> {
   return (await api.get(`/config/agent-onboarding/${id}`)).data;

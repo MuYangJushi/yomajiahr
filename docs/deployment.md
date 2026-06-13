@@ -206,7 +206,8 @@ ss -ltnp | grep -E '18789|18790'
 
 ### Admin Portal 扫码创建数字员工
 
-数字员工页面的创建向导支持飞书和钉钉扫码创建应用，操作人必须具备 Admin Portal `admin` 角色。
+数字员工页面的创建向导支持飞书和钉钉扫码创建应用，操作人必须具备 Admin Portal `ops` 或 `admin` 角色。
+修改数字员工时，也可使用已有应用凭据同时接入一个尚未绑定的飞书或钉钉渠道；资料修改与渠道接入会作为同一事务应用和回滚。
 
 - 飞书由 Admin Server 调用官方 Node SDK `registerApp()`。
 - 钉钉由 Admin Server 执行 `init → begin → poll` Device Flow。

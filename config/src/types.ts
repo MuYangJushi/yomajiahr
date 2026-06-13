@@ -27,6 +27,8 @@ export const AgentSchema = z
     id: z.string().min(1),
     role: AgentRoleSchema.default('employee'),
     name: z.string().optional(),
+    /** 平台编辑字段，仅用于渲染 workspace，不进入 OpenClaw 运行时 agents.list。 */
+    persona: z.string().optional(),
     default: z.boolean().optional(),
     workspace: z.string().min(1),
     skills: z.array(z.string()).default([]),

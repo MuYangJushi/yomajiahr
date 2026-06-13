@@ -1,9 +1,9 @@
 // MCP 端点（架构 I，ADR-006）：把 knowledge_search 暴露给 openclaw 数字员工。
 // openclaw 侧注册（yomakit，纯配置无需改源码，守 ADR-002）：
-//   openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-assistant \
+//   openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-employee \
 //     --transport streamable-http --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" \
 //     --include knowledge_search
-// 工具在 openclaw 侧命名空间化为 `fastgpt__knowledge_search`——hr-assistant 的 tools.allow 用此名。
+// 工具在 openclaw 侧命名空间化为 `fastgpt__knowledge_search`——hr-employee 的 tools.allow 用此名。
 // 传输：streamable-http stateless（每请求新建 server+transport，无会话生命周期，最省心）。
 // 鉴权：Bearer 令牌，fail-closed；与 /api 的 cookie/RBAC 是两套，故挂在 /api 鉴权之外。
 import type { Express, Request, Response } from "express";

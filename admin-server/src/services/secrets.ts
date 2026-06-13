@@ -34,6 +34,23 @@ export function upsertEnv(entries: Record<string, string>): void {
   chmodSync(ENV_PATH, 0o600);
 }
 
+/** 删除指定环境变量，保留其它键、注释与顺序。 */
+export function removeEnv(keys: Iterable<string>): void {
+  const removing = new Set(keys);
+  if (removing.size === 0 || !existsSync(ENV_PATH)) return;
+  const lines = readFileSync(ENV_PATH, "utf-8")
+    .split("\n")
+    .filter((line) => {
+      const m = line.match(KEY_RE);
+      return !m || !removing.has(m[1]);
+    });
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  const tmp = `${ENV_PATH}.tmp`;
+  writeFileSync(tmp, lines.join("\n") + "\n");
+  renameSync(tmp, ENV_PATH);
+  chmodSync(ENV_PATH, 0o600);
+}
+
 /** 读取已声明的变量名集合（用于“是否已设置”状态，不回传值）。 */
 export function envKeysSet(): Set<string> {
   const keys = new Set<string>();

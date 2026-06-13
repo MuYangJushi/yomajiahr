@@ -6,7 +6,7 @@
       "name": "HR 制度知识库",
       "provider": "local",
       "externalKbId": "",
-      "boundAgents": ["hr-assistant"]
+      "boundAgents": ["hr-employee"]
     }
   ]
 }

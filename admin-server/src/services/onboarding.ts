@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import * as lark from "@larksuiteoapi/node-sdk";
-import { createAgentFromCredentials, validateAgentDraft, type AgentDraft, type ChannelCredentials } from "./orchestrator.js";
+import {
+  createAgentFromCredentials,
+  listAgents,
+  updateAgent,
+  validateAgentDraft,
+  type AgentDraft,
+  type ChannelCredentials,
+  type UpdateAgentInput,
+} from "./orchestrator.js";
 import { appendAuditLog } from "../util.js";
 
 export type OnboardingStatus =
@@ -23,6 +31,7 @@ interface Session {
   id: string;
   owner: string;
   draft: AgentDraft;
+  updateInput?: UpdateAgentInput;
   status: OnboardingStatus;
   message?: string;
   qrUrl?: string;
@@ -128,24 +137,37 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
 
 async function finish(s: Session, credentials: ChannelCredentials): Promise<void> {
   if (s.abort.signal.aborted) return;
-  update(s, "authorized", "授权成功，正在创建数字员工");
+  const attaching = Boolean(s.updateInput);
+  update(s, "authorized", attaching ? "授权成功，正在更新数字员工" : "授权成功，正在创建数字员工");
   update(s, "applying", "正在写入配置并重启网关");
   try {
-    await createAgentFromCredentials(s.draft, credentials, () => {
-      update(s, "verifying", "正在验证目标渠道连接");
-    });
+    if (s.updateInput) {
+      await updateAgent(s.draft.id, {
+        ...s.updateInput,
+        addChannel: {
+          domain: s.draft.domain,
+          accountId: s.draft.accountId,
+          credentials,
+        },
+      });
+    } else {
+      await createAgentFromCredentials(s.draft, credentials, () => {
+        update(s, "verifying", "正在验证目标渠道连接");
+      });
+    }
   } catch (err) {
     const message = errorMessage(err).replaceAll(credentials.clientSecret, "***");
     throw new Error(message);
   }
-  update(s, "success", "数字员工已上线");
-  appendAuditLog("agent.create", s.draft.id, {
+  update(s, "success", attaching ? "数字员工及新渠道已更新" : "数字员工已上线");
+  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, {
     agent_id: s.draft.id,
     name: s.draft.name,
     role: s.draft.role,
     skills: s.draft.skills,
     channel: s.draft.domain,
     account_id: s.draft.accountId || s.draft.id,
+    operation: attaching ? "attach_channel" : "create",
   });
 }
 
@@ -229,6 +251,56 @@ export function startOnboarding(owner: string, input: StartOnboardingInput) {
   };
   sessions.set(session.id, session);
   void run(session, input);
+  return publicSession(session);
+}
+
+export function startChannelOnboarding(
+  owner: string,
+  agentId: string,
+  input: Omit<StartOnboardingInput, "id">,
+) {
+  const current = listAgents().find((agent) => agent.id === agentId);
+  if (!current) throw new Error(`agent 不存在：${agentId}`);
+  if (input.domain !== "feishu" && input.domain !== "dingtalk-connector") throw new Error("渠道非法");
+  if (current.channels.some((channel) => channel.domain === input.domain)) {
+    throw new Error(`数字员工已接入渠道：${input.domain}`);
+  }
+  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual") throw new Error("接入方式非法");
+  const draft: AgentDraft = {
+    id: agentId,
+    name: input.name,
+    role: input.role,
+    persona: input.persona,
+    skills: input.skills,
+    domain: input.domain,
+    accountId: input.accountId,
+  };
+  const accountId = draft.accountId || draft.id;
+  for (const existing of sessions.values()) {
+    if (["success", "failed", "expired", "cancelled"].includes(existing.status)) continue;
+    if (existing.draft.id === draft.id) throw new Error(`该 Agent 已有进行中的接入会话：${draft.id}`);
+    if (existing.draft.domain === draft.domain && (existing.draft.accountId || existing.draft.id) === accountId) {
+      throw new Error(`该渠道账号已有进行中的接入会话：${draft.domain}/${accountId}`);
+    }
+  }
+  const now = Date.now();
+  const session: Session = {
+    id: randomUUID(),
+    owner,
+    draft,
+    updateInput: {
+      name: input.name,
+      role: input.role,
+      persona: input.persona,
+      skills: input.skills,
+    },
+    status: "preparing",
+    expiresAt: now + SESSION_TTL_MS,
+    createdAt: now,
+    abort: new AbortController(),
+  };
+  sessions.set(session.id, session);
+  void run(session, { ...input, id: agentId });
   return publicSession(session);
 }
 

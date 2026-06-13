@@ -381,7 +381,7 @@ function defaultStore(): KnowledgeStore {
           name: "HR 制度知识库（默认）",
           provider: "fastgpt",
           externalKbId: FASTGPT_KB_ID,
-          boundAgents: ["hr-assistant"],
+          boundAgents: ["hr-employee"],
         },
       ],
     };
@@ -389,7 +389,7 @@ function defaultStore(): KnowledgeStore {
   return {
     platform: "local",
     knowledgeBases: [
-      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-assistant"] },
+      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-employee"] },
     ],
   };
 }
@@ -409,6 +409,21 @@ export function writeKnowledgeStore(s: KnowledgeStore): void {
   const tmp = `${STORE_PATH}.tmp`;
   writeFileSync(tmp, JSON.stringify(s, null, 2) + "\n");
   renameSync(tmp, STORE_PATH);
+}
+
+/** 删除数字员工时同步移除所有知识库绑定。 */
+export function unbindAgentFromKnowledge(agentId: string): void {
+  if (!existsSync(STORE_PATH)) return;
+  const store = readKnowledgeStore();
+  let changed = false;
+  for (const kb of store.knowledgeBases) {
+    const next = kb.boundAgents.filter((id) => id !== agentId);
+    if (next.length !== kb.boundAgents.length) {
+      kb.boundAgents = next;
+      changed = true;
+    }
+  }
+  if (changed) writeKnowledgeStore(store);
 }
 
 /**

@@ -1,12 +1,13 @@
-// 数字员工配置路由（P1 支柱一）：列表 / 新建（原子编排上线）/ 技能 / 渠道。
+// 数字员工配置路由（P1 支柱一）：列表 / 新建 / 修改 / 删除 / 技能 / 渠道。
 import { Router, type Request, type Response } from "express";
-import { listAgents } from "../services/orchestrator.js";
-import { cancelOnboarding, getOnboarding, startOnboarding } from "../services/onboarding.js";
+import { deleteAgent, listAgents, updateAgent } from "../services/orchestrator.js";
+import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
 import { requireRole } from "../auth/rbac.js";
 import { rateLimit } from "../middleware.js";
+import { appendAuditLog } from "../util.js";
 
 export const agentsRouter = Router();
 
@@ -22,11 +23,49 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
   }
 });
 
-agentsRouter.post("/config/agents", requireRole("admin"), async (req: Request, res: Response) => {
+agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res: Response) => {
   res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
 });
 
-agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLimiter, (req: Request, res: Response) => {
+agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    const result = await updateAgent(id, req.body);
+    appendAuditLog("agent.update", id, {
+      agent_id: id,
+      name: result.agent.name,
+      role: result.agent.role,
+      skills: result.agent.skills,
+      added_channel: req.body?.addChannel?.domain || undefined,
+      added_account_id: req.body?.addChannel
+        ? req.body.addChannel.accountId || id
+        : undefined,
+      removed_channels: req.body?.removeChannels || [],
+      operator: req.user?.platformUserId || "",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
+  }
+});
+
+agentsRouter.delete("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    const result = await deleteAgent(id);
+    appendAuditLog("agent.delete", id, {
+      agent_id: id,
+      operator: req.user?.platformUserId || "",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 409).json({ error: message });
+  }
+});
+
+agentsRouter.post("/config/agent-onboarding", requireRole("ops"), onboardingLimiter, (req: Request, res: Response) => {
   try {
     res.status(202).json(startOnboarding(req.user!.platformUserId, req.body));
   } catch (err) {
@@ -34,13 +73,22 @@ agentsRouter.post("/config/agent-onboarding", requireRole("admin"), onboardingLi
   }
 });
 
-agentsRouter.get("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+agentsRouter.post("/config/agents/:id/channel-onboarding", requireRole("ops"), onboardingLimiter, (req: Request, res: Response) => {
+  try {
+    res.status(202).json(startChannelOnboarding(req.user!.platformUserId, String(req.params.id), req.body));
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
+  }
+});
+
+agentsRouter.get("/config/agent-onboarding/:id", requireRole("ops"), (req: Request, res: Response) => {
   const session = getOnboarding(req.user!.platformUserId, String(req.params.id));
   if (!session) return res.status(404).json({ error: "会话不存在或已过期" });
   res.json(session);
 });
 
-agentsRouter.delete("/config/agent-onboarding/:id", requireRole("admin"), (req: Request, res: Response) => {
+agentsRouter.delete("/config/agent-onboarding/:id", requireRole("ops"), (req: Request, res: Response) => {
   try {
     const session = cancelOnboarding(req.user!.platformUserId, String(req.params.id));
     if (!session) return res.status(404).json({ error: "会话不存在或已过期" });

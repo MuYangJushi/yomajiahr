@@ -1,11 +1,10 @@
-// 从模板渲染 agent 的 workspace 5 文件 + CLAUDE.md 软链。
+// 从模板渲染 agent 的 workspace 5 文件。
 import {
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -19,8 +18,12 @@ export function workspaceDir(id: string): string {
   return join(WS_ROOT, id);
 }
 
-/** 渲染并写入 workspace 文件；返回目录与已写文件列表。 */
-export function renderWorkspace(id: string, vars: Record<string, string>): {
+/** 渲染并写入 workspace 文件；修改时可保留 MEMORY.md。 */
+export function renderWorkspace(
+  id: string,
+  vars: Record<string, string>,
+  options: { preserveMemory?: boolean } = {},
+): {
   dir: string;
   written: string[];
 } {
@@ -28,6 +31,7 @@ export function renderWorkspace(id: string, vars: Record<string, string>): {
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];
   for (const f of FILES) {
+    if (f === "MEMORY.md" && options.preserveMemory && existsSync(join(dir, f))) continue;
     let text = readFileSync(join(TPL_DIR, f), "utf-8");
     for (const [k, v] of Object.entries(vars)) {
       text = text.replaceAll(`{{${k}}}`, v);
@@ -36,14 +40,9 @@ export function renderWorkspace(id: string, vars: Record<string, string>): {
     writeFileSync(out, text);
     written.push(out);
   }
-  // CLAUDE.md → AGENTS.md 软链
+  // 清理旧版本生成的兼容软链。
   const claude = join(dir, "CLAUDE.md");
-  try {
-    if (existsSync(claude)) rmSync(claude);
-    symlinkSync("AGENTS.md", claude);
-  } catch {
-    /* 软链失败不致命 */
-  }
+  rmSync(claude, { force: true });
   return { dir, written };
 }
 
