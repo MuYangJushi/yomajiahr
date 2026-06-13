@@ -2,7 +2,10 @@
 import type { NextFunction, Request, Response } from "express";
 import { extname } from "node:path";
 import multer, { MulterError } from "multer";
-import { isSupported, supportedFormats } from "../lib/doc-converter.mjs";
+// ADR-010：原始文件直传 FastGPT 解析，平台不再自研转换。上传过滤仅做粗筛（FastGPT 终判）。
+export const SUPPORTED_UPLOAD_EXTS = [".pdf", ".docx", ".doc", ".txt", ".md", ".markdown", ".html", ".csv", ".pptx", ".xlsx"];
+const isSupported = (ext: string): boolean => SUPPORTED_UPLOAD_EXTS.includes(ext.toLowerCase());
+export const supportedFormats = (): string[] => SUPPORTED_UPLOAD_EXTS.map((e) => e.slice(1));
 import {
   AUTH_TOKEN,
   AUTH_TOKEN_ROLE,

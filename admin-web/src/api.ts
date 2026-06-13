@@ -131,7 +131,7 @@ export interface KnowledgeHealth {
   embeddingModel?: string;
   baseUrlHint?: string;
   indexStatus: "ready" | "indexing" | "error" | "unknown";
-  fallback: "local-memory-search";
+  fallback: "none"; // ADR-010：已弃本地回退，FastGPT 为唯一知识源
   message?: string;
   checkedAt: string;
 }
@@ -156,6 +156,7 @@ export interface KnowledgeBinding {
   provider: "fastgpt" | "local";
   externalKbId?: string;
   boundAgents: string[];
+  restricted?: boolean; // ADR-010：受限库，文档列表/切片预览仅 admin 可见
 }
 export interface KnowledgeStore {
   platform: "fastgpt" | "local";
@@ -165,12 +166,41 @@ export interface KnowledgeStore {
 export async function fetchKnowledgeHealth(): Promise<KnowledgeHealth> {
   return (await api.get("/knowledge/health")).data;
 }
-export async function fetchKnowledgeCollections(): Promise<{
+export async function fetchKnowledgeCollections(datasetId?: string): Promise<{
   collections: KbCollection[];
   source: "fastgpt" | "local";
   notice?: string;
 }> {
-  return (await api.get("/knowledge/collections")).data;
+  return (await api.get("/knowledge/collections", { params: { datasetId } })).data;
+}
+export interface KbChunkPreview {
+  id: string;
+  q: string;
+  a: string;
+  chunkIndex: number;
+}
+export async function fetchCollectionChunks(
+  collectionId: string,
+  offset = 0,
+  pageSize = 20,
+): Promise<{ chunks: KbChunkPreview[]; total: number }> {
+  return (
+    await api.get(`/knowledge/collections/${encodeURIComponent(collectionId)}/chunks`, {
+      params: { offset, pageSize },
+    })
+  ).data;
+}
+export async function uploadKnowledgeDocument(
+  file: File,
+  datasetId: string,
+): Promise<{ file: string; kbId: string; collectionId: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("datasetId", datasetId);
+  return (await api.post("/upload", body)).data;
+}
+export async function deleteKnowledgeCollection(collectionId: string): Promise<void> {
+  await api.delete(`/knowledge/collections/${encodeURIComponent(collectionId)}`);
 }
 export async function searchTest(query: string, topK = 5, datasetId?: string): Promise<KbChunk[]> {
   return (await api.post("/knowledge/search-test", { query, topK, datasetId })).data.chunks;
@@ -190,18 +220,11 @@ export interface CreateKbInput {
   name: string;
   intro?: string;
   boundAgents?: string[];
+  restricted?: boolean;
 }
 export async function createKnowledgeBase(input: CreateKbInput): Promise<KnowledgeBinding> {
   return (await api.post("/knowledge/bases", input)).data.base;
 }
-/** #46 反代入口：FastGPT 整套 UI 经 yomakit:19450（同主机、独立端口）嵌入。
- *  datasetId 给定则深链到该库详情页（按库限定检视）。 */
-export function fastgptConsoleUrl(datasetId?: string): string {
-  const port = 19450;
-  const base = `${window.location.protocol}//${window.location.hostname}:${port}`;
-  return datasetId ? `${base}/dataset/detail?datasetId=${encodeURIComponent(datasetId)}` : base;
-}
-
 // —— 审计（#44 vanilla→React）——
 export interface AuditEntry {
   timestamp: string;

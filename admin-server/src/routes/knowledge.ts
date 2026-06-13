@@ -1,10 +1,6 @@
 // 知识库平台路由（ADR-006 / FastGPT 集成，#37 骨架）。
 // RBAC：读=ops；改绑定（影响员工检索）=admin。审计：导入/删除/绑定变更进 audit-log.jsonl。
 import { Router, type Request, type Response } from "express";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { parseFrontmatter } from "../../lib/frontmatter.mjs";
-import { POLICIES_DIR } from "../config.js";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
@@ -12,7 +8,9 @@ import {
   KnowledgeUnavailableError,
   createKnowledgeBase,
   health,
-  importDocument,
+  isCollectionRestricted,
+  isKbRestricted,
+  listChunks,
   listCollections,
   listKnowledgeBases,
   readKnowledgeStore,
@@ -22,34 +20,10 @@ import {
   validateKnowledgeStore,
   writeKnowledgeStore,
   type CreateKbInput,
-  type KbCollection,
   type KnowledgeConfigInput,
 } from "../services/knowledge.js";
 
 export const knowledgeRouter = Router();
-
-// 本地归档列表（FastGPT 不可用时的回退数据源，复用 documents 的读法）。
-function listLocalCollections(): KbCollection[] {
-  const out: KbCollection[] = [];
-  if (!existsSync(POLICIES_DIR)) return out;
-  for (const cat of readdirSync(POLICIES_DIR)) {
-    const catDir = join(POLICIES_DIR, cat);
-    if (!statSync(catDir).isDirectory()) continue;
-    for (const file of readdirSync(catDir).filter((f) => f.endsWith(".md"))) {
-      const meta = parseFrontmatter(readFileSync(join(catDir, file), "utf-8"));
-      out.push({
-        externalDocId: meta.doc_id || file,
-        title: meta.title || file,
-        category: cat,
-        doc_id: meta.doc_id || undefined,
-        version: meta.version || undefined,
-        indexStatus: "local-archive",
-        source: "local",
-      });
-    }
-  }
-  return out;
-}
 
 // GET /knowledge/health —— 平台类型/可达/回退态（#37 核心，不依赖实例）。
 knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Request, res: Response) => {
@@ -75,18 +49,61 @@ knowledgeRouter.put("/knowledge/config", requireRole("admin"), (req: Request, re
 });
 
 // GET /knowledge/collections —— FastGPT 优先；不可用回退本地归档列表。
-knowledgeRouter.get("/knowledge/collections", requireRole("ops"), async (_req: Request, res: Response) => {
+// #41/ADR-009：可选 ?datasetId 指定库（单库文档管理 Tab）；省略退默认。指定的库必须已登记。
+knowledgeRouter.get("/knowledge/collections", requireRole("ops"), async (req: Request, res: Response) => {
+  const datasetId = req.query?.datasetId ? String(req.query.datasetId) : undefined;
+  if (
+    datasetId &&
+    !readKnowledgeStore().knowledgeBases.some((kb) => kb.provider === "fastgpt" && kb.externalKbId === datasetId)
+  ) {
+    res.status(400).json({ error: "目标知识库未在平台登记" });
+    return;
+  }
+  // ADR-010：受限库（薪酬/绩效）的文档列表仅 admin 可见（与切片预览、员工召回层一致）。
+  if (datasetId && isKbRestricted(datasetId) && req.user?.platformRole !== "admin") {
+    res.status(403).json({ error: "该知识库为受限库，仅管理员可查看文档列表" });
+    return;
+  }
   try {
-    const collections = await listCollections();
+    const collections = await listCollections(datasetId);
     res.json({ collections, source: "fastgpt" });
   } catch (err) {
+    // ADR-010：无本地归档回退；FastGPT 不可用即如实返回 503。
     if (err instanceof KnowledgeUnavailableError) {
-      res.json({ collections: listLocalCollections(), source: "local", notice: err.message });
+      res.status(503).json({ error: err.message });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
   }
 });
+
+// GET /knowledge/collections/:collectionId/chunks —— 切片预览（ADR-009）。
+// ⚠️ Gate-3：暴露整段 chunk 正文。受限分类（按 collection category 派生，fail-closed）内容仅 admin 可见。
+// 注意：路由顺序须在 DELETE /knowledge/collections/:docId 之前不冲突——方法+子路径不同，安全。
+knowledgeRouter.get(
+  "/knowledge/collections/:collectionId/chunks",
+  requireRole("ops"),
+  async (req: Request, res: Response) => {
+    const collectionId = String(req.params.collectionId);
+    const offset = Math.max(0, Number(req.query?.offset) || 0);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query?.pageSize) || 20));
+    try {
+      // 先判受限——内容是敏感面，必须在取正文之前过角色闸（fail-closed：解析失败按受限）。
+      const restricted = await isCollectionRestricted(collectionId);
+      if (restricted && req.user?.platformRole !== "admin") {
+        res.status(403).json({ error: "受限分类内容仅管理员可查看切片正文" });
+        return;
+      }
+      res.json(await listChunks(collectionId, offset, pageSize));
+    } catch (err) {
+      if (err instanceof KnowledgeUnavailableError) {
+        res.status(503).json({ error: err.message });
+        return;
+      }
+      res.status(500).json({ error: (err as Error).message });
+    }
+  },
+);
 
 // POST /knowledge/search-test —— 召回测试（管理员页用，非员工通道）。
 knowledgeRouter.post("/knowledge/search-test", requireRole("ops"), async (req: Request, res: Response) => {

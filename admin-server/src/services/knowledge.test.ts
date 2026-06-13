@@ -13,7 +13,7 @@ process.env.FASTGPT_API_KEY = "test-fastgpt-secret";
 process.env.FASTGPT_KB_ID = "test-kb-id";
 process.env.FASTGPT_EMBEDDING_MODEL = "text-embedding-v4";
 
-const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, writeKnowledgeStore } = await import("./knowledge.js");
+const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
 const originalFetch = globalThis.fetch;
 
 test.afterEach(() => {
@@ -50,7 +50,7 @@ test("health distinguishes an HTTP error from a network outage", async () => {
   assert.equal(result.message, "FastGPT 可达，但探活返回 401");
 });
 
-test("health keeps fallback state when FastGPT cannot be reached", async () => {
+test("health reports unavailable (no fallback) when FastGPT cannot be reached", async () => {
   globalThis.fetch = async () => {
     throw new TypeError("fetch failed: test-fastgpt-secret");
   };
@@ -59,8 +59,8 @@ test("health keeps fallback state when FastGPT cannot be reached", async () => {
 
   assert.equal(result.reachable, false);
   assert.equal(result.indexStatus, "unknown");
-  assert.equal(result.fallback, "local-memory-search");
-  assert.equal(result.message, "FastGPT 不可达（TypeError）—— 已回退本地检索");
+  assert.equal(result.fallback, "none"); // ADR-010：已弃本地回退
+  assert.equal(result.message, "FastGPT 不可达（TypeError）—— 知识库暂时不可用");
   assert.equal(JSON.stringify(result).includes("test-fastgpt-secret"), false);
 });
 
@@ -138,7 +138,7 @@ test("importDocument converts a FastGPT network failure into an explicit fallbac
   };
 
   await assert.rejects(
-    importDocument("# 测试\n年假最小单位 0.5 小时。", "测试.md", { doc_id: "HR-TEST-001", version: "1.0" }),
+    importDocument(Buffer.from("年假最小单位 0.5 小时。"), "测试.txt"),
     (err: unknown) => {
       assert.equal(err instanceof KnowledgeUnavailableError, true);
       assert.match((err as Error).message, /FastGPT 导入不可达/);
@@ -148,28 +148,22 @@ test("importDocument converts a FastGPT network failure into an explicit fallbac
   );
 });
 
-test("importDocument injects doc_id into collection name and metadata, returns collectionId", async () => {
-  let sentBody: any;
+test("importDocument forwards the raw file to create/localFile and returns collectionId (ADR-010)", async () => {
+  let calledUrl = "";
+  let bodyIsFormData = false;
   globalThis.fetch = async (input, init) => {
-    assert.equal(String(input), "http://10.99.0.1:3000/api/core/dataset/collection/create/text");
-    sentBody = JSON.parse(String(init?.body));
+    calledUrl = String(input);
+    bodyIsFormData = init?.body instanceof FormData;
     return new Response(JSON.stringify({ code: 200, data: { collectionId: "col_abc123" } }), { status: 200 });
   };
 
-  const result = await importDocument("# 年假\n最小单位 0.5 小时。", "年假规则.md", {
-    title: "年假规则",
-    doc_id: "HR-LEAVE-001",
-    version: "2.1",
-    category: "leave",
-  });
+  const result = await importDocument(Buffer.from("年假最小单位 0.5 小时。"), "年假规则.pdf", "test-kb-id");
 
   assert.equal(result.collectionId, "col_abc123");
   assert.equal(result.externalDocId, "col_abc123");
-  assert.equal(sentBody.datasetId, "test-kb-id");
-  assert.equal(sentBody.name, "[HR-LEAVE-001] 年假规则");
-  assert.equal(sentBody.metadata.doc_id, "HR-LEAVE-001");
-  assert.equal(sentBody.metadata.version, "2.1");
-  assert.equal(sentBody.metadata.source_file, "年假规则.md");
+  // 走文件导入端点、multipart（FastGPT 原生解析）；不再注入 doc_id/metadata。
+  assert.equal(calledUrl, "http://10.99.0.1:3000/api/core/dataset/collection/create/localFile");
+  assert.equal(bodyIsFormData, true);
 });
 
 test("search merges multiple datasets by score and tolerates one failing (allSettled)", async () => {
@@ -275,4 +269,124 @@ test("knowledge config rejects unsupported URLs and empty updates", () => {
   assert.throws(() => updateKnowledgeConfig({ apiKey: "secret\nINJECTED=value" }), /不能包含换行/);
   assert.throws(() => updateKnowledgeConfig({ baseUrl: "http://user:password@10.99.0.1:3000" }), /不能包含用户名或密码/);
   assert.throws(() => updateKnowledgeConfig({}), /至少提供一个/);
+});
+
+test("listCollections maps listV2 + derives index status from trainingAmount (ADR-009)", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    assert.ok(url.includes("/api/core/dataset/collection/listV2"));
+    return new Response(
+      JSON.stringify({
+        code: 200,
+        data: {
+          total: 3,
+          list: [
+            { _id: "c1", name: "[HR-LEAVE-001] 年假制度", dataAmount: 9, trainingAmount: 0 }, // 训练完 → ready
+            { _id: "c2", name: "ä¸ªäººç»©æç®¡çåæ³_1.3.pdf", dataAmount: 5, trainingAmount: 2 }, // FastGPT listV2 可能回传 mojibake
+            { _id: "c3", name: "空集合", dataAmount: 0, trainingAmount: 0 }, // 无切片 → unknown
+          ],
+        },
+      }),
+      { status: 200 },
+    );
+  };
+  const cols = await listCollections("ds_x");
+  assert.equal(cols.length, 3);
+  assert.deepEqual(
+    cols.map((c) => [c.externalDocId, c.title, c.chunkCount, c.indexStatus, c.source]),
+    [
+      ["c1", "年假制度", 9, "ready", "fastgpt"], // doc_id 前缀已剥离
+      ["c2", "个人绩效管理办法_1.3.pdf", 5, "indexing", "fastgpt"],
+      ["c3", "空集合", 0, "unknown", "fastgpt"],
+    ],
+  );
+});
+
+test("listCollections converts a FastGPT failure into an explicit fallback signal", async () => {
+  globalThis.fetch = async () => new Response("boom", { status: 500 });
+  await assert.rejects(listCollections("ds_x"), KnowledgeUnavailableError);
+});
+
+test("removeCollection issues DELETE to collection/delete with the id, throws on failure", async () => {
+  let seen = "";
+  globalThis.fetch = async (input, init) => {
+    seen = `${(init?.method ?? "GET")} ${String(input)}`;
+    return new Response(JSON.stringify({ code: 200, data: null }), { status: 200 });
+  };
+  await removeCollection("col_abc123");
+  assert.match(seen, /^DELETE .*\/api\/core\/dataset\/collection\/delete\?id=col_abc123$/);
+
+  globalThis.fetch = async () => new Response("nope", { status: 404 });
+  await assert.rejects(removeCollection("col_abc123"), KnowledgeUnavailableError);
+});
+
+test("listChunks maps data/v2/list items (id/q/a/chunkIndex) + total", async () => {
+  globalThis.fetch = async (input, init) => {
+    assert.ok(String(input).includes("/api/core/dataset/data/v2/list"));
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.collectionId, "col_x");
+    return new Response(
+      JSON.stringify({
+        code: 200,
+        data: {
+          total: 2,
+          list: [
+            { _id: "d1", q: "年假最小单位 0.5 小时", a: "", chunkIndex: 0 },
+            { _id: "d2", q: "病假需提供证明", a: "答案侧", chunkIndex: 1 },
+          ],
+        },
+      }),
+      { status: 200 },
+    );
+  };
+  const { chunks, total } = await listChunks("col_x", 0, 20);
+  assert.equal(total, 2);
+  assert.deepEqual(chunks, [
+    { id: "d1", q: "年假最小单位 0.5 小时", a: "", chunkIndex: 0 },
+    { id: "d2", q: "病假需提供证明", a: "答案侧", chunkIndex: 1 },
+  ]);
+});
+
+test("listChunks converts a FastGPT failure into an explicit fallback signal", async () => {
+  globalThis.fetch = async () => new Response("boom", { status: 500 });
+  await assert.rejects(listChunks("col_x"), KnowledgeUnavailableError);
+});
+
+test("isCollectionRestricted reflects the owning KB's restricted flag (ADR-010 KB 级)", async () => {
+  mkdirSync(join(stateDir, "config-store"), { recursive: true });
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [
+      { id: "kb_pub", name: "公开", provider: "fastgpt", externalKbId: "ds_pub", boundAgents: [] },
+      { id: "kb_comp", name: "薪酬", provider: "fastgpt", externalKbId: "ds_comp", boundAgents: [], restricted: true },
+    ],
+  });
+  // collection/detail 回吐归属 datasetId。
+  const detail = (datasetId: string) =>
+    new Response(JSON.stringify({ data: { name: "n", sourceName: "n", datasetId, metadata: {} } }), { status: 200 });
+
+  globalThis.fetch = async () => detail("ds_comp");
+  assert.equal(await isCollectionRestricted("c_comp"), true); // 归属受限库
+
+  globalThis.fetch = async () => detail("ds_pub");
+  assert.equal(await isCollectionRestricted("c_pub_x"), false); // 归属公开库
+});
+
+test("isCollectionRestricted is fail-closed when the owning KB cannot be resolved (ADR-010)", async () => {
+  mkdirSync(join(stateDir, "config-store"), { recursive: true });
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [{ id: "kb_pub", name: "公开", provider: "fastgpt", externalKbId: "ds_pub", boundAgents: [] }],
+  });
+  // detail 无 datasetId → 无法解析归属库 → 受限
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ data: { name: "n", sourceName: "n", metadata: {} } }), { status: 200 });
+  assert.equal(await isCollectionRestricted("c_nods"), true);
+  // detail 失败 → {} → 受限
+  globalThis.fetch = async () => new Response("err", { status: 500 });
+  assert.equal(await isCollectionRestricted("c_err"), true);
+  // datasetId 指向未登记的库 → fail-closed 受限
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ data: { name: "n", sourceName: "n", datasetId: "ds_unknown", metadata: {} } }), { status: 200 });
+  assert.equal(await isCollectionRestricted("c_unknown"), true);
 });

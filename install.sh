@@ -302,65 +302,8 @@ mkdir -p "$STATE_DIR/workspaces/hr-admin"
 mkdir -p "$STATE_DIR/memory"
 mkdir -p "$STATE_DIR/skills"
 mkdir -p "$STATE_DIR/data/hr-admin"
-POLICIES_DIR="$STATE_DIR/data/hr-policies"
-CURRENT_POLICY_DIRS=()
-while IFS= read -r category; do
-  CURRENT_POLICY_DIRS+=("$category")
-done < <(
-  node --input-type=module <<EOF
-import { CATEGORIES } from "${REPO_DIR}/admin-server/lib/categories.mjs";
-
-if (!Array.isArray(CATEGORIES) || CATEGORIES.length === 0) {
-  console.error("ERROR: admin-server/lib/categories.mjs does not export a non-empty CATEGORIES array.");
-  process.exit(1);
-}
-
-for (const category of CATEGORIES) {
-  if (typeof category !== "string" || category.trim() === "") {
-    console.error("ERROR: CATEGORIES contains an invalid category value.");
-    process.exit(1);
-  }
-  console.log(category);
-}
-EOF
-)
-if [ "${#CURRENT_POLICY_DIRS[@]}" -eq 0 ]; then
-  echo "ERROR: Failed to load policy categories from admin-server/lib/categories.mjs"
-  exit 1
-fi
-mkdir -p "$POLICIES_DIR"
-for category in "${CURRENT_POLICY_DIRS[@]}"; do
-  mkdir -p "$POLICIES_DIR/$category"
-done
-for existing_dir in "$POLICIES_DIR"/*; do
-  if [ ! -d "$existing_dir" ]; then
-    continue
-  fi
-  dir_name=$(basename "$existing_dir")
-  keep_dir=false
-  for category in "${CURRENT_POLICY_DIRS[@]}"; do
-    if [ "$dir_name" = "$category" ]; then
-      keep_dir=true
-      break
-    fi
-  done
-  if [ "$keep_dir" = true ]; then
-    continue
-  fi
-  if find "$existing_dir" -mindepth 1 -print -quit | grep -q .; then
-    echo "  [WARN] Legacy policy directory not empty: $existing_dir"
-    echo "         Please migrate its files to the new categories before deleting it."
-    continue
-  fi
-  rmdir "$existing_dir"
-  echo "  Removed obsolete policy directory: $existing_dir"
-done
-# Pre-chunked knowledge base directory (for OpenClaw search indexing)
-CHUNKS_DIR="$STATE_DIR/data/hr-chunks"
-mkdir -p "$CHUNKS_DIR"
-for category in "${CURRENT_POLICY_DIRS[@]}"; do
-  mkdir -p "$CHUNKS_DIR/$category"
-done
+# ADR-010：文档交 FastGPT 原生解析/存储，平台不再本地归档/切片，
+# 故不再创建 data/hr-policies、data/hr-chunks 及其分类子目录（仅保留上面的审计日志目录）。
 echo "  Done"
 
 # ---------------------------------------------------------------------------
@@ -638,7 +581,6 @@ echo "State directory: $STATE_DIR/"
 echo "  workspaces/hr-employee/     (employee agent workspace)"
 echo "  workspaces/hr-admin/        (admin agent workspace)"
 echo "  skills/                     (HR skills)"
-echo "  data/hr-policies/           (knowledge base)"
 echo "  data/hr-admin/              (audit logs)"
 echo "  openclaw.json               (gateway config)"
 echo "  .env                        (API keys)"

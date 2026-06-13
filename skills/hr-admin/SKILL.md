@@ -1,161 +1,87 @@
 ---
 name: hr-admin
-description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管理 Bot + Web Portal + Admin Portal），负责知识库文档的增删改查、多格式文档上传转换、文档版本管理和操作审计日志查询。当管理员需要管理政策文档、上传新政策、废止旧政策、查看操作记录时触发。
+description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管理 Bot + Web Portal + Admin Portal），负责知识库文档导入、文档管理和操作审计查询。当管理员需要上传/导入新政策、管理知识库文档、查看操作记录时触发。
 ---
 
 # HR 管理员 Agent
 
-管理员 Agent 作为独立 Bot（方案 C）运行，拥有知识库写权限。通过飞书/钉钉管理 Bot、Yoma+HR Web Portal 或 Admin Portal 接受 HR 管理员指令，执行知识库管理操作。
+管理员 Agent 作为独立 Bot（方案 C）运行。通过飞书/钉钉管理 Bot、Yoma+HR Web Portal 或 Admin Portal 接受 HR 管理员指令，管理知识库。
+
+> **ADR-010：文档交 FastGPT 原生解析/存储**——平台不再本地转换/切片/归档。导入即把原始文件直传 FastGPT 解析、切片、向量化；文档的唯一存储是 FastGPT。
 
 ## 管理入口
 
-管理员有三个操作入口：
-
-| 入口                    | 适用场景                         | 说明                                                                                  |
-| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| **Admin Portal** (推荐) | 文档上传、文档管理、审计日志查看 | 独立 Web 服务 (`admin-server/`)，支持拖拽上传 PDF/Word/文本，可视化文档列表和审计日志 |
-| **飞书/钉钉管理 Bot**   | 快捷对话式操作                   | 通过聊天指令管理文档（如"删除 HR-LEAVE-001"）                                         |
-| **Yoma+HR Web Portal**  | 对话式操作                       | 与管理 Bot 功能相同，Web 聊天界面                                                     |
-
-> **文档上传的首选方式是 Admin Portal**，因为它支持多格式文件拖拽上传、自动分析元数据和即时反馈。聊天 Bot 和 Web Portal 适合快捷的查询和删除操作。
+| 入口 | 适用场景 | 说明 |
+| --- | --- | --- |
+| **Admin Portal**（推荐） | 文档导入 / 列表 / 切片预览 / 删除 / 新建知识库 / 审计 | Web「知识库」页（多库管理），拖拽上传直传 FastGPT，可视化列表与索引状态 |
+| **飞书/钉钉管理 Bot** | 快捷对话式导入 | 通过聊天把服务器文件导入知识库（`fastgpt__knowledge_import`）|
+| **Yoma+HR Web Portal** | 对话式操作 | 与管理 Bot 功能相同，Web 聊天界面 |
 
 ## 核心功能
 
-### 1. 上传文档
+### 1. 导入文档（聊天）
 
-**方式 A: Admin Portal 上传（推荐）**
+管理员提供服务器文件路径，或渠道把附件注入成 `[media attached: /path/to/file]` 时，调用 **`fastgpt__knowledge_import`** 工具：
 
-管理员通过 Admin Portal (`http://<server>:18790`) 上传：
-
-1. 拖拽或选择文件（支持 PDF、Word/docx、文本）
-2. 点击"上传并转换"，系统自动分析分类、文档编号、版本号、生效日期
-3. 系统自动转为 Markdown 写入知识库
-4. 页面显示上传结果、自动识别出的元数据和警告信息
-
-**方式 B: 聊天 Bot / Web Portal 对话上传**
-
-管理员提供服务器上的文件路径，Agent 执行：
-
-1. 优先调用 `skills/hr-admin/scripts/doc-to-markdown.mjs` 将 PDF、Word、文本转换为 Markdown；仅 Admin Portal 自动上传链路才直接走内置 `doc-converter.mjs`
-2. 自动分析元数据（文档编号、版本号、生效日期、分类）
-3. 使用 `memory_write` 将 Markdown 写入知识库 `../data/hr-policies/<category>/`
-4. 确认写入成功，返回文档摘要
+- 参数：`filePath`（服务器文件绝对路径，必填）、`datasetId`（目标知识库，省略则默认库）
+- 该工具把原始文件直传 FastGPT 原生解析/切片/向量化，并自动记审计 `IMPORT`
+- 导入成功返回 collectionId；FastGPT 后台切片/向量化，稍后在知识库页可见索引状态
 
 对话示例：
 
 ```
-管理员: 转换 /tmp/overtime-policy.pdf 到知识库
-Agent:  已自动识别元数据并写入 ../data/hr-policies/attendance/overtime-policy.md
-        文档编号: HR-ATT-003 | 版本: 1.0 | 生效日期: 2026-04-01
-        全员 Bot 现在可以查询到该文档。
+管理员: 把 /tmp/overtime-policy.pdf 导入知识库
+Agent:  已导入「overtime-policy.pdf」到知识库（collectionId=...）。
+        FastGPT 正在切片/向量化，稍后可在知识库页查看；全员 Bot 随后可检索到。
 ```
 
-**对话上传优先约定：**
+约定：
 
-- 只要管理员消息里出现服务器上的文档路径，或系统把附件注入成 `[media attached: /path/to/file]`
-- 一律优先用 `skills/hr-admin/scripts/doc-to-markdown.mjs <path> --out-dir ../data/hr-policies/`
-- 不要临时自行寻找其他 PDF / DOCX 解析方式，除非脚本不可用且你已向管理员说明
+- 只要管理员消息出现服务器文件路径，或附件注入 `[media attached: /path]`，优先用 `fastgpt__knowledge_import`
+- **不要**自行用 `exec` 跑本地脚本转换/切片（自研转换链已退役，ADR-010）；FastGPT 负责解析
+- 支持的文档格式由 FastGPT 决定（常见：pdf / docx / txt / md / pptx / xlsx / csv / html）
+- 多文档批量导入：逐个调用 `fastgpt__knowledge_import`；超过 5 份先列清单、管理员确认后再逐个执行
 
-**支持的文档格式：**
+### 2. 文档管理（列表 / 删除 / 切片预览）→ Admin Portal
 
-| 格式 | 扩展名    | 转换引擎   |
-| ---- | --------- | ---------- |
-| PDF  | .pdf      | pdfjs-dist |
-| Word | .docx     | mammoth    |
-| 文本 | .txt, .md | 直接读取   |
+ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admin Portal「知识库」页**（多库管理，原生封装 FastGPT API，写操作实时落审计）：
 
-### 2. 更新文档
+- 列表 + 切片数 + 索引状态：知识库页单库详情「文档管理」
+- 删除：知识库页删除（二次确认 + 审计 `DELETE`）
+- 受限库（薪酬/绩效）：其文档列表与切片预览仅 `admin` 可见
+- 聊天 Bot 暂不提供文档删除工具；删除请走 Admin Portal
 
-管理员指定文档编号或文件名：
+> 「更新文档」= 删除旧 collection + 重新导入（FastGPT 按 collection 管理，无原地改内容）。
 
-1. 使用 `memory_search` 定位现有文档
-2. 展示当前文档元数据和摘要
-3. 接收管理员的修改指令（替换内容、更新版本号等）
-4. 使用 `memory_write` 覆盖更新
-5. 记录变更到审计日志
+### 3. 新建知识库 → Admin Portal
 
-### 3. 删除/废止文档
+在 Admin Portal「知识库」页「新建知识库」（原生创建 FastGPT 数据集 + 绑定数字员工 + 可标记受限库，审计 `CREATE_KB`）。
 
-**安全规则：删除操作需二次确认。**
+### 4. 操作审计
 
-1. 管理员指定文档编号或文件名
-2. Agent 展示文档信息，要求确认
-3. 管理员确认后，使用 `memory_delete` 移除
-4. 记录删除操作到审计日志
+所有写操作（导入 / 删除 / 新建库 / 绑定）自动记审计（`../data/hr-admin/audit-log.jsonl`）：
 
-对话示例：
-
-```
-管理员: 废止 HR-LEAVE-001 旧版
-Agent:  即将删除以下文档：
-        - 文件: leave-policy-v2.md
-        - 文档编号: HR-LEAVE-001
-        - 版本: 2.1
-        确认删除？（回复"确认"继续）
-管理员: 确认
-Agent:  已删除。审计记录已生成。
-```
-
-### 4. 查询文档列表
-
-管理员可查询知识库中的文档：
-
-- `列出所有文档`：按分类分组展示
-- `列出 leave 分类的文档`：筛选特定分类
-- `查找 HR-LEAVE-001`：按文档编号搜索
-
-返回格式：
-
-```
-知识库文档列表（leave 分类）：
-| 文件名 | 文档编号 | 版本 | 生效日期 |
-|--------|---------|------|---------|
-| leave-policy-v2.md | HR-LEAVE-001 | 2.1 | 2025-01-01 |
-| leave-policy-faq.md | HR-LEAVE-002 | 1.3 | 2024-07-01 |
-```
-
-### 5. 操作审计日志
-
-所有写操作（上传、更新、删除）自动记录审计日志。审计日志存储为 JSONL 格式（`../data/hr-admin/audit-log.jsonl`），支持两种查看方式：
-
-**方式 A: Admin Portal 审计日志页面（推荐）**
-
-- 表格展示，支持按操作类型、文档编号、日期范围筛选
-- 支持分页浏览
-- 支持导出 CSV（兼容 Excel）
-
-**方式 B: 聊天 Bot / Web Portal 对话查询**
-
-管理员可通过对话查询：
-
-- `查看最近的操作记录`
-- `查看本周的操作记录`
-- `查看 HR-LEAVE-001 的变更历史`
-
-## 批量操作安全
-
-超过 5 份文档的批量操作（批量删除、批量更新分类等），必须先列出完整清单，等管理员逐一确认后再执行。
+- **Admin Portal 审计页**（推荐）：表格 + 按动作/日期筛选 + 导出 CSV
+- 聊天查询：`查看最近的操作记录` 等
 
 ## 工具权限
 
-| 工具             | 权限 | 用途                                                   |
-| ---------------- | ---- | ------------------------------------------------------ |
-| `memory_write`   | 允许 | 写入/更新知识库文档                                    |
-| `memory_delete`  | 允许 | 删除知识库文档                                         |
-| `memory_search`  | 允许 | 搜索知识库（验证写入结果）                             |
-| `exec`           | 允许 | 优先运行 `skills/hr-admin/scripts/doc-to-markdown.mjs` |
-| `gateway`        | 禁止 | 管理员 Agent 不操作网关                                |
-| `sessions_spawn` | 禁止 | 管理员 Agent 无需 Sub-agent                            |
+| 工具 | 权限 | 用途 |
+| --- | --- | --- |
+| `fastgpt__knowledge_import` | 允许 | 把服务器文件导入知识库（FastGPT 原生解析），仅管理员 |
+| `fastgpt__knowledge_search` | 允许 | 检索知识库（验证导入结果 / 协助答疑） |
+| `memory_search` | 允许 | （兼容）会话内记忆检索，非知识库主路径 |
+| `exec` | 允许 | 一般无需；导入由 `fastgpt__knowledge_import` 服务端读文件，不再跑本地转换脚本 |
+| `gateway` / `sessions_spawn` | 禁止 | 管理员 Agent 不操作网关、无需 Sub-agent |
 
 ## 回复规范
 
 - 使用中文回复
-- 操作前展示将要执行的操作内容，等管理员确认
-- 操作完成后返回明确的成功/失败状态
-- 删除操作始终要求二次确认
+- 导入/删除前展示将执行的操作，完成后返回明确成功/失败状态
+- 删除操作走 Admin Portal 并二次确认
+- 知识库平台不可用时如实告知，不要谎称已导入
 
 ## 参考文档
 
 - 管理操作详细规范：[references/admin-operations.md](references/admin-operations.md)
-- Admin Portal 源码：`admin-server/`（独立 Web 服务，端口 18790）
-- 多格式 CLI 转换脚本：`skills/hr-admin/scripts/doc-to-markdown.mjs`
+- Admin Portal：`admin-server/`（Web「知识库」页，多库管理 + 审计）

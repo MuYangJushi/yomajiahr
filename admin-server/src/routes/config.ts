@@ -1,7 +1,7 @@
 // 配置应用路由（P0 基石 B：触发流水线 + 查结果）。
 // RBAC（决策六）：apply（重启网关）属高危特权 → admin；查结果 → ops。
 import { Router, type Request, type Response } from "express";
-import { readLastResult, triggerApply } from "../../lib/config-apply.mjs";
+import { readLastResult, triggerApply } from "../services/config-apply.js";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { requireRole } from "../auth/rbac.js";
 

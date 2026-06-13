@@ -85,7 +85,7 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
             role: values.role,
             persona: values.persona,
             skills: values.skills,
-            removeChannels: removedChannels,
+            removeChannels: removedChannels as Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>,
           };
           if (values.addChannelDomain && values.addChannelMode !== "manual") {
             setSession(await startAgentChannelOnboarding(agent.id, {

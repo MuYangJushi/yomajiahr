@@ -1,23 +1,31 @@
 // 知识库页（ADR-008：B + 多库层）。结构：顶部平台健康条 + [库列表 ⇄ 单库详情]。
 // 库列表：GET /knowledge/bases + [新建知识库]（原生，走 #45，审计 CREATE_KB）。
-// 单库详情：① 平台视图（#46 反代 iframe 嵌 FastGPT 整套 UI，按 datasetId 限定，做文档/切片/向量化）；
+// 单库详情：① 平台视图（项目原生 UI，经 admin-server 调 FastGPT API，做导入/切片/向量化管理）；
 //          ② 召回测试（原生，按本库 datasetId）；③ 绑定数字员工。
 import { useEffect, useState } from "react";
 import {
-  Alert, Button, Card, Empty, Form, Input, List, Modal, Select, Space, Spin, Tabs, Tag, message,
+  Alert, Button, Card, Drawer, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Spin, Switch,
+  Tabs, Tag, Typography, Upload, message,
 } from "antd";
-import { ArrowLeftOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+  ArrowLeftOutlined, DeleteOutlined, EyeOutlined, InboxOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
+} from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   createKnowledgeBase,
-  fastgptConsoleUrl,
+  deleteKnowledgeCollection,
+  fetchCollectionChunks,
   fetchKnowledgeBases,
   fetchKnowledgeBindings,
+  fetchKnowledgeCollections,
   fetchKnowledgeHealth,
   saveKnowledgeBindings,
   searchTest,
+  uploadKnowledgeDocument,
   type AgentRow,
   type KbChunk,
+  type KbChunkPreview,
+  type KbCollection,
   type KnowledgeBinding,
   type KnowledgeHealth,
 } from "./api";
@@ -29,8 +37,8 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
   const title = ok
     ? `● FastGPT 已连接 · 默认 KB ${health.kbId ?? "—"} · 索引 ${health.indexStatus}`
     : health.platform === "local"
-      ? "● 当前使用本地知识库（memory_search / hr-chunks）"
-      : "● FastGPT 不可用 · 已回退本地检索";
+      ? "● 知识库平台未启用 FastGPT"
+      : "● FastGPT 不可用 · 知识库暂时不可用（无本地回退）";
   return (
     <Alert
       type={type}
@@ -40,7 +48,7 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
         <Space size="large" wrap>
           <span>地址 {health.baseUrlHint ?? "（未配置）"}</span>
           <span>embedding {health.embeddingModel ?? "—"}</span>
-          <span>回退 本地 memory_search</span>
+          <span>回退 无（FastGPT 唯一知识源）</span>
           {health.message && <span style={{ color: "#888" }}>{health.message}</span>}
         </Space>
       }
@@ -104,6 +112,14 @@ function NewKbModal({
             options={agents.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` }))}
           />
         </Form.Item>
+        <Form.Item
+          name="restricted"
+          label="受限库"
+          valuePropName="checked"
+          tooltip="受限库（薪酬/绩效等）的文档列表与切片预览仅管理员可见"
+        >
+          <Switch />
+        </Form.Item>
       </Form>
       <Alert
         type="info"
@@ -133,7 +149,16 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
   useEffect(load, []);
 
   const columns: ProColumns<KnowledgeBinding>[] = [
-    { title: "名称", dataIndex: "name", render: (_, r) => <a onClick={() => onSelect(r)}>{r.name}</a> },
+    {
+      title: "名称",
+      dataIndex: "name",
+      render: (_, r) => (
+        <Space>
+          <a onClick={() => onSelect(r)}>{r.name}</a>
+          {r.restricted && <Tag color="volcano">受限</Tag>}
+        </Space>
+      ),
+    },
     {
       title: "平台",
       dataIndex: "provider",
@@ -292,28 +317,184 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
 }
 
 function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
-  if (kb.provider !== "fastgpt" || !kb.externalKbId) {
+  type PlatformCollection = KbCollection & { pendingStatus?: "uploading" | "processing" };
+  const datasetId = kb.externalKbId || "";
+  const [collections, setCollections] = useState<KbCollection[]>([]);
+  const [pending, setPending] = useState<PlatformCollection[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [chunkOpen, setChunkOpen] = useState(false);
+  const [chunkTitle, setChunkTitle] = useState("");
+  const [chunks, setChunks] = useState<KbChunkPreview[]>([]);
+  const [chunkLoading, setChunkLoading] = useState(false);
+
+  const load = async (silent = false) => {
+    if (!datasetId) return;
+    if (!silent) setLoading(true);
+    try {
+      const next = (await fetchKnowledgeCollections(datasetId)).collections;
+      setCollections(next);
+      const visibleIds = new Set(next.map((item) => item.externalDocId));
+      setPending((items) => items.filter((item) => !visibleIds.has(item.externalDocId)));
+    } catch (e: any) {
+      if (!silent) message.error(e?.response?.data?.error || "加载文档列表失败");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (kb.provider === "fastgpt" && datasetId) void load();
+  }, [datasetId]);
+  useEffect(() => {
+    if (pending.length === 0 && !collections.some((item) => item.indexStatus === "indexing")) return;
+    const timer = window.setInterval(() => void load(true), 3000);
+    return () => window.clearInterval(timer);
+  }, [datasetId, pending.length, collections]);
+
+  if (kb.provider !== "fastgpt" || !datasetId) {
     return <Empty description="本库非 FastGPT 库，无平台视图" />;
   }
+
+  const showChunks = async (collection: KbCollection) => {
+    setChunkTitle(collection.title);
+    setChunkOpen(true);
+    setChunkLoading(true);
+    try {
+      setChunks((await fetchCollectionChunks(collection.externalDocId, 0, 100)).chunks);
+    } catch (e: any) {
+      setChunks([]);
+      message.error(e?.response?.data?.error || "加载切片失败");
+    } finally {
+      setChunkLoading(false);
+    }
+  };
+
+  const remove = async (collection: KbCollection) => {
+    try {
+      await deleteKnowledgeCollection(collection.externalDocId);
+      message.success(`已删除「${collection.title}」`);
+      await load();
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || "删除失败");
+    }
+  };
+
+  const status = (row: PlatformCollection) => {
+    if (row.pendingStatus === "uploading") return <Tag color="processing">上传中</Tag>;
+    if (row.pendingStatus === "processing") return <Tag color="processing">已上传，等待 FastGPT 处理</Tag>;
+    const map = {
+      ready: { color: "success", label: "向量化完成" },
+      indexing: { color: "processing", label: "向量化中" },
+      error: { color: "error", label: "处理失败" },
+      unknown: { color: "default", label: "等待处理" },
+      "local-archive": { color: "default", label: "本地归档" },
+    } as const;
+    const item = map[row.indexStatus];
+    return <Tag color={item.color}>{item.label}</Tag>;
+  };
+
+  const columns: ProColumns<PlatformCollection>[] = [
+    { title: "文档", dataIndex: "title", ellipsis: true },
+    { title: "切片数", dataIndex: "chunkCount", width: 100, render: (_, row) => row.chunkCount ?? "—" },
+    { title: "状态", dataIndex: "indexStatus", width: 220, render: (_, row) => status(row) },
+    {
+      title: "操作",
+      width: 180,
+      render: (_, row) => (
+        <Space>
+          <Button type="link" size="small" icon={<EyeOutlined />} disabled={Boolean(row.pendingStatus)} onClick={() => void showChunks(row)}>
+            查看切片
+          </Button>
+          <Popconfirm title={`确认删除「${row.title}」？`} disabled={Boolean(row.pendingStatus)} onConfirm={() => void remove(row)}>
+            <Button type="link" danger size="small" disabled={Boolean(row.pendingStatus)} icon={<DeleteOutlined />}>删除</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
   return (
-    <div>
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 12 }}
-        message="下方为嵌入的 FastGPT 平台（经 :19450 反代）——在此导入文档、查看分段切片与向量化/训练进度。"
-        description="若显示空白或登录页：需先放行 19450 端口，且（未配 SSO 时）在此登录一次 FastGPT。"
+    <>
+      <Upload.Dragger
+        accept=".pdf,.docx,.doc,.txt,.md,.markdown,.html,.csv,.pptx,.xlsx"
+        multiple
+        showUploadList={false}
+        customRequest={async ({ file, onSuccess, onError }) => {
+          const uploadFile = file as File;
+          const temporaryId = `uploading-${crypto.randomUUID()}`;
+          setPending((items) => [
+            { externalDocId: temporaryId, title: uploadFile.name, source: "fastgpt", indexStatus: "unknown", pendingStatus: "uploading" },
+            ...items,
+          ]);
+          try {
+            const result = await uploadKnowledgeDocument(uploadFile, datasetId);
+            setPending((items) => items.map((item) => item.externalDocId === temporaryId
+              ? { ...item, externalDocId: result.collectionId, title: result.file, pendingStatus: "processing" }
+              : item));
+            message.success(`已上传「${result.file}」，FastGPT 正在解析和向量化`);
+            onSuccess?.({});
+            await load(true);
+          } catch (e: any) {
+            setPending((items) => items.filter((item) => item.externalDocId !== temporaryId));
+            message.error(e?.response?.data?.error || `导入「${uploadFile.name}」失败`);
+            onError?.(e);
+          }
+        }}
+        style={{ marginBottom: 16 }}
+      >
+        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+        <p className="ant-upload-text">点击或拖拽文档到此处导入</p>
+        <p className="ant-upload-hint">原始文件由 FastGPT 解析、切片并向量化，完成状态可在下方查看。</p>
+      </Upload.Dragger>
+      <ProTable<PlatformCollection>
+        headerTitle="文档与向量化状态"
+        rowKey="externalDocId"
+        loading={loading}
+        search={false}
+        pagination={false}
+        dataSource={[...pending, ...collections]}
+        columns={columns}
+        options={{ reload: () => void load(), density: false, setting: false }}
       />
-      <iframe
-        title="FastGPT 平台视图"
-        src={fastgptConsoleUrl(kb.externalKbId)}
-        style={{ width: "100%", height: "72vh", border: "1px solid #f0f0f0", borderRadius: 6 }}
-      />
-    </div>
+      <Drawer title={`切片预览 · ${chunkTitle}`} width={720} open={chunkOpen} onClose={() => setChunkOpen(false)}>
+        {chunkLoading ? <Spin /> : (
+          <List
+            locale={{ emptyText: "暂无切片" }}
+            dataSource={chunks}
+            renderItem={(chunk) => (
+              <List.Item>
+                <List.Item.Meta
+                  title={<Tag>#{chunk.chunkIndex + 1}</Tag>}
+                  description={
+                    <Space direction="vertical" style={{ width: "100%" }}>
+                      <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
+                        {chunk.q || "（空切片）"}
+                      </Typography.Paragraph>
+                      {chunk.a && <Typography.Text type="secondary">{chunk.a}</Typography.Text>}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        )}
+      </Drawer>
+    </>
   );
 }
 
-function KbDetail({ kb, onBack }: { kb: KnowledgeBinding; onBack: () => void }) {
+type KnowledgeTab = "platform" | "search" | "bindings";
+
+function KbDetail({
+  kb,
+  activeTab,
+  onTabChange,
+  onBack,
+}: {
+  kb: KnowledgeBinding;
+  activeTab: KnowledgeTab;
+  onTabChange: (tab: KnowledgeTab) => void;
+  onBack: () => void;
+}) {
   return (
     <div>
       <Space style={{ marginBottom: 12 }}>
@@ -322,9 +503,12 @@ function KbDetail({ kb, onBack }: { kb: KnowledgeBinding; onBack: () => void }) 
         </Button>
         <strong style={{ fontSize: 16 }}>{kb.name}</strong>
         <Tag color={kb.provider === "fastgpt" ? "blue" : "default"}>{kb.provider}</Tag>
+        {kb.restricted && <Tag color="volcano">受限（仅管理员可见内容）</Tag>}
         {kb.externalKbId && <span style={{ color: "#888" }}>KB ID: {kb.externalKbId}</span>}
       </Space>
       <Tabs
+        activeKey={activeTab}
+        onChange={(key) => onTabChange(key as KnowledgeTab)}
         items={[
           { key: "platform", label: "平台视图（导入/切片/向量化）", children: <PlatformViewTab kb={kb} /> },
           { key: "search", label: "召回测试", children: <SearchTestTab datasetId={kb.externalKbId} /> },
@@ -338,19 +522,71 @@ function KbDetail({ kb, onBack }: { kb: KnowledgeBinding; onBack: () => void }) 
 export default function Knowledge() {
   const [health, setHealth] = useState<KnowledgeHealth | null>(null);
   const [selected, setSelected] = useState<KnowledgeBinding | null>(null);
+  const [activeTab, setActiveTab] = useState<KnowledgeTab>("platform");
 
   const load = () => {
     fetchKnowledgeHealth().then(setHealth).catch(() => setHealth(null));
   };
   useEffect(load, []);
+  const syncFromUrl = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const kbId = params.get("kb");
+    const tab = params.get("tab");
+    setActiveTab(tab === "search" || tab === "bindings" ? tab : "platform");
+    if (!kbId) {
+      setSelected(null);
+      return;
+    }
+    try {
+      const { bases } = await fetchKnowledgeBases();
+      setSelected(bases.find((base) => base.id === kbId) || null);
+    } catch {
+      setSelected(null);
+    }
+  };
+  useEffect(() => {
+    void syncFromUrl();
+    const onPopState = () => void syncFromUrl();
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const writeUrl = (kb?: KnowledgeBinding, tab: KnowledgeTab = "platform") => {
+    const url = new URL(window.location.href);
+    if (kb) {
+      url.searchParams.set("kb", kb.id);
+      url.searchParams.set("tab", tab);
+    } else {
+      url.searchParams.delete("kb");
+      url.searchParams.delete("tab");
+    }
+    window.history.pushState({}, "", `${url.pathname}${url.search}`);
+  };
+
+  const selectKb = (kb: KnowledgeBinding) => {
+    setSelected(kb);
+    setActiveTab("platform");
+    writeUrl(kb);
+  };
+
+  const changeTab = (tab: KnowledgeTab) => {
+    setActiveTab(tab);
+    if (selected) writeUrl(selected, tab);
+  };
+
+  const back = () => {
+    setSelected(null);
+    setActiveTab("platform");
+    writeUrl();
+  };
 
   return (
     <div>
       <HealthBanner health={health} onRefresh={load} />
       {selected ? (
-        <KbDetail kb={selected} onBack={() => setSelected(null)} />
+        <KbDetail kb={selected} activeTab={activeTab} onTabChange={changeTab} onBack={back} />
       ) : (
-        <KbList onSelect={setSelected} />
+        <KbList onSelect={selectKb} />
       )}
     </div>
   );
