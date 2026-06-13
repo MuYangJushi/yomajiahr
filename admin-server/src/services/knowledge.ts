@@ -469,7 +469,7 @@ const STORE_PATH = join(STORE_DIR, "knowledge.json");
 
 /**
  * 缺省知识库（无 knowledge.json 时）。fastgpt 已配 → 默认库即真实 FastGPT 默认库
- * （带 externalKbId、绑 hr-assistant），使多库列表能显示它，且首次写入会把它持久化，
+ * （带 externalKbId、绑 hr-employee），使多库列表能显示它，且首次写入会把它持久化，
  * 与 resolveDatasetIdsForAgent 一致；否则退本地归档库。
  */
 function defaultStore(): KnowledgeStore {

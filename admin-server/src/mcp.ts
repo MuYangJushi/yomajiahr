@@ -1,6 +1,6 @@
 // MCP 端点（架构 I，ADR-006/010）：把 knowledge_search（检索）+ knowledge_import（导入，仅 admin）暴露给数字员工。
 // openclaw 侧注册（yomakit，纯配置无需改源码，守 ADR-002），每 agent 一注册、路径带 agentId：
-//   员工（只读）：openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-assistant \
+//   员工（只读）：openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-employee \
 //     --transport streamable-http --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" --include knowledge_search
 //   管理员（读+导入）：openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-admin \
 //     --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" --include knowledge_search,knowledge_import
