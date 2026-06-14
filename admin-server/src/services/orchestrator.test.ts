@@ -126,7 +126,10 @@ test("修改数字员工时可同时新增另一渠道，并保留 MEMORY.md", a
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   assert.equal(agents[0].name, "更新后的助手");
   assert.equal(agents[0].persona, "负责集成测试");
-  assert.ok(agents[0].tools.allow.includes("memory_write"));
+  // ADR-012：admin agent 仅授予 exec，内置 memory 工具（含 memory_write）退役并入 deny。
+  assert.deepEqual(agents[0].tools.allow, ["exec"]);
+  assert.ok(agents[0].tools.deny.includes("memory_write"));
+  assert.ok(!agents[0].tools.allow.includes("memory_search"));
   assert.match(readFileSync(join(stateDir, "workspaces", "integration-agent", "SOUL.md"), "utf-8"), /负责集成测试/);
   assert.equal(readFileSync(memoryPath, "utf-8"), "custom memory\n");
   assert.equal(channels["dingtalk-connector"]["integration-agent"].clientId, "${DINGTALK_INTEGRATION_AGENT_CLIENT_ID}");

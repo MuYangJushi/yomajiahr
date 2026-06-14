@@ -6,7 +6,6 @@ import {
   BindingsStoreSchema,
   ChannelsStoreSchema,
   KnowledgeStoreSchema,
-  LOCKED_CHUNKING,
   SUBAGENT_TOOLS,
   WRITE_TOOLS,
   type Agent,
@@ -120,10 +119,7 @@ export function validateConfig(
     }
   }
 
-  // —— 5. ADR-004：chunking 锁定 ——
-  const chunking = (runtime as any)?.agents?.defaults?.memorySearch?.chunking;
-  if (JSON.stringify(chunking) !== JSON.stringify(LOCKED_CHUNKING))
-    errors.push(`ADR-004 违规：agents.defaults.memorySearch.chunking 必须为 ${JSON.stringify(LOCKED_CHUNKING)}，当前为 ${JSON.stringify(chunking)}`);
+  // —— 5. ADR-004 的 chunking 锁定校验已随 ADR-012 退役内置 memorySearch 一并移除（约束对象已不存在）——
 
   // —— 6. ${VAR} 占位符存在性 ——
   if (opts.envKeys) {

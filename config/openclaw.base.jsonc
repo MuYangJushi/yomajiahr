@@ -61,37 +61,9 @@
         "every": "30m",
         "target": "none",
       },
-      // 阿里百炼 Embedding（通过 OpenAI-compatible /embeddings 接口接入）。
-      // 注意: ADR-004 锁定 chunking.tokens=4000 / overlap=0，校验器会强制此不变量。
-      "memorySearch": {
-        "enabled": true,
-        "sources": ["memory"],
-        "experimental": {
-          "sessionMemory": false,
-        },
-        "provider": "openai",
-        "model": "text-embedding-v4",
-        "fallback": "none",
-        "remote": {
-          "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-          "apiKey": "${DASHSCOPE_API_KEY}",
-        },
-        "sync": {
-          "watch": true,
-          "onSessionStart": true,
-        },
-        "query": {
-          "hybrid": {
-            "enabled": true,
-          },
-        },
-        "extraPaths": ["../../data/hr-chunks"],
-        // 预切片文件已按主题切好，调大窗口让每个 .md = 一个 chunk，避免 builtin 二次切片
-        "chunking": {
-          "tokens": 4000,
-          "overlap": 0,
-        },
-      },
+      // ADR-012：已退役 openclaw 内置 memorySearch（memory_search/memory_get + 本地 hr-chunks 索引）。
+      // 知识检索唯一通道为 FastGPT knowledge_search（ADR-010/011，经 MCP 绑定驱动暴露）。
+      // 内置 memory 仅余 retired 本地切片（绕 FastGPT 受限标记的暗路）+ 边际 workspace 记忆，整块移除。
     },
   },
 

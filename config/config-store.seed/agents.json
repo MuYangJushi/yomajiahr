@@ -8,7 +8,7 @@
     "skills": ["hr-policy-qa", "hr-general"],
     "heartbeat": {},
     "tools": {
-      "allow": ["memory_search", "memory_get"],
+      "allow": [],
       "deny": ["memory_write", "memory_delete", "exec"]
     }
   },
@@ -20,7 +20,7 @@
     "skills": ["hr-admin"],
     "heartbeat": {},
     "tools": {
-      "allow": ["memory_search", "memory_get", "exec"],
+      "allow": ["exec"],
       "deny": ["gateway", "sessions_spawn", "memory_write", "memory_delete"]
     }
   }
