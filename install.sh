@@ -55,6 +55,17 @@ else
   export OPENCLAW_MIN_VERSION
   unset _DETECTED_MIN_VERSION _probe
 fi
+# Pin TMPDIR to a per-user runtime dir so openclaw 2026.6.6+ and tools
+# like mktemp(1) don't fall back to /tmp (which is 0700 root-owned on
+# yomakit, blocking uid 1000 from creating per-uid temp dirs).
+# Only set when not already exported (user override wins).
+if [ -z "${TMPDIR:-}" ]; then
+  _INSTALL_TMPDIR="/run/user/$(id -u 2>/dev/null || echo 1000)"
+  if [ -d "$_INSTALL_TMPDIR" ] && [ -w "$_INSTALL_TMPDIR" ]; then
+    export TMPDIR="$_INSTALL_TMPDIR"
+  fi
+  unset _INSTALL_TMPDIR
+fi
 OPENCLAW_REGISTRY="${OPENCLAW_REGISTRY:-$(npm config get registry 2>/dev/null || echo 'https://registry.npmjs.org')}"
 OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
