@@ -46,14 +46,24 @@ export async function logout(): Promise<void> {
 }
 
 // —— 类型 ——
+export interface AgentProfile {
+  jobTitle?: string;
+  responsibilities?: string;
+  personality?: string;
+  tone?: string;
+  boundaries?: string;
+}
 export interface AgentRow {
   id: string;
   role: "employee" | "admin";
   name: string;
+  /** @deprecated 兼容读取；新数据用 profile.personality。 */
   persona: string;
+  profile?: AgentProfile;
   default: boolean;
   skills: string[];
   channels: Array<{ domain: string; accountId: string }>;
+  derived: { pendingSkills: boolean; pendingChannels: boolean };
 }
 export interface Skill {
   name: string;
@@ -70,24 +80,68 @@ export interface ChannelsInfo {
 export async function fetchAgents(): Promise<AgentRow[]> {
   return (await api.get("/config/agents")).data.agents;
 }
+export interface CreateAgentInput {
+  id: string;
+  name: string;
+  role: "employee" | "admin";
+  /** @deprecated 由 profile.personality 取代。 */
+  persona?: string;
+  profile?: AgentProfile;
+  skills?: string[];
+}
+export async function createAgent(input: CreateAgentInput): Promise<unknown> {
+  return (await api.post("/config/agents", input)).data;
+}
 export interface UpdateAgentInput {
   name: string;
   role: "employee" | "admin";
+  /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
-  skills: string[];
-  addChannel?: {
-    domain: "feishu" | "dingtalk-connector";
-    accountId?: string;
-    credentials?: { clientId: string; clientSecret: string };
-    existing?: boolean;
-  };
-  removeChannels?: Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>;
+  profile?: AgentProfile;
+  skills?: string[];
 }
 export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
   await api.put(`/config/agents/${encodeURIComponent(id)}`, input);
 }
 export async function deleteAgent(id: string): Promise<void> {
   await api.delete(`/config/agents/${encodeURIComponent(id)}`);
+}
+export interface BindChannelInput {
+  domain: "feishu" | "dingtalk-connector";
+  accountId?: string;
+  existing?: boolean;
+  credentials?: { clientId: string; clientSecret: string };
+}
+export async function bindAgentChannel(id: string, input: BindChannelInput): Promise<unknown> {
+  return (await api.post(`/config/agents/${encodeURIComponent(id)}/channels`, input)).data;
+}
+export async function unbindAgentChannel(id: string, domain: string, accountId: string): Promise<unknown> {
+  return (await api.delete(`/config/agents/${encodeURIComponent(id)}/channels/${encodeURIComponent(domain)}/${encodeURIComponent(accountId)}`)).data;
+}
+export async function generateAgentProfile(input: { jobTitle: string; hints?: string; role?: "employee" | "admin" }): Promise<AgentProfile> {
+  return (await api.post("/config/agent-profile/generate", input)).data.profile;
+}
+
+// —— 渠道管理（ADR-013 §渠道独立）——
+export interface ChannelHealth { ok: boolean; lastError?: string; updatedAt: string }
+export interface ChannelAsset {
+  id: string;
+  type: "feishu" | "dingtalk";
+  displayName: string;
+  enabled?: boolean;
+  policy?: { dmPolicy?: "open" | "restricted"; groupPolicy?: "open" | "disabled"; requireMention?: boolean };
+  account?: Record<string, unknown>;
+  envKeys?: string[];
+  health?: ChannelHealth;
+}
+export async function fetchChannelAssets(): Promise<{ channels: ChannelAsset[]; health: ChannelHealth[] }> {
+  return (await api.get("/config/channels")).data;
+}
+export async function probeChannels(): Promise<ChannelHealth[]> {
+  return (await api.post("/config/channels/probe")).data.health;
+}
+export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
+  await api.delete(`/config/channels/${type}/${encodeURIComponent(id)}`);
 }
 export async function fetchSkills(): Promise<Skill[]> {
   return (await api.get("/config/skills")).data.skills;

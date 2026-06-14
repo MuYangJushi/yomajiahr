@@ -153,23 +153,18 @@ export default function Agents() {
           </Button>,
         ]}
       />
-      {channels && (
-        <CreateAgentWizard
-          open={wizardOpen}
-          onClose={() => setWizardOpen(false)}
-          onCreated={() => {
-            setWizardOpen(false);
-            actionRef.current?.reload();
-            fetchChannels().then(setChannels).catch(() => {});
-          }}
-          skills={skills}
-          channels={channels}
-        />
-      )}
+      <CreateAgentWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={() => {
+          setWizardOpen(false);
+          actionRef.current?.reload();
+        }}
+        skills={skills}
+      />
       <EditAgentModal
         agent={editingAgent}
         skills={skills}
-        channels={channels || { supported: [], channels: {}, env_keys: [] }}
         onClose={() => setEditingAgent(null)}
         onUpdated={() => {
           setEditingAgent(null);

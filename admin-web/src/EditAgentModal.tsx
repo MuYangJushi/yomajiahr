@@ -1,29 +1,12 @@
-import { useEffect, useState } from "react";
-import {
-  ModalForm,
-  ProFormDependency,
-  ProFormRadio,
-  ProFormSelect,
-  ProFormText,
-  ProFormTextArea,
-} from "@ant-design/pro-components";
-import { Alert, Collapse, Divider, Space, Tag, message } from "antd";
-import {
-  cancelAgentOnboarding,
-  fetchAgentOnboarding,
-  startAgentChannelOnboarding,
-  updateAgent,
-  type AgentRow,
-  type ChannelsInfo,
-  type OnboardingSession,
-  type Skill,
-} from "./api";
-import { OnboardingProgress } from "./CreateAgentWizard";
+// 修改数字员工（ADR-013 §招募向导）：仅改资料 + 权限 + 技能。
+// 渠道的解绑/绑定/复用统一在「渠道管理」页通过独立 API 完成，不再在本弹窗中编辑。
+import { ModalForm, ProFormRadio, ProFormSelect, ProFormText, ProFormTextArea } from "@ant-design/pro-components";
+import { Alert, Tag, message } from "antd";
+import { updateAgent, type AgentRow, type Skill } from "./api";
 
 interface Props {
   agent: AgentRow | null;
   skills: Skill[];
-  channels: ChannelsInfo;
   onClose: () => void;
   onUpdated: () => void;
 }
@@ -33,40 +16,7 @@ const DOMAIN_LABEL: Record<string, string> = {
   "dingtalk-connector": "钉钉",
 };
 
-export default function EditAgentModal({ agent, skills, channels, onClose, onUpdated }: Props) {
-  const [removedChannels, setRemovedChannels] = useState<AgentRow["channels"]>([]);
-  const [session, setSession] = useState<OnboardingSession | null>(null);
-  const connectedDomains = new Set(agent?.channels.filter((channel) => !removedChannels.some(
-    (removed) => removed.domain === channel.domain && removed.accountId === channel.accountId,
-  )).map((channel) => channel.domain) || []);
-  const availableDomains = channels.supported.filter((domain) => !connectedDomains.has(domain));
-  useEffect(() => {
-    setRemovedChannels([]);
-    setSession(null);
-  }, [agent?.id]);
-  useEffect(() => {
-    if (!session || ["success", "failed", "expired", "cancelled"].includes(session.status)) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const next = await fetchAgentOnboarding(session.id);
-        setSession(next);
-        if (next.status === "success") {
-          message.success("数字员工及新渠道已更新");
-          onUpdated();
-        }
-      } catch (err: any) {
-        setSession((current) => current ? { ...current, status: "failed", message: err?.response?.data?.error || "状态查询失败" } : current);
-      }
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [session?.id, session?.status]);
-  async function closeModal() {
-    if (session && !["success", "failed", "expired", "cancelled"].includes(session.status)) {
-      await cancelAgentOnboarding(session.id).catch(() => {});
-    }
-    setSession(null);
-    onClose();
-  }
+export default function EditAgentModal({ agent, skills, onClose, onUpdated }: Props) {
   return (
     <ModalForm
       key={agent?.id || "closed"}
@@ -74,42 +24,24 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
       open={Boolean(agent)}
       initialValues={agent || undefined}
       onOpenChange={(open) => {
-        if (!open) void closeModal();
+        if (!open) onClose();
       }}
       modalProps={{ destroyOnClose: true }}
       onFinish={async (values) => {
         if (!agent) return false;
         try {
-          const body = {
+          await updateAgent(agent.id, {
             name: values.name,
             role: values.role,
-            persona: values.persona,
+            profile: {
+              ...(agent.profile || {}),
+              jobTitle: values.jobTitle,
+              responsibilities: values.responsibilities,
+              personality: values.personality,
+              tone: values.tone,
+              boundaries: values.boundaries,
+            },
             skills: values.skills,
-            removeChannels: removedChannels as Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>,
-          };
-          if (values.addChannelDomain && values.addChannelMode !== "manual") {
-            setSession(await startAgentChannelOnboarding(agent.id, {
-              ...body,
-              domain: values.addChannelDomain,
-              accountId: values.addChannelMode === "existing"
-                ? values.addChannelExistingAccountId
-                : values.addChannelAccountId || undefined,
-              mode: values.addChannelMode,
-            }));
-            return false;
-          }
-          await updateAgent(agent.id, {
-            ...body,
-            addChannel: values.addChannelDomain
-              ? {
-                  domain: values.addChannelDomain,
-                  accountId: values.addChannelAccountId || undefined,
-                  credentials: {
-                    clientId: values.addChannelClientId,
-                    clientSecret: values.addChannelClientSecret,
-                  },
-                }
-              : undefined,
           });
           message.success("数字员工已更新");
           onUpdated();
@@ -120,108 +52,81 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
         }
       }}
     >
-      {session ? (
-        <OnboardingProgress session={session} onRetry={() => setSession(null)} onClose={closeModal} />
-      ) : <>
       <ProFormText name="id" label="ID" disabled />
       <ProFormText name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]} />
       <ProFormRadio.Group
         name="role"
-        label="岗位"
+        label="系统权限"
+        tooltip="这是平台权限级别，不是真实岗位（岗位由 profile.jobTitle 表达）"
         options={[
-          { label: "员工", value: "employee" },
-          { label: "管理员", value: "admin" },
+          { label: "员工（只读）", value: "employee" },
+          { label: "管理员（可写）", value: "admin" },
         ]}
         rules={[{ required: true }]}
       />
-      <ProFormTextArea name="persona" label="人设" placeholder="一句话描述该数字员工的职责与风格" />
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ margin: "8px 0" }}
+        message="职业档案：岗位名 + 5 段结构化描述。AGENTS.md 会按此渲染「待配置技能 / 待接入渠道」状态提示。"
+      />
+      <ProFormText
+        name="jobTitle"
+        label="岗位名"
+        rules={[{ required: true, max: 60 }]}
+        initialValue={agent?.profile?.jobTitle}
+        fieldProps={{ autoComplete: "off" }}
+      />
+      <ProFormTextArea
+        name="responsibilities"
+        label="职责"
+        initialValue={agent?.profile?.responsibilities}
+        fieldProps={{ rows: 3 }}
+      />
+      <ProFormText
+        name="personality"
+        label="人设（3~5 形容词）"
+        initialValue={agent?.profile?.personality || agent?.persona}
+      />
+      <ProFormText name="tone" label="语气" initialValue={agent?.profile?.tone} />
+      <ProFormTextArea
+        name="boundaries"
+        label="边界"
+        initialValue={agent?.profile?.boundaries}
+        fieldProps={{ rows: 2 }}
+      />
+
       <ProFormSelect
         name="skills"
         label="分配技能"
         mode="multiple"
-        rules={[{ required: true, message: "至少分配一个技能" }]}
+        allowClear
+        placeholder="可留空，AGENTS.md 会显示「待配置技能」"
         options={skills.map((s) => ({ label: s.name, value: s.name, title: s.description }))}
+        fieldProps={{ optionRender: (o: any) => <span title={o.data.title}>{o.label}</span> }}
       />
-      <Divider orientation="left">渠道接入</Divider>
-      <Space wrap style={{ marginBottom: 16 }}>
-        {agent?.channels.filter((channel) => !removedChannels.some(
-          (removed) => removed.domain === channel.domain && removed.accountId === channel.accountId,
-        )).map((channel) => (
-          <Tag
-            key={`${channel.domain}/${channel.accountId}`}
-            color="geekblue"
-            closable
-            onClose={() => setRemovedChannels((current) => [...current, channel])}
-          >
-            {DOMAIN_LABEL[channel.domain] || channel.domain}/{channel.accountId}
-          </Tag>
-        ))}
-      </Space>
-      {availableDomains.length === 0 ? (
-        <Alert type="info" showIcon message="该数字员工已接入所有支持的渠道" />
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ margin: "12px 0 0" }}
+        message="渠道绑定 / 解绑 / 账号复用请在「渠道管理」页完成。"
+      />
+      {agent?.channels.length ? (
+        <div style={{ marginTop: 8 }}>
+          当前接入：
+          {agent.channels.map((c) => (
+            <Tag key={`${c.domain}/${c.accountId}`} color="geekblue" style={{ marginLeft: 4 }}>
+              {DOMAIN_LABEL[c.domain] || c.domain}/{c.accountId}
+            </Tag>
+          ))}
+        </div>
       ) : (
-        <>
-          <ProFormSelect
-            name="addChannelDomain"
-            label="同时新增渠道（可选）"
-            placeholder="不新增渠道"
-            options={availableDomains.map((domain) => ({
-              label: DOMAIN_LABEL[domain] || domain,
-              value: domain,
-            }))}
-          />
-          <ProFormDependency name={["addChannelDomain"]}>
-            {({ addChannelDomain }) => addChannelDomain ? (
-              <>
-                <ProFormRadio.Group
-                  name="addChannelMode"
-                  label="接入方式"
-                  initialValue="scan"
-                  options={[
-                    { label: "扫码创建新应用", value: "scan" },
-                    { label: "选择平台已有账号", value: "existing" },
-                    { label: "录入新的已有应用", value: "manual" },
-                  ]}
-                />
-                <ProFormText
-                  name="addChannelAccountId"
-                  label="账号 ID"
-                  tooltip="留空则使用数字员工 ID"
-                  placeholder={agent?.id}
-                />
-                <ProFormDependency name={["addChannelMode"]}>
-                  {({ addChannelMode }) => addChannelMode === "existing" ? (
-                    <ProFormSelect
-                      name="addChannelExistingAccountId"
-                      label="已有账号"
-                      rules={[{ required: true, message: "请选择空闲账号" }]}
-                      options={(channels.channels[addChannelDomain]?.accounts || []).map((account) => ({
-                        label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedByName || account.occupiedBy} 占用）` : "（空闲）"}`,
-                        value: account.accountId,
-                        disabled: account.occupied,
-                      }))}
-                    />
-                  ) : addChannelMode === "manual" ? (
-                    <Collapse items={[{ key: "credentials", label: "已有应用凭证", children: <>
-                      <ProFormText
-                        name="addChannelClientId"
-                        label={addChannelDomain === "feishu" ? "App ID" : "Client ID"}
-                        rules={[{ required: true, message: "请输入应用 ID" }]}
-                      />
-                      <ProFormText.Password
-                        name="addChannelClientSecret"
-                        label={addChannelDomain === "feishu" ? "App Secret" : "Client Secret"}
-                        rules={[{ required: true, message: "请输入应用密钥" }]}
-                      />
-                    </> }]} />
-                  ) : <Alert type="info" showIcon message="保存后显示二维码；扫码授权成功后自动更新。" />}
-                </ProFormDependency>
-              </>
-            ) : null}
-          </ProFormDependency>
-        </>
+        <div style={{ marginTop: 8 }}>
+          <Tag color="warning">暂未接入渠道</Tag>
+        </div>
       )}
-      </>}
     </ModalForm>
   );
 }
