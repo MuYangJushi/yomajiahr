@@ -153,7 +153,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
               label="已有账号"
               rules={[{ required: true, message: "请选择空闲账号" }]}
               options={(channels.channels[domain]?.accounts || []).map((account) => ({
-                label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedBy} 占用）` : "（空闲）"}`,
+                label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedByName || account.occupiedBy} 占用）` : "（空闲）"}`,
                 value: account.accountId,
                 disabled: account.occupied,
               }))}

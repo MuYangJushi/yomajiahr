@@ -62,7 +62,7 @@ export interface Skill {
 export interface ChannelsInfo {
   supported: string[];
   channels: Record<string, {
-    accounts: Array<{ accountId: string; occupied: boolean; occupiedBy?: string }>;
+    accounts: Array<{ accountId: string; occupied: boolean; occupiedBy?: string; occupiedByName?: string }>;
   }>;
   env_keys: string[];
 }
