@@ -53,7 +53,7 @@ cd yomajiahr
 ```
 
 `install.sh` 会自动：
-1. 安装已验证兼容的 OpenClaw 版本（默认 `2026.5.26`；可用 `OPENCLAW_VERSION` 覆盖）
+1. 安装 OpenClaw（默认装 **npm `latest` 通道**；可用 `OPENCLAW_VERSION=2026.6.6` 锁定具体版本，或 `OPENCLAW_VERSION=beta` 用灰度版；最低兼容版本 `2026.5.26`，可用 `OPENCLAW_MIN_VERSION` 覆盖）。脚本会通过 `npm view` 解析 dist-tag 到具体版本号避免抖动，并在重启 systemd 前用新版本 `openclaw config validate` 校验现有 `openclaw.json`，校验失败则**不重启服务、保留旧版运行**。
 2. 创建 `~/.openclaw/` 目录结构
 3. 复制 workspace 文件和 skills
 4. 编译配置文件（JSONC -> JSON）

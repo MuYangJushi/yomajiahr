@@ -22,7 +22,14 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIN_NODE_MAJOR=24
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.5.26}"
+# OpenClaw version resolution:
+#   - "latest" (default)  → 解析 npm dist-tags.latest 到具体版本号（避免 openclaw@latest 抖动）
+#   - "beta"              → 解析 npm dist-tags.beta（灰度验证用）
+#   - "2026.6.6"          → 精确版本号（生产锁定用）
+#   - "2026.5.26"         → 仍可锁定到旧版（兜底）
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
+OPENCLAW_MIN_VERSION="${OPENCLAW_MIN_VERSION:-2026.5.26}"   # 最低兼容版本（仓库基线）
+OPENCLAW_REGISTRY="${OPENCLAW_REGISTRY:-$(npm config get registry 2>/dev/null || echo 'https://registry.npmjs.org')}"
 OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
 
@@ -268,8 +275,34 @@ npm config set registry https://registry.npmmirror.com
 echo "[2/9] Installing openclaw..."
 if [ "$OPENCLAW_SKIP_INSTALL" = "1" ]; then
   command -v openclaw >/dev/null 2>&1 || { echo "ERROR: OPENCLAW_SKIP_INSTALL=1 but openclaw is not on PATH"; exit 1; }
-  echo "  skipped; using $(openclaw --version 2>/dev/null || echo openclaw)"
+  INSTALLED_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  echo "  skipped; using $INSTALLED_VERSION"
 else
+  # Resolve OPENCLAW_VERSION to a concrete semver.
+  # "latest" / "beta" → resolve via npm dist-tags.
+  # "2026.6.6" / "2026.5.26" → keep as-is.
+  case "$OPENCLAW_VERSION" in
+    latest|beta|alpha)
+      RESOLVED_VERSION="$(npm view "openclaw@$OPENCLAW_VERSION" version --registry="$OPENCLAW_REGISTRY" 2>/dev/null | tail -1)"
+      if [ -z "$RESOLVED_VERSION" ]; then
+        echo "ERROR: failed to resolve dist-tag '$OPENCLAW_VERSION' from $OPENCLAW_REGISTRY" >&2
+        exit 1
+      fi
+      echo "  Resolved $OPENCLAW_VERSION → $RESOLVED_VERSION (from $OPENCLAW_REGISTRY)"
+      OPENCLAW_VERSION="$RESOLVED_VERSION"
+      ;;
+    *)
+      # Concrete semver — keep as-is
+      ;;
+  esac
+
+  # Compare against minimum required version (sortable: 2026.5.26 < 2026.6.6)
+  if [ "$OPENCLAW_VERSION" != "$(printf '%s\n%s\n' "$OPENCLAW_VERSION" "$OPENCLAW_MIN_VERSION" | sort -V | tail -1)" ]; then
+    echo "ERROR: openclaw@$OPENCLAW_VERSION is older than minimum required ($OPENCLAW_MIN_VERSION)" >&2
+    echo "       Pass OPENCLAW_VERSION=<newer> or OPENCLAW_MIN_VERSION=<lower> to override." >&2
+    exit 1
+  fi
+
   # Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
   NPM_PREFIX="$(npm config get prefix)"
   if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
@@ -277,12 +310,21 @@ else
     sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
   fi
   # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
-  if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
-    npm install -g "openclaw@$OPENCLAW_VERSION"
+  if [ -w "$NVM_DIR/versions/node/$(node -v | tr -d 'v')/lib" ] 2>/dev/null \
+     || [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
+    npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
   else
-    sudo npm install -g "openclaw@$OPENCLAW_VERSION"
+    sudo npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
   fi
-  echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
+  INSTALLED_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  if [ -z "$INSTALLED_VERSION" ] || ! command -v openclaw >/dev/null 2>&1; then
+    echo "ERROR: openclaw@$OPENCLAW_VERSION install completed but binary is not on PATH" >&2
+    exit 1
+  fi
+  if [ "$INSTALLED_VERSION" != "$OPENCLAW_VERSION" ]; then
+    echo "WARN: installed version ($INSTALLED_VERSION) differs from requested ($OPENCLAW_VERSION)" >&2
+  fi
+  echo "  openclaw $INSTALLED_VERSION installed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -556,16 +598,40 @@ if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
 fi
 
 if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; }; then
-  echo "[systemd] Restarting previously running services..."
-  if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
-    sudo systemctl restart openclaw-gateway
-    echo "  openclaw-gateway restarted"
+  # Pre-restart health gate: validate the new config against the freshly installed
+  # openclaw binary. If the upgrade changed schema/CLI surface, openclaw may
+  # reject the existing openclaw.json — in that case we DO NOT restart the
+  # services (would bring down production on a bad upgrade).
+  echo "[health] Validating $STATE_DIR/openclaw.json against openclaw $INSTALLED_VERSION..."
+  if command -v openclaw >/dev/null 2>&1; then
+    # `openclaw config validate` does not take a --config arg; it reads
+    # $OPENCLAW_CONFIG_PATH. Point it at the runtime config explicitly.
+    if OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" openclaw config validate >/tmp/openclaw-validate.log 2>&1; then
+      echo "  config validate: OK"
+    else
+      echo "  [WARN] config validate failed (see /tmp/openclaw-validate.log);" >&2
+      echo "         skipping service restart to keep the previous version live." >&2
+      echo "         Investigate log, fix the config, then run:" >&2
+      echo "           sudo systemctl restart openclaw-gateway openclaw-admin" >&2
+      GATEWAY_WAS_ACTIVE=false
+      ADMIN_WAS_ACTIVE=false
+    fi
+  else
+    echo "  [WARN] openclaw not on PATH; skipping pre-restart validation"
   fi
-  if [ "$ADMIN_WAS_ACTIVE" = true ]; then
-    sudo systemctl restart openclaw-admin
-    echo "  openclaw-admin restarted"
+
+  if [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; then
+    echo "[systemd] Restarting previously running services..."
+    if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
+      sudo systemctl restart openclaw-gateway
+      echo "  openclaw-gateway restarted"
+    fi
+    if [ "$ADMIN_WAS_ACTIVE" = true ]; then
+      sudo systemctl restart openclaw-admin
+      echo "  openclaw-admin restarted"
+    fi
+    SERVICES_RESTARTED=true
   fi
-  SERVICES_RESTARTED=true
 fi
 
 # ---------------------------------------------------------------------------
