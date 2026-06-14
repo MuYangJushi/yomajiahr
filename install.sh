@@ -614,7 +614,12 @@ if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_
   if command -v openclaw >/dev/null 2>&1; then
     # `openclaw config validate` does not take a --config arg; it reads
     # $OPENCLAW_CONFIG_PATH. Point it at the runtime config explicitly.
-    if OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" openclaw config validate >/tmp/openclaw-validate.log 2>&1; then
+    # Also export TMPDIR — openclaw 2026.6.6+ refuses to start (and validate)
+    # when the temp dir falls back to /tmp (the runtime user can't mkdir there
+    # when /tmp is mode 0700 root-owned). Mirror the systemd unit setting.
+    if TMPDIR=/run/user/$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000) \
+       OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" \
+       openclaw config validate >/tmp/openclaw-validate.log 2>&1; then
       echo "  config validate: OK"
     else
       echo "  [WARN] config validate failed (see /tmp/openclaw-validate.log);" >&2

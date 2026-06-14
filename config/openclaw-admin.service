@@ -12,6 +12,7 @@ Restart=always
 RestartSec=10
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=NODE_ENV=production
+Environment=TMPDIR=/run/user/1000
 Environment=ADMIN_PORTAL_PORT=18790
 Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
 EnvironmentFile=/home/ubuntu/.openclaw/.env
