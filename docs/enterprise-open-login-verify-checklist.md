@@ -58,3 +58,68 @@
 
 - [ ] 移除 B1 的临时 debug 日志（勿把 token 打进生产日志）。
 - [ ] 三段（A/B/C）全绿 → 在 PR 描述勾上"真机核验通过"，署名 Dennis + 日期。
+
+---
+
+## 附录：rsync 直上生产核验（`/opt/yomajiahr` 非 git）
+
+> 部署模型：`/opt/yomajiahr` = install.sh 的 `REPO_DIR`（非 git），本地代码 rsync 过去后跑
+> `./install.sh` 从中 build admin-server/web 并重启。`.env` 有 `if [ -f ]` 守卫（install.sh:388），
+> 已存在则跳过，**不会冲掉生产凭据**。config-store/base 本分支未改，配置重生成≈no-op。
+> 所有命令以 **ubuntu** 用户（CLAUDE.md §3，绝不 root）。corpId 信号无需改代码——拒登日志已带 `corp_id=`。
+
+### 0. 先备份（回滚用）
+```bash
+sudo -u ubuntu tar -C /opt -czf /home/ubuntu/yomajiahr-pre-openlogin.tgz yomajiahr
+```
+
+### 1. 本地 rsync 分支代码到 /opt（排除 .git/node_modules/dist）
+```bash
+# 在 worktree 根目录执行
+rsync -az --exclude '.git' --exclude 'node_modules' --exclude 'dist' \
+  /Users/yangmu/Projects/yomajia/.worktrees/feat-login-open-enterprise-members/ \
+  yomakit:/opt/yomajiahr/
+```
+> 若 /opt 属主非 ssh 用户，加 `--rsync-path="sudo rsync"`。
+
+### 2. 加两个新 env（生产 .env 末尾追加）
+```bash
+sudo -u ubuntu bash -lc '
+  cat >> /home/ubuntu/.openclaw/.env <<ENV
+
+# 企业开放登录（feat/login-open-enterprise-members）
+PLATFORM_OPEN_ENTERPRISE_LOGIN_ROLE=ops
+DINGTALK_LOGIN_CORP_ID=<本企业 corpId>
+ENV
+'
+```
+
+### 3. 重新 build + 重启
+```bash
+sudo -u ubuntu bash -lc 'cd /opt/yomajiahr && ./install.sh --systemd'
+sudo systemctl restart openclaw-admin
+```
+> 启动日志确认：`journalctl -u openclaw-admin | grep -i "open enterprise"` 出现
+> `Open enterprise login: enabled ... ops`（缺 corpId 时还会有 fail-closed WARN）。
+
+### 4. 验证（A/B/C 段）+ 读 corpId 信号
+- 浏览器走生产登录页，按上文 A/B/C 段试登。
+- 钉钉若被拒，看日志即知 corpId 有没有正确回传：
+  ```bash
+  journalctl -u openclaw-admin -n 50 | grep "钉钉登录被拒"
+  ```
+  - `corp_id=-` → corpId 没回来（scope/返回形态问题，需排查授权 scope 是否含 corpid）
+  - `corp_id=<某值>` → 值与 env 不匹配，核对 `DINGTALK_LOGIN_CORP_ID`
+  - 钉钉能登进 → corpId 闸门 OK
+
+### 5. 回滚（核验不过时）
+```bash
+sudo -u ubuntu bash -lc '
+  rm -rf /opt/yomajiahr && tar -C /opt -xzf /home/ubuntu/yomajiahr-pre-openlogin.tgz
+  cd /opt/yomajiahr && ./install.sh --systemd
+'
+# 并从 /home/ubuntu/.openclaw/.env 删掉第 2 步追加的两行
+sudo systemctl restart openclaw-admin
+```
+
+> 核验通过后：合并 PR #30 到 main（让 GitHub main 与 /opt 一致，避免日后 install.sh 回退——CLAUDE.md §7 硬约束）。
