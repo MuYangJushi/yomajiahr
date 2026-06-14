@@ -309,9 +309,17 @@ else
     echo "  Removing existing openclaw installation..."
     sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
   fi
-  # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
-  if [ -w "$NVM_DIR/versions/node/$(node -v | tr -d 'v')/lib" ] 2>/dev/null \
-     || [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
+  # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt).
+  # NVM_DIR is only set when nvm is installed for the current $HOME; fall through
+  # to NPM_PREFIX otherwise. ${VAR:-} defends against `set -u` on unset vars.
+  NPM_LIB_WRITABLE=false
+  if [ -d "${NVM_DIR:-}/versions/node/$(node -v | tr -d 'v')/lib" ] \
+     && [ -w "${NVM_DIR:-}/versions/node/$(node -v | tr -d 'v')/lib" ]; then
+    NPM_LIB_WRITABLE=true
+  elif [ -w "$NPM_PREFIX/lib" ]; then
+    NPM_LIB_WRITABLE=true
+  fi
+  if [ "$NPM_LIB_WRITABLE" = true ]; then
     npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
   else
     sudo npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
