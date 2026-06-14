@@ -175,7 +175,17 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
   // —— 渠道：逐层合并（保留脚手架，仅注入 accounts）——
   config.channels ??= {};
   for (const [domain, accounts] of Object.entries(store.channels)) {
-    config.channels[domain] = { ...(config.channels[domain] ?? {}), accounts };
+    // channels.json 是平台账号资产池；只有存在 binding 的占用账号才注入 Gateway。
+    // 空闲账号保留在平台供复用，但不得继续在线或回落路由到默认 Agent。
+    const boundAccountIds = new Set(
+      store.bindings
+        .filter((binding) => binding.match.channel === domain)
+        .map((binding) => binding.match.accountId),
+    );
+    const activeAccounts = Object.fromEntries(
+      Object.entries(accounts).filter(([accountId]) => boundAccountIds.has(accountId)),
+    );
+    config.channels[domain] = { ...(config.channels[domain] ?? {}), accounts: activeAccounts };
   }
 
   // —— agents.list：整体替换；剥离平台专用字段（不进 OpenClaw 运行时配置）——

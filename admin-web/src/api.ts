@@ -61,7 +61,9 @@ export interface Skill {
 }
 export interface ChannelsInfo {
   supported: string[];
-  channels: Record<string, { accounts: string[] }>;
+  channels: Record<string, {
+    accounts: Array<{ accountId: string; occupied: boolean; occupiedBy?: string }>;
+  }>;
   env_keys: string[];
 }
 
@@ -76,7 +78,8 @@ export interface UpdateAgentInput {
   addChannel?: {
     domain: "feishu" | "dingtalk-connector";
     accountId?: string;
-    credentials: { clientId: string; clientSecret: string };
+    credentials?: { clientId: string; clientSecret: string };
+    existing?: boolean;
   };
   removeChannels?: Array<{ domain: "feishu" | "dingtalk-connector"; accountId: string }>;
 }
@@ -199,8 +202,8 @@ export async function uploadKnowledgeDocument(
   body.append("datasetId", datasetId);
   return (await api.post("/upload", body)).data;
 }
-export async function deleteKnowledgeCollection(collectionId: string): Promise<void> {
-  await api.delete(`/knowledge/collections/${encodeURIComponent(collectionId)}`);
+export async function deleteKnowledgeCollection(collectionId: string, datasetId: string): Promise<void> {
+  await api.delete(`/knowledge/collections/${encodeURIComponent(collectionId)}`, { params: { datasetId } });
 }
 export async function searchTest(query: string, topK = 5, datasetId?: string): Promise<KbChunk[]> {
   return (await api.post("/knowledge/search-test", { query, topK, datasetId })).data.chunks;

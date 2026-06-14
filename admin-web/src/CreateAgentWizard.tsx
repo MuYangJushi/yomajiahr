@@ -61,12 +61,12 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
   }
 
   async function handleFinish(values: any): Promise<boolean> {
-    const { id, name, role, persona, skills: chosenSkills, domain, accountId, mode, cred1, cred2 } = values;
+    const { id, name, role, persona, skills: chosenSkills, domain, accountId, existingAccountId, mode, cred1, cred2 } = values;
     const body = {
       id, name, role, persona,
       skills: chosenSkills,
       domain,
-      accountId: accountId || undefined,
+      accountId: mode === "existing" ? existingAccountId : accountId || undefined,
       mode: mode || "scan",
       credentials: mode === "manual" ? { clientId: cred1, clientSecret: cred2 } : undefined,
     };
@@ -142,11 +142,23 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
           initialValue="scan"
           options={[
             { label: "扫码创建新应用", value: "scan" },
-            { label: "使用已有应用", value: "manual" },
+            { label: "选择平台已有账号", value: "existing" },
+            { label: "录入新的已有应用", value: "manual" },
           ]}
         />
         <ProFormDependency name={["domain", "mode"]}>
-          {({ domain, mode }) => mode === "manual" ? (
+          {({ domain, mode }) => mode === "existing" ? (
+            <ProFormSelect
+              name="existingAccountId"
+              label="已有账号"
+              rules={[{ required: true, message: "请选择空闲账号" }]}
+              options={(channels.channels[domain]?.accounts || []).map((account) => ({
+                label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedBy} 占用）` : "（空闲）"}`,
+                value: account.accountId,
+                disabled: account.occupied,
+              }))}
+            />
+          ) : mode === "manual" ? (
             <Collapse
               defaultActiveKey={["manual"]}
               items={[{

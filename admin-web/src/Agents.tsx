@@ -30,7 +30,10 @@ export default function Agents() {
 
   useEffect(() => {
     fetchSkills().then(setSkills).catch(() => {});
-    fetchChannels().then(setChannels).catch(() => {});
+    const refreshChannels = () => fetchChannels().then(setChannels).catch(() => {});
+    refreshChannels();
+    const timer = window.setInterval(refreshChannels, 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const columns: ProColumns<AgentRow>[] = [
@@ -100,7 +103,7 @@ export default function Agents() {
             onClick={() => {
               Modal.confirm({
                 title: `删除数字员工“${r.name}”？`,
-                content: "将同时删除其 workspace、独占渠道账号和知识库绑定。此操作上线后立即生效。",
+                content: "将删除其 workspace 和知识库绑定，并释放渠道账号供其他数字员工复用。此操作上线后立即生效。",
                 okText: "确认删除",
                 okButtonProps: { danger: true },
                 cancelText: "取消",
@@ -109,6 +112,7 @@ export default function Agents() {
                     await deleteAgent(r.id);
                     message.success("数字员工已删除");
                     actionRef.current?.reload();
+                    fetchChannels().then(setChannels).catch(() => {});
                   } catch (err: any) {
                     message.error(err?.response?.data?.error || err.message || "删除失败");
                     throw err;
@@ -156,6 +160,7 @@ export default function Agents() {
           onCreated={() => {
             setWizardOpen(false);
             actionRef.current?.reload();
+            fetchChannels().then(setChannels).catch(() => {});
           }}
           skills={skills}
           channels={channels}
@@ -169,6 +174,7 @@ export default function Agents() {
         onUpdated={() => {
           setEditingAgent(null);
           actionRef.current?.reload();
+          fetchChannels().then(setChannels).catch(() => {});
         }}
       />
     </>

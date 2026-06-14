@@ -370,7 +370,7 @@ function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
 
   const remove = async (collection: KbCollection) => {
     try {
-      await deleteKnowledgeCollection(collection.externalDocId);
+      await deleteKnowledgeCollection(collection.externalDocId, datasetId);
       message.success(`已删除「${collection.title}」`);
       await load();
     } catch (e: any) {

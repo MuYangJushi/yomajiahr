@@ -13,7 +13,7 @@ process.env.FASTGPT_API_KEY = "test-fastgpt-secret";
 process.env.FASTGPT_KB_ID = "test-kb-id";
 process.env.FASTGPT_EMBEDDING_MODEL = "text-embedding-v4";
 
-const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
+const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, resolveCollectionBoundAgents, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
 const originalFetch = globalThis.fetch;
 
 test.afterEach(() => {
@@ -220,6 +220,23 @@ test("search with an explicit empty dataset list returns no hits without falling
   };
   assert.deepEqual(await search("q", 5, []), []);
   assert.equal(called, false);
+});
+
+test("删除文档时可用显式 datasetId 精确解析绑定 Agent，无需反查文档详情", async () => {
+  let fetched = false;
+  globalThis.fetch = async () => {
+    fetched = true;
+    throw new Error("must not fetch");
+  };
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [
+      { id: "kb_delete", name: "待删除文档所属库", provider: "fastgpt", externalKbId: "ds_delete", boundAgents: ["a", "b", "a"] },
+    ],
+  });
+
+  assert.deepEqual(await resolveCollectionBoundAgents("collection-id", "ds_delete"), ["a", "b"]);
+  assert.equal(fetched, false);
 });
 
 test("knowledge store validation rejects malformed bindings and unknown agents", async () => {

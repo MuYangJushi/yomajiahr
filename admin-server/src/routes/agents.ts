@@ -108,11 +108,18 @@ agentsRouter.get("/config/skills", requireRole("ops"), (_req: Request, res: Resp
 
 agentsRouter.get("/config/channels", requireRole("ops"), (_req: Request, res: Response) => {
   try {
-    const { channels } = readStore();
+    const { channels, bindings } = readStore();
     const keys = envKeysSet();
-    const result: Record<string, { accounts: string[] }> = {};
+    const result: Record<string, { accounts: Array<{ accountId: string; occupied: boolean; occupiedBy?: string }> }> = {};
     for (const domain of SUPPORTED_CHANNELS) {
-      result[domain] = { accounts: Object.keys(channels[domain] || {}) };
+      result[domain] = {
+        accounts: Object.keys(channels[domain] || {}).map((accountId) => {
+          const binding = bindings.find(
+            (item) => item.match.channel === domain && item.match.accountId === accountId,
+          );
+          return { accountId, occupied: Boolean(binding), ...(binding ? { occupiedBy: binding.agentId } : {}) };
+        }),
+      };
     }
     res.json({ supported: SUPPORTED_CHANNELS, channels: result, env_keys: [...keys] });
   } catch (err) {

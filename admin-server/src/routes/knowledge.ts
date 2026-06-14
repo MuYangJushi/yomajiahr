@@ -5,6 +5,7 @@ import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
 import { triggerApply } from "../services/config-apply.js";
+import { resetCurrentAgentSessions } from "../services/sessions.js";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import {
   KnowledgeStore,
@@ -18,6 +19,7 @@ import {
   listKnowledgeBases,
   readKnowledgeStore,
   removeCollection,
+  resolveCollectionBoundAgents,
   search,
   updateKnowledgeConfig,
   validateKnowledgeStore,
@@ -144,9 +146,39 @@ knowledgeRouter.post("/knowledge/import", requireRole("ops"), async (_req: Reque
 // DELETE /knowledge/collections/:docId —— 删除（#38 接通）。审计 DELETE。
 knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), async (req: Request, res: Response) => {
   try {
-    await removeCollection(String(req.params.docId));
-    appendAuditLog("DELETE", String(req.params.docId), { source: "fastgpt" });
-    res.json({ success: true });
+    const collectionId = String(req.params.docId);
+    const datasetId = req.query?.datasetId ? String(req.query.datasetId) : undefined;
+    if (
+      datasetId &&
+      !readKnowledgeStore().knowledgeBases.some((kb) => kb.provider === "fastgpt" && kb.externalKbId === datasetId)
+    ) {
+      res.status(400).json({ error: "目标知识库未在平台登记" });
+      return;
+    }
+    const affectedAgents = await resolveCollectionBoundAgents(collectionId, datasetId);
+    const resetSessions = resetCurrentAgentSessions(affectedAgents);
+    await removeCollection(collectionId);
+    const apply = resetSessions.length > 0
+      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 })
+      : undefined;
+    appendAuditLog("DELETE", collectionId, {
+      source: "fastgpt",
+      resetSessions,
+      applyStatus: apply?.status,
+    });
+    if (apply?.status === "failed") {
+      res.status(502).json({
+        error: "文档已删除且当前会话已归档，但 Gateway 重启失败；需重试应用配置以清除进程内上下文",
+        resetSessions,
+        apply,
+      });
+      return;
+    }
+    res.status(apply?.status === "pending" ? 202 : 200).json({
+      success: apply?.status !== "pending",
+      resetSessions,
+      apply,
+    });
   } catch (err) {
     if (err instanceof KnowledgeUnavailableError) {
       res.status(503).json({ error: err.message });
@@ -231,10 +263,17 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
     const next = validateKnowledgeStore(req.body, listAgents().map((agent) => agent.id));
     prev = readKnowledgeStore(); // 快照：apply 失败时复原
     ownsRollback = true;
+    const resetSessions = resetCurrentAgentSessions(
+      prev.knowledgeBases.flatMap((oldKb) => {
+        const nextKb = next.knowledgeBases.find((kb) => kb.id === oldKb.id);
+        return oldKb.boundAgents.filter((agentId) => !nextKb?.boundAgents.includes(agentId));
+      }),
+    );
     writeKnowledgeStore(next);
     appendAuditLog("BIND_KB", "knowledge.json", {
       operator: req.user?.platformUserId || "",
       bases: next.knowledgeBases.map((b) => ({ id: b.id, boundAgents: b.boundAgents })),
+      resetSessions,
     });
     // 应用：权威校验 + 重启网关 + 探活（apply-config.sh 自带 runtime 回滚）。
     // 超时设大：脚本探活窗默认 30s，加余量；慢路径返回 "pending" 表示 apply 仍可能成功，

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import * as lark from "@larksuiteoapi/node-sdk";
 import {
   createAgentFromCredentials,
+  createAgentFromExistingAccount,
   listAgents,
   updateAgent,
   validateAgentDraft,
@@ -23,7 +24,7 @@ export type OnboardingStatus =
   | "cancelled";
 
 export interface StartOnboardingInput extends AgentDraft {
-  mode?: "scan" | "manual";
+  mode?: "scan" | "manual" | "existing";
   credentials?: ChannelCredentials;
 }
 
@@ -171,6 +172,26 @@ async function finish(s: Session, credentials: ChannelCredentials): Promise<void
   });
 }
 
+async function finishExisting(s: Session): Promise<void> {
+  const attaching = Boolean(s.updateInput);
+  update(s, "applying", attaching ? "正在绑定已有渠道账号" : "正在使用已有渠道账号创建数字员工");
+  if (s.updateInput) {
+    await updateAgent(s.draft.id, {
+      ...s.updateInput,
+      addChannel: { domain: s.draft.domain, accountId: s.draft.accountId, existing: true },
+    });
+  } else {
+    await createAgentFromExistingAccount(s.draft, () => update(s, "verifying", "正在验证目标渠道连接"));
+  }
+  update(s, "success", attaching ? "数字员工及已有渠道已更新" : "数字员工已上线");
+  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, {
+    agent_id: s.draft.id,
+    channel: s.draft.domain,
+    account_id: s.draft.accountId,
+    operation: attaching ? "attach_existing_channel" : "create_with_existing_channel",
+  });
+}
+
 async function runFeishu(s: Session): Promise<void> {
   const credentials = await registerFeishuApplication(s.draft, {
     signal: s.abort.signal,
@@ -198,7 +219,9 @@ async function runDingTalk(s: Session): Promise<void> {
 
 async function run(s: Session, input: StartOnboardingInput): Promise<void> {
   try {
-    if (input.mode === "manual") {
+    if (input.mode === "existing") {
+      await finishExisting(s);
+    } else if (input.mode === "manual") {
       if (!input.credentials?.clientId?.trim() || !input.credentials?.clientSecret?.trim()) {
         throw new Error("手工接入凭证不能为空");
       }
@@ -230,7 +253,8 @@ export function startOnboarding(owner: string, input: StartOnboardingInput) {
     accountId: input.accountId,
   };
   validateAgentDraft(draft);
-  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual") throw new Error("接入方式非法");
+  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual" && input.mode !== "existing") throw new Error("接入方式非法");
+  if (input.mode === "existing" && !draft.accountId) throw new Error("请选择已有渠道账号");
   const accountId = draft.accountId || draft.id;
   for (const existing of sessions.values()) {
     if (["success", "failed", "expired", "cancelled"].includes(existing.status)) continue;
@@ -265,7 +289,8 @@ export function startChannelOnboarding(
   if (current.channels.some((channel) => channel.domain === input.domain)) {
     throw new Error(`数字员工已接入渠道：${input.domain}`);
   }
-  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual") throw new Error("接入方式非法");
+  if (input.mode !== undefined && input.mode !== "scan" && input.mode !== "manual" && input.mode !== "existing") throw new Error("接入方式非法");
+  if (input.mode === "existing" && !input.accountId) throw new Error("请选择已有渠道账号");
   const draft: AgentDraft = {
     id: agentId,
     name: input.name,
