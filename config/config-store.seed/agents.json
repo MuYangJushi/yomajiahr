@@ -8,7 +8,7 @@
     "skills": ["hr-policy-qa", "hr-general"],
     "heartbeat": {},
     "tools": {
-      "allow": ["fastgpt__knowledge_search", "memory_search", "memory_get"],
+      "allow": ["memory_search", "memory_get"],
       "deny": ["memory_write", "memory_delete", "exec"]
     }
   },
@@ -20,8 +20,8 @@
     "skills": ["hr-admin"],
     "heartbeat": {},
     "tools": {
-      "allow": ["memory_search", "memory_get", "memory_write", "memory_delete", "exec"],
-      "deny": ["gateway", "sessions_spawn"]
+      "allow": ["memory_search", "memory_get", "exec"],
+      "deny": ["gateway", "sessions_spawn", "memory_write", "memory_delete"]
     }
   }
 ]

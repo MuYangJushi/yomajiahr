@@ -1,12 +1,21 @@
 // 生成器（基石 A）：base.jsonc + config-store/*.json → 运行时 openclaw.json。
 // 被 install.sh（CLI）与未来 portal（programmatic）共用。
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import type { ConfigStore, RuntimeConfig } from './types.js';
+import type { ConfigStore, KnowledgeStore, RuntimeConfig } from './types.js';
 import { validateConfig, type ValidateOptions } from './validate-config.js';
+
+/** 本机 Admin Server 暴露的 per-agent MCP 端点（loopback）。绑定驱动注册指向 /mcp/<agentId>。 */
+const KNOWLEDGE_MCP_BASE_URL = 'http://127.0.0.1:18790';
+/** per-agent MCP 注册名前缀；工具命名空间化为 `kb-<agentId>__<工具名>`（ADR-011）。 */
+const KB_REGISTRATION_PREFIX = 'kb-';
+const KNOWLEDGE_SEARCH_TOOL = 'knowledge_search';
+const KNOWLEDGE_IMPORT_TOOL = 'knowledge_import';
+/** 识别由本机制管理的知识库工具（无论旧名 `fastgpt__…` 还是新名 `kb-<id>__…`），用于幂等清洗。 */
+const KNOWLEDGE_TOOL_SUFFIX_RE = /__(knowledge_search|knowledge_import)$/;
 
 /** 把 agent.workspace（如 "~/.openclaw/workspaces/x"）解析为绝对路径。
  *  优先把前缀 ~/.openclaw 映射到运行时 stateDir（apply 以 root 运行时 ~ ≠ 部署用户家目录）。 */
@@ -65,6 +74,82 @@ export interface GenerateResult {
   store: ConfigStore;
 }
 
+/**
+ * 解析某 agent 是否至少绑定了一个可检索的 FastGPT 库（决定它是否获得 knowledge_search 工具）。
+ * 语义与 admin-server `resolveDatasetIdsForAgent` 一致：只认 provider=fastgpt 且 externalKbId 非空的绑定。
+ * 兜底（无 knowledge.json，旧部署）镜像 admin-server `defaultStore()`：**仅默认 agent** 视为已绑定，
+ * 避免「文件缺失→全员无工具」回归，也不过度授权给非默认 agent。
+ */
+function agentHasFastgptBinding(
+  agentId: string,
+  knowledge: KnowledgeStore | undefined,
+  defaultAgentId: string | undefined,
+): boolean {
+  if (!knowledge) return Boolean(defaultAgentId) && agentId === defaultAgentId;
+  // 防御畸形 knowledge.json（如 knowledgeBases 非数组）：退化为「无绑定」，
+  // 结构错误交由 validateConfig 抛可读错误，不在此处崩。
+  const kbs = Array.isArray(knowledge.knowledgeBases) ? knowledge.knowledgeBases : [];
+  return kbs.some(
+    (kb) =>
+      kb.provider === 'fastgpt' &&
+      Boolean(kb.externalKbId) &&
+      Array.isArray(kb.boundAgents) &&
+      kb.boundAgents.includes(agentId),
+  );
+}
+
+/**
+ * 绑定驱动 per-agent MCP 注册与 knowledge_search 工具暴露（ADR-011）。就地改写 config：
+ *  - 为每个有 FastGPT 绑定的 agent 生成 `mcp.servers["kb-<id>"]` → `/mcp/<id>`，并往其 tools.allow
+ *    注入 `kb-<id>__knowledge_search`（admin 角色再加 `kb-<id>__knowledge_import`）。
+ *  - 无绑定的 agent：不生成注册、不注入工具 → 没有 knowledge_search。
+ *  - 幂等清洗：先剥离各 agent allow 中**所有**既有知识库工具（含旧硬编码 `fastgpt__knowledge_search`），
+ *    再按绑定重新注入，使 knowledge.json 成为工具暴露的唯一真相源。
+ * 注：注册 URL 只带 agentId，不含 datasetId —— 多库由 admin-server 检索时按绑定 fan-out（单注册即可）。
+ */
+export function applyKnowledgeBindings(config: any, store: ConfigStore): void {
+  const knowledge = store.knowledge;
+  const defaultAgentId = store.agents.find((a) => a.default)?.id;
+  // role 在 config.agents.list 中已被剥离，故从 store.agents 取角色判定 admin。
+  const roleById = new Map(store.agents.map((a) => [a.id, a.role]));
+
+  config.mcp ??= {};
+  const servers: Record<string, unknown> = { ...(config.mcp.servers ?? {}) };
+  const list: any[] = Array.isArray(config.agents?.list) ? config.agents.list : [];
+
+  for (const agent of list) {
+    const agentId: string = agent.id;
+    // 用新对象替换 tools，避免改到 store.agents（map 浅拷贝共享了 tools 引用）。
+    const tools = { ...(agent.tools ?? {}) };
+    const allow: string[] = Array.isArray(tools.allow) ? [...tools.allow] : [];
+    // 幂等：先移除所有既有知识库工具（旧 fastgpt__ 或上一次生成的 kb-*）。
+    let nextAllow = allow.filter((t) => !KNOWLEDGE_TOOL_SUFFIX_RE.test(t));
+
+    if (agentHasFastgptBinding(agentId, knowledge, defaultAgentId)) {
+      const regName = `${KB_REGISTRATION_PREFIX}${agentId}`;
+      const isAdmin = roleById.get(agentId) === 'admin';
+      const include = isAdmin
+        ? [KNOWLEDGE_SEARCH_TOOL, KNOWLEDGE_IMPORT_TOOL]
+        : [KNOWLEDGE_SEARCH_TOOL];
+      servers[regName] = {
+        enabled: true,
+        url: `${KNOWLEDGE_MCP_BASE_URL}/mcp/${agentId}`,
+        transport: 'streamable-http',
+        headers: { Authorization: 'Bearer ${KNOWLEDGE_MCP_TOKEN}' },
+        toolFilter: { include },
+      };
+      nextAllow.push(`${regName}__${KNOWLEDGE_SEARCH_TOOL}`);
+      if (isAdmin) nextAllow.push(`${regName}__${KNOWLEDGE_IMPORT_TOOL}`);
+    }
+
+    // 仅当原本就有 allow 策略、或本轮注入了工具时才写 allow，避免给「无策略=全开」的 agent 平添 allowlist。
+    if (Array.isArray(tools.allow) || nextAllow.length > 0) tools.allow = nextAllow;
+    agent.tools = tools;
+  }
+
+  config.mcp.servers = servers;
+}
+
 /** 装配运行时配置；校验失败抛错（带可读中文错误）。 */
 export function generateConfig(opts: GenerateOptions): GenerateResult {
   const base = readJsonc(opts.basePath) as any;
@@ -72,10 +157,13 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
   if (opts.store) {
     store = opts.store;
   } else if (opts.storeDir) {
+    const knowledgePath = resolve(opts.storeDir, 'knowledge.json');
     store = {
       channels: readJson(resolve(opts.storeDir, 'channels.json')),
       agents: readJson(resolve(opts.storeDir, 'agents.json')),
       bindings: readJson(resolve(opts.storeDir, 'bindings.json')),
+      // 旧部署可能尚无 knowledge.json：缺失时留空，由绑定派生逻辑走默认库兜底。
+      knowledge: existsSync(knowledgePath) ? (readJson(knowledgePath) as KnowledgeStore) : undefined,
     };
   } else {
     throw new Error('generateConfig：需提供 storeDir 或 store 之一');
@@ -96,6 +184,9 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
 
   // —— bindings：整体替换 ——
   config.bindings = store.bindings;
+
+  // —— 知识库绑定驱动 MCP 注册 + knowledge_search 工具暴露（ADR-011）——
+  applyKnowledgeBindings(config, store);
 
   // —— 注入 gateway（与旧 install.sh 一致）——
   config.gateway = { mode: 'local' };
