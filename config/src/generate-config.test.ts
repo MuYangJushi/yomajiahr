@@ -129,3 +129,18 @@ test('provider=local 或 externalKbId 为空 → 不视为有效绑定', () => {
   const config = gen(store);
   assert.equal(config.mcp.servers['kb-hr-employee'], undefined);
 });
+
+test('空闲渠道账号保留在 store，但不注入 Gateway runtime', () => {
+  const store = makeStore();
+  store.channels = {
+    feishu: {
+      occupied: { appId: '${FEISHU_HR_BOT_APP_ID}' },
+      available: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' },
+    },
+  };
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'occupied' } }];
+
+  const config = gen(store);
+
+  assert.deepEqual(Object.keys(config.channels.feishu.accounts), ['occupied']);
+});

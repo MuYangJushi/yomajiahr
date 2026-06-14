@@ -451,6 +451,16 @@ export async function isCollectionRestricted(collectionId: string): Promise<bool
   return isKbRestricted(meta.datasetId);
 }
 
+/** 删除文档前解析其所属库及绑定 Agent，用于同步清除可能含该文档内容的会话上下文。 */
+export async function resolveCollectionBoundAgents(collectionId: string, datasetId?: string): Promise<string[]> {
+  const resolvedDatasetId = datasetId || (await resolveCollectionMeta(collectionId)).datasetId;
+  if (!resolvedDatasetId) return [];
+  const kb = readKnowledgeStore().knowledgeBases.find(
+    (item) => item.provider === "fastgpt" && item.externalKbId === resolvedDatasetId,
+  );
+  return [...new Set(kb?.boundAgents || [])];
+}
+
 // —— KB↔数字员工绑定（存自有平台 config-store/knowledge.json，守 ADR-002 边界）——
 export interface KnowledgeBinding {
   id: string;

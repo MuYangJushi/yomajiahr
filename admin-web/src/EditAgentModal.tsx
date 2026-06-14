@@ -91,8 +91,10 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
             setSession(await startAgentChannelOnboarding(agent.id, {
               ...body,
               domain: values.addChannelDomain,
-              accountId: values.addChannelAccountId || undefined,
-              mode: "scan",
+              accountId: values.addChannelMode === "existing"
+                ? values.addChannelExistingAccountId
+                : values.addChannelAccountId || undefined,
+              mode: values.addChannelMode,
             }));
             return false;
           }
@@ -177,7 +179,8 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
                   initialValue="scan"
                   options={[
                     { label: "扫码创建新应用", value: "scan" },
-                    { label: "使用已有应用", value: "manual" },
+                    { label: "选择平台已有账号", value: "existing" },
+                    { label: "录入新的已有应用", value: "manual" },
                   ]}
                 />
                 <ProFormText
@@ -187,7 +190,18 @@ export default function EditAgentModal({ agent, skills, channels, onClose, onUpd
                   placeholder={agent?.id}
                 />
                 <ProFormDependency name={["addChannelMode"]}>
-                  {({ addChannelMode }) => addChannelMode === "manual" ? (
+                  {({ addChannelMode }) => addChannelMode === "existing" ? (
+                    <ProFormSelect
+                      name="addChannelExistingAccountId"
+                      label="已有账号"
+                      rules={[{ required: true, message: "请选择空闲账号" }]}
+                      options={(channels.channels[addChannelDomain]?.accounts || []).map((account) => ({
+                        label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedByName || account.occupiedBy} 占用）` : "（空闲）"}`,
+                        value: account.accountId,
+                        disabled: account.occupied,
+                      }))}
+                    />
+                  ) : addChannelMode === "manual" ? (
                     <Collapse items={[{ key: "credentials", label: "已有应用凭证", children: <>
                       <ProFormText
                         name="addChannelClientId"
