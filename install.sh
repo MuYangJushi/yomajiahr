@@ -28,7 +28,33 @@ MIN_NODE_MAJOR=24
 #   - "2026.6.6"          → 精确版本号（生产锁定用）
 #   - "2026.5.26"         → 仍可锁定到旧版（兜底）
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
-OPENCLAW_MIN_VERSION="${OPENCLAW_MIN_VERSION:-2026.5.26}"   # 最低兼容版本（仓库基线）
+# OPENCLAW_MIN_VERSION 的回退基线：默认从线上探测（保持"基线=当前生产版本"的语义），
+# 仅在用户显式指定或全新装（无现有 openclaw）时回退到 2026.5.26（仓库开发的最初基线）。
+if [ -n "${OPENCLAW_MIN_VERSION:-}" ]; then
+  : # user-provided; respect it
+else
+  _DETECTED_MIN_VERSION=""
+  # 1) 优先看 STATE_DIR 里既有的 openclaw 安装痕迹（飞书/钉钉插件会拉一份 openclaw 进去）
+  for _probe in \
+      "$STATE_DIR/extensions/openclaw-lark/node_modules/openclaw/package.json" \
+      "$STATE_DIR/extensions/dingtalk-connector/node_modules/openclaw/package.json"; do
+    if [ -f "$_probe" ]; then
+      _DETECTED_MIN_VERSION="$(node -e "console.log(require('$_probe').version)" 2>/dev/null || true)"
+      [ -n "$_DETECTED_MIN_VERSION" ] && break
+    fi
+  done
+  # 2) 否则看 PATH 上的 openclaw
+  if [ -z "$_DETECTED_MIN_VERSION" ] && command -v openclaw >/dev/null 2>&1; then
+    _DETECTED_MIN_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  fi
+  # 3) 都没有（全新装）→ 兜底到仓库基线
+  if [ -z "$_DETECTED_MIN_VERSION" ]; then
+    _DETECTED_MIN_VERSION="2026.5.26"
+  fi
+  OPENCLAW_MIN_VERSION="$_DETECTED_MIN_VERSION"
+  export OPENCLAW_MIN_VERSION
+  unset _DETECTED_MIN_VERSION _probe
+fi
 OPENCLAW_REGISTRY="${OPENCLAW_REGISTRY:-$(npm config get registry 2>/dev/null || echo 'https://registry.npmjs.org')}"
 OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
@@ -291,10 +317,8 @@ else
       echo "  Resolved $OPENCLAW_VERSION → $RESOLVED_VERSION (from $OPENCLAW_REGISTRY)"
       OPENCLAW_VERSION="$RESOLVED_VERSION"
       ;;
-    *)
-      # Concrete semver — keep as-is
-      ;;
   esac
+  echo "  Minimum required version (auto-detected from current install): $OPENCLAW_MIN_VERSION"
 
   # Compare against minimum required version (sortable: 2026.5.26 < 2026.6.6)
   if [ "$OPENCLAW_VERSION" != "$(printf '%s\n%s\n' "$OPENCLAW_VERSION" "$OPENCLAW_MIN_VERSION" | sort -V | tail -1)" ]; then
