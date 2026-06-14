@@ -100,5 +100,4 @@ export const WRITE_TOOLS = ['memory_write', 'memory_delete', 'exec'] as const;
 /** sub-agent 相关工具（ADR-001：任何 agent 不得有效授予）。 */
 export const SUBAGENT_TOOLS = ['sessions_spawn'] as const;
 
-/** ADR-004 锁定的 chunking 参数。 */
-export const LOCKED_CHUNKING = { tokens: 4000, overlap: 0 } as const;
+// ADR-012：内置 memorySearch 退役 → ADR-004 的 LOCKED_CHUNKING（chunking 锁）随之移除（约束对象已不存在）。

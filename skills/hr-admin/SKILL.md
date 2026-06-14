@@ -70,9 +70,8 @@ ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admi
 | --- | --- | --- |
 | `knowledge_import` | 允许 | 把服务器文件导入知识库（FastGPT 原生解析），仅管理员 |
 | `knowledge_search` | 允许 | 检索知识库（验证导入结果 / 协助答疑） |
-| `memory_search` | 允许 | （兼容）会话内记忆检索，非知识库主路径 |
 | `exec` | 允许 | 一般无需；导入由 `knowledge_import` 服务端读文件，不再跑本地转换脚本 |
-| `gateway` / `sessions_spawn` | 禁止 | 管理员 Agent 不操作网关、无需 Sub-agent |
+| `gateway` / `sessions_spawn` / `memory_write` / `memory_delete` | 禁止 | 不操作网关、无需 Sub-agent；内置 memory 写已退役（ADR-010/012） |
 
 ## 回复规范
 

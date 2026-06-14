@@ -3,9 +3,8 @@
 ## 可用工具
 
 - `knowledge_search`：**唯一**知识库检索工具，检索 FastGPT 知识库
-- `memory_get`：按路径读取文档片段（一般无需）
 
-> **ADR-010**：FastGPT 是唯一知识源，已取消 `memory_search`/本地 chunk 回退。
+> **ADR-010/012**：FastGPT 是唯一知识源；内置 `memory_search`/`memory_get` 与本地 chunk 回退已退役。
 
 ## 检索顺序
 

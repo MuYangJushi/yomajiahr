@@ -4,7 +4,6 @@
 
 - `knowledge_import`：把服务器文件导入知识库（FastGPT 原生解析/切片/向量化），仅管理员
 - `knowledge_search`：检索知识库（验证导入结果 / 协助答疑）
-- `memory_search` / `memory_get`：会话内记忆检索/读取（非知识库主路径）
 - `exec`：执行命令（一般无需——导入由 `knowledge_import` 服务端读文件，不再跑本地转换脚本）
 
 > ADR-010：文档存于 FastGPT，平台无本地归档/切片。知识库的列表 / 删除 / 切片预览 / 新建库走 **Admin Portal「知识库」页**（原生封装 FastGPT API + 审计）。

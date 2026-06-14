@@ -21,13 +21,14 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// ADR-012：内置 memorySearch/memory_* 已退役，新建 agent 不再授予 memory 工具。
+// 知识检索由 ADR-011 生成器按 knowledge.json 绑定注入 kb-<id>__knowledge_search(+_import)。
+// employee → 空 allowlist（最小权限，绑库后才得 knowledge_search）；admin → 仅 exec。
+// memory_write/delete 始终入 deny（ADR-003 兜底 + ADR-010 已退役）。
 function toolsForRole(role: "employee" | "admin"): { allow: string[]; deny: string[] } {
   return role === "admin"
-    ? {
-        allow: ["memory_search", "memory_get", "memory_write", "memory_delete", "exec"],
-        deny: ["gateway", "sessions_spawn"],
-      }
-    : { allow: ["memory_search", "memory_get"], deny: ["memory_write", "memory_delete", "exec"] };
+    ? { allow: ["exec"], deny: ["gateway", "sessions_spawn", "memory_write", "memory_delete"] }
+    : { allow: [], deny: ["memory_write", "memory_delete", "exec"] };
 }
 
 const ROLE_LABEL = { employee: "员工", admin: "管理员" } as const;
