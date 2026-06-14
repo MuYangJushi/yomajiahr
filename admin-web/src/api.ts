@@ -134,14 +134,16 @@ export interface ChannelAsset {
   envKeys?: string[];
   health?: ChannelHealth;
 }
+// 账号资产视图走 /config/channel-assets（独立资源）；
+// /config/channels 是渠道占用视图（fetchChannels，给 Agents 页绑定下拉用），勿混。
 export async function fetchChannelAssets(): Promise<{ channels: ChannelAsset[]; health: ChannelHealth[] }> {
-  return (await api.get("/config/channels")).data;
+  return (await api.get("/config/channel-assets")).data;
 }
 export async function probeChannels(): Promise<ChannelHealth[]> {
-  return (await api.post("/config/channels/probe")).data.health;
+  return (await api.post("/config/channel-assets/probe")).data.health;
 }
 export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
-  await api.delete(`/config/channels/${type}/${encodeURIComponent(id)}`);
+  await api.delete(`/config/channel-assets/${type}/${encodeURIComponent(id)}`);
 }
 export async function fetchSkills(): Promise<Skill[]> {
   return (await api.get("/config/skills")).data.skills;

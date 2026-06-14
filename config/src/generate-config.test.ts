@@ -143,6 +143,24 @@ test('空闲渠道账号保留在 store，但不注入 Gateway runtime', () => {
   assert.deepEqual(Object.keys(config.channels.feishu.accounts), ['occupied']);
 });
 
+test('重复 (id,type) 渠道资产 → generateConfig 抛唯一性校验错误', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'hr-employee', type: 'feishu', displayName: 'A', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
+    { id: 'hr-employee', type: 'feishu', displayName: 'B', enabled: true, account: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' } },
+  ];
+  assert.throws(() => gen(store), /\(id,type\) 必须唯一/);
+});
+
+test('同 id 不同 type（feishu + dingtalk）→ 合法，不报重复', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'hr-employee', type: 'feishu', displayName: 'F', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
+    { id: 'hr-employee', type: 'dingtalk', displayName: 'D', enabled: true, account: { clientId: '${DINGTALK_HR_BOT_CLIENT_ID}' } },
+  ];
+  assert.doesNotThrow(() => gen(store));
+});
+
 // ============================================================================
 // ADR-013: profile 字段不进运行时配置（#56）
 // ============================================================================

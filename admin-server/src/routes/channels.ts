@@ -1,10 +1,13 @@
 // 渠道独立管理路由（ADR-013 §渠道独立）：
-//   GET    /config/channels                 列出全部账号资产（含 health）
-//   POST   /config/channels                 创建账号资产
-//   DELETE /config/channels/:type/:id       删除账号资产（无 binding 时允许）
-//   POST   /config/channels/probe           集中探活（force=true 强制刷新）
+//   GET    /config/channel-assets                 列出全部账号资产（含 health）
+//   POST   /config/channel-assets                 创建账号资产
+//   DELETE /config/channel-assets/:type/:id       删除账号资产（无 binding 时允许）
+//   POST   /config/channel-assets/probe           集中探活（force=true 强制刷新）
 //   POST   /config/agents/:id/channels      bindAgentToChannel（见 agents.ts）
 //   DELETE /config/agents/:id/channels/:domain/:accountId  unbindAgentFromChannel（见 agents.ts）
+//
+// 注意：账号资产视图走 /config/channel-assets，与 agents.ts 的 GET /config/channels
+// （渠道占用视图，给绑定下拉用）是两个不同资源——勿合并，否则路由先注册者会遮蔽另一个。
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { requireRole } from "../auth/rbac.js";
@@ -30,7 +33,7 @@ const CreateSchema = z.object({
   envKeys: z.array(z.string()).optional(),
 });
 
-channelsRouter.get("/config/channels", requireRole("ops"), async (_req: Request, res: Response) => {
+channelsRouter.get("/config/channel-assets", requireRole("ops"), async (_req: Request, res: Response) => {
   try {
     const assets = listChannelAssets();
     // 不强制刷新；首次列表让前端再点"探活"
@@ -41,7 +44,7 @@ channelsRouter.get("/config/channels", requireRole("ops"), async (_req: Request,
   }
 });
 
-channelsRouter.post("/config/channels", requireRole("ops"), async (req: Request, res: Response) => {
+channelsRouter.post("/config/channel-assets", requireRole("ops"), async (req: Request, res: Response) => {
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
   try {
@@ -57,7 +60,7 @@ channelsRouter.post("/config/channels", requireRole("ops"), async (req: Request,
   }
 });
 
-channelsRouter.delete("/config/channels/:type/:id", requireRole("ops"), async (req: Request, res: Response) => {
+channelsRouter.delete("/config/channel-assets/:type/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const type = String(req.params.type) as "feishu" | "dingtalk";
   const id = String(req.params.id);
   if (type !== "feishu" && type !== "dingtalk") return res.status(400).json({ error: "type 非法" });
@@ -80,7 +83,7 @@ channelsRouter.delete("/config/channels/:type/:id", requireRole("ops"), async (r
   }
 });
 
-channelsRouter.post("/config/channels/probe", requireRole("ops"), async (_req: Request, res: Response) => {
+channelsRouter.post("/config/channel-assets/probe", requireRole("ops"), async (_req: Request, res: Response) => {
   try {
     const health = await probeChannels(true);
     res.json({ health });
