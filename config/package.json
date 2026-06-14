@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "generate": "node dist/generate-config.js",
-    "migrate": "node dist/migrate-jsonc.js"
+    "migrate": "node dist/migrate-jsonc.js",
+    "test": "npm run build && node --test dist/*.test.js"
   },
   "dependencies": {
     "zod": "^3.23.8"

@@ -52,6 +52,26 @@ export const BindingSchema = z
 
 export const BindingsStoreSchema = z.array(BindingSchema);
 
+/** knowledge.json：KB↔agent 绑定（与 admin-server services/knowledge.ts 同源；ADR-010/011）。
+ *  passthrough 透传 admin-server 写入的其余字段（intro 等），生成器仅消费 provider/externalKbId/boundAgents。 */
+export const KnowledgeBindingSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    provider: z.enum(['fastgpt', 'local']),
+    externalKbId: z.string().optional(),
+    boundAgents: z.array(z.string()).default([]),
+    restricted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const KnowledgeStoreSchema = z
+  .object({
+    platform: z.enum(['fastgpt', 'local']),
+    knowledgeBases: z.array(KnowledgeBindingSchema).default([]),
+  })
+  .passthrough();
+
 export type ChannelAccount = z.infer<typeof ChannelAccountSchema>;
 export type ChannelsStore = z.infer<typeof ChannelsStoreSchema>;
 export type AgentTools = z.infer<typeof AgentToolsSchema>;
@@ -60,12 +80,15 @@ export type Agent = z.infer<typeof AgentSchema>;
 export type AgentsStore = z.infer<typeof AgentsStoreSchema>;
 export type Binding = z.infer<typeof BindingSchema>;
 export type BindingsStore = z.infer<typeof BindingsStoreSchema>;
+export type KnowledgeBinding = z.infer<typeof KnowledgeBindingSchema>;
+export type KnowledgeStore = z.infer<typeof KnowledgeStoreSchema>;
 
-/** 三份动态 store 的合集。 */
+/** 动态 store 的合集。knowledge 可选：旧部署无 knowledge.json 时缺省（走默认库兜底，见生成器）。 */
 export interface ConfigStore {
   channels: ChannelsStore;
   agents: AgentsStore;
   bindings: BindingsStore;
+  knowledge?: KnowledgeStore;
 }
 
 /** 运行时配置（openclaw.json）——宽松类型，仅约束我们关心的部分。 */

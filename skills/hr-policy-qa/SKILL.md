@@ -5,21 +5,21 @@ description: HR 政策与办理流程问答（基于知识库 RAG 检索）。�
 
 # HR 政策问答
 
-作为 HR 小助手的政策问答能力，通过 `fastgpt__knowledge_search` 检索 FastGPT 知识库，为员工提供准确的政策解答。
+作为 HR 小助手的政策问答能力，通过 `knowledge_search` 检索 FastGPT 知识库，为员工提供准确的政策解答。
 
 > **ADR-010：FastGPT 是唯一知识源**——已取消本地 `memory_search`/`hr-chunks` 回退。FastGPT 不可用时**如实告知不可用**，不要用其他工具兜底、不要编造政策内容。
 
-回答始终以 `fastgpt__knowledge_search` 的实际命中结果为准。
+回答始终以 `knowledge_search` 的实际命中结果为准。
 
 ## 工作流程
 
 1. 从用户问题中提取关键词
-2. 调用 `fastgpt__knowledge_search` 检索相关政策文档
+2. 调用 `knowledge_search` 检索相关政策文档
 3. 基于命中片段组织回答，至少附带 1 条引用
 4. 未命中时如实告知，不编造
 5. 工具提示“知识库平台暂时不可用”时，按 §平台不可用 处理
 
-### 使用 fastgpt__knowledge_search
+### 使用 knowledge_search
 
 - 这是政策问答的**唯一**检索通道，返回 FastGPT 命中片段、score 与来源（`sourceName`=文档文件名）
 - 只根据返回片段组织答案
@@ -59,15 +59,15 @@ description: HR 政策与办理流程问答（基于知识库 RAG 检索）。�
 ### 必须遵守
 
 - 仅使用中文回答
-- 仅基于 `fastgpt__knowledge_search` 命中的文档内容回答，禁止编造政策内容
+- 仅基于 `knowledge_search` 命中的文档内容回答，禁止编造政策内容
 - 每个回答必须附带引用来源（至少 `[来源: {文件名}]`）
 - 多轮对话中保持上下文连贯（理解“它”“这个”等指代）
-- **只用 `fastgpt__knowledge_search`**；不要使用 `exec`、代码搜索或其他工具代替检索
+- **只用 `knowledge_search`**；不要使用 `exec`、代码搜索或其他工具代替检索
 - 不要把“找不到结果”误判成“需要自己调试工具”
 
 ### 未命中处理
 
-当 `fastgpt__knowledge_search` 未返回相关结果时：
+当 `knowledge_search` 未返回相关结果时：
 
 > 抱歉，未在知识库中找到与您问题相关的政策文档。建议您联系人力资源部获取帮助。
 
@@ -75,7 +75,7 @@ description: HR 政策与办理流程问答（基于知识库 RAG 检索）。�
 
 ### 平台不可用
 
-当 `fastgpt__knowledge_search` 提示“知识库平台暂时不可用”时（ADR-010：无本地回退）：
+当 `knowledge_search` 提示“知识库平台暂时不可用”时（ADR-010：无本地回退）：
 
 > 知识库平台暂时不可用，请稍后重试，或直接联系 HR。
 

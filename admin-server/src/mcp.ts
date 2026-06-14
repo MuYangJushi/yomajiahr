@@ -1,11 +1,11 @@
 // MCP 端点（架构 I，ADR-006/010）：把 knowledge_search（检索）+ knowledge_import（导入，仅 admin）暴露给数字员工。
-// openclaw 侧注册（yomakit，纯配置无需改源码，守 ADR-002），每 agent 一注册、路径带 agentId：
-//   员工（只读）：openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-employee \
-//     --transport streamable-http --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" --include knowledge_search
-//   管理员（读+导入）：openclaw mcp add fastgpt --url http://127.0.0.1:18790/mcp/hr-admin \
-//     --header "Authorization=Bearer <KNOWLEDGE_MCP_TOKEN>" --include knowledge_search,knowledge_import
-// 工具命名空间化为 `fastgpt__knowledge_search` / `fastgpt__knowledge_import`——各 agent tools.allow 用此名。
-// knowledge_import 双重门：openclaw --include 软过滤 + 服务器侧 isAdminAgent(agentId) 硬闸。
+// openclaw 侧注册由 config 生成器按 knowledge.json 绑定**自动派生**（ADR-011，纯配置守 ADR-002）——
+// 不再手工 `openclaw mcp add`。每个有 FastGPT 绑定的 agent 一注册，名为 `kb-<agentId>`、URL 带 agentId：
+//   员工（只读）：kb-hr-employee → http://127.0.0.1:18790/mcp/hr-employee，include [knowledge_search]
+//   管理员（读+导入）：kb-hr-admin → http://127.0.0.1:18790/mcp/hr-admin，include [knowledge_search, knowledge_import]
+// 工具因注册名而 per-agent 命名空间化为 `kb-<agentId>__knowledge_search` / `…__knowledge_import`；
+//   agent 至多一个 `*__knowledge_search`，故 skill/workspace 文档泛指 knowledge_search 即可唯一定位。
+// knowledge_import 双重门：生成器 toolFilter.include 软过滤 + 服务器侧 isAdminAgent(agentId) 硬闸。
 // 传输：streamable-http stateless（每请求新建 server+transport，无会话生命周期，最省心）。
 // 鉴权：Bearer 令牌，fail-closed；与 /api 的 cookie/RBAC 是两套，故挂在 /api 鉴权之外。
 import type { Express, Request, Response } from "express";

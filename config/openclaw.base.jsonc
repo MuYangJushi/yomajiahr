@@ -96,22 +96,12 @@
   },
 
   // ---------------------------------------------------------------------------
-  // MCP — knowledge_search 由本机 Admin Server 暴露；令牌仅从运行时 .env 注入
+  // MCP — 知识库注册不再硬编码：由生成器按 config-store/knowledge.json 绑定派生
+  //   per-agent 注册 `kb-<agentId>` → /mcp/<agentId>（ADR-011，见 generate-config.ts
+  //   applyKnowledgeBindings）。令牌 ${KNOWLEDGE_MCP_TOKEN} 仅从运行时 .env 注入。
   // ---------------------------------------------------------------------------
   "mcp": {
-    "servers": {
-      "fastgpt": {
-        "enabled": true,
-        "url": "http://127.0.0.1:18790/mcp/hr-employee",
-        "transport": "streamable-http",
-        "headers": {
-          "Authorization": "Bearer ${KNOWLEDGE_MCP_TOKEN}",
-        },
-        "toolFilter": {
-          "include": ["knowledge_search"],
-        },
-      },
-    },
+    "servers": {},
   },
 
   // ---------------------------------------------------------------------------

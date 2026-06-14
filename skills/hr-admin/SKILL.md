@@ -14,14 +14,14 @@ description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管�
 | 入口 | 适用场景 | 说明 |
 | --- | --- | --- |
 | **Admin Portal**（推荐） | 文档导入 / 列表 / 切片预览 / 删除 / 新建知识库 / 审计 | Web「知识库」页（多库管理），拖拽上传直传 FastGPT，可视化列表与索引状态 |
-| **飞书/钉钉管理 Bot** | 快捷对话式导入 | 通过聊天把服务器文件导入知识库（`fastgpt__knowledge_import`）|
+| **飞书/钉钉管理 Bot** | 快捷对话式导入 | 通过聊天把服务器文件导入知识库（`knowledge_import`）|
 | **Yoma+HR Web Portal** | 对话式操作 | 与管理 Bot 功能相同，Web 聊天界面 |
 
 ## 核心功能
 
 ### 1. 导入文档（聊天）
 
-管理员提供服务器文件路径，或渠道把附件注入成 `[media attached: /path/to/file]` 时，调用 **`fastgpt__knowledge_import`** 工具：
+管理员提供服务器文件路径，或渠道把附件注入成 `[media attached: /path/to/file]` 时，调用 **`knowledge_import`** 工具：
 
 - 参数：`filePath`（服务器文件绝对路径，必填）、`datasetId`（目标知识库，省略则默认库）
 - 该工具把原始文件直传 FastGPT 原生解析/切片/向量化，并自动记审计 `IMPORT`
@@ -37,10 +37,10 @@ Agent:  已导入「overtime-policy.pdf」到知识库（collectionId=...）。
 
 约定：
 
-- 只要管理员消息出现服务器文件路径，或附件注入 `[media attached: /path]`，优先用 `fastgpt__knowledge_import`
+- 只要管理员消息出现服务器文件路径，或附件注入 `[media attached: /path]`，优先用 `knowledge_import`
 - **不要**自行用 `exec` 跑本地脚本转换/切片（自研转换链已退役，ADR-010）；FastGPT 负责解析
 - 支持的文档格式由 FastGPT 决定（常见：pdf / docx / txt / md / pptx / xlsx / csv / html）
-- 多文档批量导入：逐个调用 `fastgpt__knowledge_import`；超过 5 份先列清单、管理员确认后再逐个执行
+- 多文档批量导入：逐个调用 `knowledge_import`；超过 5 份先列清单、管理员确认后再逐个执行
 
 ### 2. 文档管理（列表 / 删除 / 切片预览）→ Admin Portal
 
@@ -68,10 +68,10 @@ ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admi
 
 | 工具 | 权限 | 用途 |
 | --- | --- | --- |
-| `fastgpt__knowledge_import` | 允许 | 把服务器文件导入知识库（FastGPT 原生解析），仅管理员 |
-| `fastgpt__knowledge_search` | 允许 | 检索知识库（验证导入结果 / 协助答疑） |
+| `knowledge_import` | 允许 | 把服务器文件导入知识库（FastGPT 原生解析），仅管理员 |
+| `knowledge_search` | 允许 | 检索知识库（验证导入结果 / 协助答疑） |
 | `memory_search` | 允许 | （兼容）会话内记忆检索，非知识库主路径 |
-| `exec` | 允许 | 一般无需；导入由 `fastgpt__knowledge_import` 服务端读文件，不再跑本地转换脚本 |
+| `exec` | 允许 | 一般无需；导入由 `knowledge_import` 服务端读文件，不再跑本地转换脚本 |
 | `gateway` / `sessions_spawn` | 禁止 | 管理员 Agent 不操作网关、无需 Sub-agent |
 
 ## 回复规范
