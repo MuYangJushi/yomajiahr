@@ -86,7 +86,10 @@ function agentHasFastgptBinding(
   defaultAgentId: string | undefined,
 ): boolean {
   if (!knowledge) return Boolean(defaultAgentId) && agentId === defaultAgentId;
-  return (knowledge.knowledgeBases ?? []).some(
+  // 防御畸形 knowledge.json（如 knowledgeBases 非数组）：退化为「无绑定」，
+  // 结构错误交由 validateConfig 抛可读错误，不在此处崩。
+  const kbs = Array.isArray(knowledge.knowledgeBases) ? knowledge.knowledgeBases : [];
+  return kbs.some(
     (kb) =>
       kb.provider === 'fastgpt' &&
       Boolean(kb.externalKbId) &&

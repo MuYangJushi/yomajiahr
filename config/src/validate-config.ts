@@ -5,6 +5,7 @@ import {
   AgentsStoreSchema,
   BindingsStoreSchema,
   ChannelsStoreSchema,
+  KnowledgeStoreSchema,
   LOCKED_CHUNKING,
   SUBAGENT_TOOLS,
   WRITE_TOOLS,
@@ -68,8 +69,18 @@ export function validateConfig(
     errors.push(`agents.json 结构错误：${agentsParsed.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('；')}`);
   if (!bindingsParsed.success)
     errors.push(`bindings.json 结构错误：${bindingsParsed.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('；')}`);
+  // knowledge 可选（旧部署无 knowledge.json）；存在时与其余三份同源校验，畸形早报而非带进生成。
+  const knowledgeParsed =
+    store.knowledge !== undefined ? KnowledgeStoreSchema.safeParse(store.knowledge) : undefined;
+  if (knowledgeParsed && !knowledgeParsed.success)
+    errors.push(`knowledge.json 结构错误：${knowledgeParsed.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('；')}`);
   // 结构不过则不再做语义检查（避免 undefined 噪声）
-  if (!channelsParsed.success || !agentsParsed.success || !bindingsParsed.success) {
+  if (
+    !channelsParsed.success ||
+    !agentsParsed.success ||
+    !bindingsParsed.success ||
+    (knowledgeParsed && !knowledgeParsed.success)
+  ) {
     return { ok: false, errors };
   }
 

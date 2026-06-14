@@ -111,6 +111,11 @@ test('幂等：剥离旧硬编码 fastgpt__knowledge_search，无绑定时不残
   assert.ok(allow.includes('memory_search'), '非知识库工具应保留');
 });
 
+test('畸形 knowledge.json → generateConfig 抛可读结构错误', () => {
+  const store = makeStore({ knowledge: { platform: 'fastgpt', knowledgeBases: 'oops' } as any });
+  assert.throws(() => gen(store), /knowledge\.json 结构错误/);
+});
+
 test('provider=local 或 externalKbId 为空 → 不视为有效绑定', () => {
   const store = makeStore({
     knowledge: {
