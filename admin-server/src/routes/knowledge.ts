@@ -4,7 +4,10 @@ import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
+import { triggerApply } from "../services/config-apply.js";
+import { REPO_DIR, STATE_DIR } from "../config.js";
 import {
+  KnowledgeStore,
   KnowledgeUnavailableError,
   createKnowledgeBase,
   health,
@@ -185,13 +188,28 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
       return;
     }
     const binding = await createKnowledgeBase(input);
-    appendAuditLog("CREATE_KB", binding.id, {
+    // 新库若已绑 agent，需 apply 才会暴露 knowledge_search（ADR-011）。库已建好，apply 失败
+    // 不回滚库（FastGPT dataset 合法存在）——回传 apply 状态供前端提示，运维可重试 apply。
+    // pending：apply 仍在进行，不报错；前端可轮询。
+    // 审计顺序：apply 之后才落库——若 apply 失败，审计记 FAILED；否则记 CREATED，使审计与 apply 终态一致。
+    const apply =
+      binding.boundAgents.length > 0
+        ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 })
+        : undefined;
+    const applyFailed = apply?.status === "failed";
+    appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, {
       operator: req.user?.platformUserId || "",
       name: binding.name,
       externalKbId: binding.externalKbId,
       boundAgents: binding.boundAgents,
+      applyStatus: apply?.status,
+      applyMessage: apply?.message,
     });
-    res.json({ success: true, base: binding });
+    res.status(applyFailed ? 502 : apply?.status === "pending" ? 202 : 200).json({
+      success: !applyFailed,
+      base: binding,
+      apply,
+    });
   } catch (err) {
     if (err instanceof KnowledgeUnavailableError) {
       res.status(503).json({ error: err.message });
@@ -202,16 +220,55 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
 });
 
 // PUT /knowledge/bindings —— 改 KB↔Agent 绑定（写 config-store，原子）。审计 BIND_KB。
-knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), (req: Request, res: Response) => {
+// 绑定即真相（ADR-011）：绑/解绑后必须 triggerApply 重新生成 per-agent MCP 注册与
+// knowledge_search 工具暴露，否则解绑不立即生效（工具残留到下次其他 apply）。失败回滚 + 复原。
+knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Request, res: Response) => {
+  // 回滚契约：只要拿到了 prev 快照（writeKnowledgeStore 之前），就负责复原。
+  // 不依赖「写调用是否成功返回」——writeKnowledgeStore 内部异常中断时仍应回滚。
+  let prev: KnowledgeStore | undefined;
+  let ownsRollback = false;
   try {
     const next = validateKnowledgeStore(req.body, listAgents().map((agent) => agent.id));
+    prev = readKnowledgeStore(); // 快照：apply 失败时复原
+    ownsRollback = true;
     writeKnowledgeStore(next);
     appendAuditLog("BIND_KB", "knowledge.json", {
       operator: req.user?.platformUserId || "",
       bases: next.knowledgeBases.map((b) => ({ id: b.id, boundAgents: b.boundAgents })),
     });
-    res.json({ success: true, store: readKnowledgeStore() });
+    // 应用：权威校验 + 重启网关 + 探活（apply-config.sh 自带 runtime 回滚）。
+    // 超时设大：脚本探活窗默认 30s，加余量；慢路径返回 "pending" 表示 apply 仍可能成功，
+    // 此时**不**回滚（避免对正在进行的 apply 重复触发，参见 config-apply.ts 注释）——只回传 pending 让前端轮询。
+    const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 });
+    if (apply.status === "failed") {
+      // 显式失败：apply-config.sh 已回滚运行时配置；复原绑定文件并再 apply 一次让 runtime 与 store 一致。
+      try {
+        writeKnowledgeStore(prev);
+        await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+        res.status(422).json({ error: `应用失败：${apply.message || apply.status}；已回滚绑定`, apply });
+      } catch (rbErr) {
+        res.status(422).json({
+          error: `应用失败：${apply.message || apply.status}；回滚绑定时也失败：${(rbErr as Error).message}`,
+          apply,
+        });
+      }
+      return;
+    }
+    ownsRollback = false; // 成功路径不需回滚
+    res.status(apply.status === "pending" ? 202 : 200).json({
+      success: apply.status === "success",
+      store: readKnowledgeStore(),
+      apply,
+    });
   } catch (err) {
+    if (ownsRollback && prev) {
+      try {
+        writeKnowledgeStore(prev);
+        await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+      } catch {
+        /* 复原失败：保持错误返回，运维可手工 apply */
+      }
+    }
     res.status(400).json({ error: (err as Error).message });
   }
 });
