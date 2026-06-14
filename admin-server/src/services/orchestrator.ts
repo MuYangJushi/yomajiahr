@@ -1,4 +1,10 @@
 // 原子编排：新建数字员工 = 一次事务（单飞锁 + 快照 + 落盘 + apply + 失败回滚）。
+//
+// ADR-013（#57）：将"员工档案"与"渠道绑定"拆分为两个独立原子操作。
+//   - createAgentProfile / updateAgentProfile：只处理员工资料（name/role/profile/skills），可创建/更新无技能无渠道员工
+//   - bindAgentToChannel / unbindAgentFromChannel：渠道账号绑定/解绑，独立原子
+//   - createAgent / updateAgent（legacy）：保留旧签名，内部走新拆分路径，供历史调用方与测试兼容
+//   - 派生状态 pendingSkills / pendingChannels 实时计算，不入 store
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,7 +48,11 @@ export interface CreateAgentInput {
   id: string;
   name: string;
   role: "employee" | "admin";
+  /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
+  /** 结构化职业档案（ADR-013）。 */
+  profile?: AgentProfile;
+  /** ADR-013 允许空数组（待配置技能）。 */
   skills: string[];
   channels: Array<{
     domain: string;
@@ -53,13 +63,61 @@ export interface CreateAgentInput {
   }>;
 }
 
+/** 结构化职业档案（ADR-013 §数据与接口）。所有字段可选。 */
+export interface AgentProfile {
+  jobTitle?: string;
+  responsibilities?: string;
+  personality?: string;
+  tone?: string;
+  boundaries?: string;
+  [k: string]: unknown;
+}
+
+/** 渠道绑定/解绑独立操作的入参（ADR-013 #57）。 */
+export interface BindChannelInput {
+  agentId: string;
+  domain: SupportedChannel;
+  accountId?: string;
+  credentials?: ChannelCredentials;
+  existing?: boolean;
+  account?: Record<string, unknown>;
+  secrets?: Record<string, string>;
+}
+
 export type SupportedChannel = "feishu" | "dingtalk-connector";
+
+/** domain ↔ 资产 type 互转（ADR-013 #64：channels.json 顶层数组按 type 分桶）。 */
+function domainToType(domain: SupportedChannel): "feishu" | "dingtalk" {
+  return domain === "dingtalk-connector" ? "dingtalk" : "feishu";
+}
+function findChannelAsset(
+  channels: Array<{ id: string; type: "feishu" | "dingtalk"; [k: string]: unknown }>,
+  domain: SupportedChannel,
+  accountId: string,
+): { id: string; type: "feishu" | "dingtalk"; [k: string]: unknown } | undefined {
+  const type = domainToType(domain);
+  return channels.find((c) => c.type === type && c.id === accountId);
+}
+function upsertChannelAsset(
+  channels: Array<{ id: string; type: "feishu" | "dingtalk"; [k: string]: unknown }>,
+  domain: SupportedChannel,
+  accountId: string,
+  patch: Record<string, unknown>,
+): void {
+  const type = domainToType(domain);
+  const idx = channels.findIndex((c) => c.type === type && c.id === accountId);
+  if (idx >= 0) Object.assign(channels[idx] as object, patch);
+  else channels.push({ id: accountId, type, ...patch } as any);
+}
 
 export interface AgentDraft {
   id: string;
   name: string;
   role: "employee" | "admin";
+  /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
+  profile?: AgentProfile;
+  /** ADR-013 允许空数组。 */
   skills: string[];
   domain: SupportedChannel;
   accountId?: string;
@@ -80,7 +138,9 @@ export interface ApplyResult {
 export interface UpdateAgentInput {
   name: string;
   role: "employee" | "admin";
+  /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
+  profile?: AgentProfile;
   skills: string[];
   addChannel?: {
     domain: SupportedChannel;
@@ -94,25 +154,49 @@ export interface UpdateAgentInput {
   }>;
 }
 
-function validateSkills(skills: unknown): asserts skills is string[] {
-  if (!Array.isArray(skills) || skills.length === 0) throw new Error("至少分配一个技能");
+/** 派生状态（ADR-013 #57）：按 store 实时计算，不入盘。 */
+export interface AgentDerivedStatus {
+  pendingSkills: boolean;
+  pendingChannels: boolean;
+}
+
+function validateSkills(skills: unknown, { allowEmpty = false }: { allowEmpty?: boolean } = {}): asserts skills is string[] {
+  if (!Array.isArray(skills)) throw new Error("skills 必须为数组");
+  if (!allowEmpty && skills.length === 0) throw new Error("至少分配一个技能");
   for (const skill of skills) {
     if (typeof skill !== "string" || !/^[a-z0-9][a-z0-9_-]*$/.test(skill)) throw new Error(`技能 ID 非法：${String(skill)}`);
     if (!existsSync(join(STATE_DIR, "skills", skill, "SKILL.md"))) throw new Error(`技能不存在：${skill}`);
   }
 }
 
-export function validateAgentDraft(input: AgentDraft): void {
+/** 把旧 persona 隐式映射为 profile.personality（ADR-013 向后兼容）。 */
+function legacyToProfile(input: { persona?: string; profile?: AgentProfile }): AgentProfile | undefined {
+  if (input.profile) return input.profile;
+  if (input.persona) return { personality: input.persona };
+  return undefined;
+}
+
+/** 由 pending 标志派生出"待配置"状态提示行（AGENTS.md 渲染用，ADR-013）。 */
+function pendingStatusBlock(pendingSkills: boolean, pendingChannels: boolean): string {
+  const items: string[] = [];
+  if (pendingSkills) items.push("- 暂未分配技能。招募后在「技能配置」页分配，或通过 /api/config/agents/:id/skills 写入。");
+  if (pendingChannels) items.push("- 暂未接入渠道。招募后在「渠道管理」页绑定账号。");
+  if (items.length === 0) return "";
+  return `## 当前状态\n\n${items.join("\n")}\n`;
+}
+
+export function validateAgentDraft(input: AgentDraft, opts: { allowEmptySkills?: boolean; allowNoChannel?: boolean } = {}): void {
   if (typeof input.id !== "string" || !/^[a-z0-9-]+$/.test(input.id)) throw new Error("id 只能含小写字母、数字、连字符");
   if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
   if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
   if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
-  validateSkills(input.skills);
-  if (input.domain !== "feishu" && input.domain !== "dingtalk-connector") throw new Error("渠道非法");
-  if (input.accountId !== undefined && (typeof input.accountId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(input.accountId))) {
-    throw new Error("账号 ID 非法");
+  validateSkills(input.skills, { allowEmpty: opts.allowEmptySkills });
+  if (!opts.allowNoChannel) {
+    if (input.domain !== "feishu" && input.domain !== "dingtalk-connector") throw new Error("渠道非法");
+    if (input.accountId !== undefined && (typeof input.accountId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(input.accountId))) {
+      throw new Error("账号 ID 非法");
+    }
   }
-
   const store = readStore();
   if (store.agents.some((a) => a.id === input.id)) throw new Error(`agent id 已存在：${input.id}`);
 }
@@ -132,7 +216,8 @@ function assembleExistingChannel(draft: AgentDraft): CreateAgentInput["channels"
   const accountId = draft.accountId?.trim();
   if (!accountId) throw new Error("请选择已有渠道账号");
   const store = readStore();
-  const account = store.channels[draft.domain]?.[accountId];
+  const asset = findChannelAsset(store.channels, draft.domain, accountId);
+  const account = asset?.account as Record<string, unknown> | undefined;
   if (!account) throw new Error(`渠道账号不存在：${draft.domain}/${accountId}`);
   const occupied = store.bindings.find(
     (binding) => binding.match.channel === draft.domain && binding.match.accountId === accountId,
@@ -217,23 +302,298 @@ async function verifyChannel(domain: string, accountId: string): Promise<void> {
   throw new Error(`${domain === "feishu" ? "飞书" : "钉钉"}渠道验证失败：${lastError}`);
 }
 
-/** 列表（含绑定渠道汇总）。 */
+/** 列表（含绑定渠道汇总 + 派生状态 pendingSkills/pendingChannels，ADR-013）。 */
 export function listAgents() {
   const { agents, bindings } = readStore();
-  return agents.map((a) => ({
-    id: a.id,
-    role: a.role,
-    name: a.name || a.id,
-    persona: typeof a.persona === "string" ? a.persona : "",
-    default: Boolean(a.default),
-    skills: a.skills || [],
-    channels: bindings
+  return agents.map((a) => {
+    const channels = bindings
       .filter((b) => b.agentId === a.id)
-      .map((b) => ({ domain: b.match.channel, accountId: b.match.accountId })),
-  }));
+      .map((b) => ({ domain: b.match.channel, accountId: b.match.accountId }));
+    const skills = a.skills || [];
+    const profile = a.profile;
+    return {
+      id: a.id,
+      role: a.role,
+      name: a.name || a.id,
+      /** @deprecated 由 profile.personality 取代。读取时映射，保证旧调用方仍能拿到 personality。 */
+      persona: typeof a.persona === "string"
+        ? a.persona
+        : (typeof profile?.personality === "string" ? profile.personality : ""),
+      profile,
+      default: Boolean(a.default),
+      skills,
+      channels,
+      derived: {
+        pendingSkills: skills.length === 0,
+        pendingChannels: channels.length === 0,
+      } satisfies AgentDerivedStatus,
+    };
+  });
 }
 
-/** 创建一个数字员工（原子）。 */
+/**
+ * 仅创建数字员工档案（ADR-013 #57）。
+ * 允许空 skills + 无渠道绑定；状态显示"待配置技能 / 待接入渠道"。
+ * 不创建/绑定任何渠道账号；渠道操作走 bindAgentToChannel。
+ */
+export async function createAgentProfile(
+  input: {
+    id: string;
+    name: string;
+    role: "employee" | "admin";
+    /** @deprecated 由 profile.personality 取代。 */
+    persona?: string;
+    profile?: AgentProfile;
+    skills?: string[];
+  },
+  onApplied?: () => void,
+): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
+  return withLock(async () => {
+    const skills = input.skills ?? [];
+    if (typeof input.id !== "string" || !/^[a-z0-9-]+$/.test(input.id)) throw new Error("id 只能含小写字母、数字、连字符");
+    if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
+    if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
+    if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
+    validateSkills(skills, { allowEmpty: true });
+
+    const store = readStore();
+    if (store.agents.some((a) => a.id === input.id)) throw new Error(`agent id 已存在：${input.id}`);
+    const wsDir = workspaceDir(input.id);
+    if (existsSync(wsDir)) throw new Error(`agent workspace 已存在：${wsDir}`);
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-profile-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+
+    try {
+      const profile = legacyToProfile({ persona: input.persona, profile: input.profile });
+      const jobTitle = profile?.jobTitle || ROLE_LABEL[input.role];
+      renderWorkspace(input.id, {
+        ID: input.id,
+        NAME: input.name,
+        ROLE: input.role,
+        ROLE_LABEL: ROLE_LABEL[input.role],
+        JOB_TITLE: jobTitle,
+        RESPONSIBILITIES: profile?.responsibilities || "（未填写职责）",
+        PERSONA: profile?.personality || "（未填写人设）",
+        TONE: profile?.tone || "（未指定语气）",
+        BOUNDARIES: profile?.boundaries || "（未指定边界）",
+        PROFILE: profile ? JSON.stringify(profile, null, 2) : "（未配置职业档案）",
+        SKILLS: skills.length > 0 ? skills.map((s) => `- ${s}`).join("\n") : "（待配置技能）",
+        PENDING_STATUS: pendingStatusBlock(skills.length === 0, true),
+        PENDING_SKILLS: skills.length === 0 ? "true" : "false",
+        PENDING_CHANNELS: "true",
+      });
+
+      const agentEntry: AgentEntry = {
+        id: input.id,
+        role: input.role,
+        name: input.name,
+        // 旧 persona 字段保留以便历史读取；新写入走 profile
+        persona: profile?.personality || "",
+        profile,
+        workspace: `~/.openclaw/workspaces/${input.id}`,
+        skills,
+        heartbeat: {},
+        tools: toolsForRole(input.role),
+      };
+      store.agents.push(agentEntry);
+      writeStore(store);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`上线失败：${apply.message || apply.status}`);
+      onApplied?.();
+
+      rmSync(snap, { recursive: true, force: true });
+      return { agent: agentEntry, apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        rmSync(wsDir, { recursive: true, force: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        }
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+/**
+ * 渠道绑定（ADR-013 #57 独立原子操作）。
+ * 适用：① 新建账号并绑定；② 复用现有空闲账号。
+ * 同一 agent 在同渠道下已绑其他账号 → 409；同账号已绑他 agent → 409。
+ */
+export async function bindAgentToChannel(
+  input: BindChannelInput,
+  onApplied?: () => void,
+): Promise<{ apply: ApplyResult }> {
+  return withLock(async () => {
+    if (!input.agentId) throw new Error("agentId 不能为空");
+    if (input.domain !== "feishu" && input.domain !== "dingtalk-connector") {
+      throw new Error(`渠道非法：${input.domain}`);
+    }
+    if (input.accountId !== undefined && (typeof input.accountId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(input.accountId))) {
+      throw new Error("账号 ID 非法");
+    }
+    if (input.existing) {
+      if (!input.accountId) throw new Error("复用账号必须指定 accountId");
+    } else {
+      if (!input.credentials?.clientId?.trim() || !input.credentials?.clientSecret?.trim()) {
+        throw new Error("新建渠道凭证不能为空");
+      }
+    }
+
+    const store = readStore();
+    const agent = store.agents.find((a) => a.id === input.agentId);
+    if (!agent) throw new Error(`agent 不存在：${input.agentId}`);
+
+    const accountId = input.accountId || input.agentId;
+    const existingAccount = findChannelAsset(store.channels, input.domain, accountId)?.account as Record<string, unknown> | undefined;
+
+    if (input.existing) {
+      if (!existingAccount) throw new Error(`渠道账号不存在：${input.domain}/${accountId}`);
+    } else {
+      if (existingAccount) throw new Error(`渠道账号已存在：${input.domain}/${accountId}`);
+    }
+
+    const occupiedBy = store.bindings.find(
+      (b) => b.match.channel === input.domain && b.match.accountId === accountId,
+    );
+    if (occupiedBy) throw new Error(`渠道账号已被 ${occupiedBy.agentId} 占用：${input.domain}/${accountId}`);
+
+    const sameDomainBinding = store.bindings.find(
+      (b) => b.agentId === input.agentId && b.match.channel === input.domain,
+    );
+    if (sameDomainBinding) {
+      throw new Error(`数字员工已接入该渠道：${input.domain}/${sameDomainBinding.match.accountId}`);
+    }
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-bind-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    const envExisted = existsSync(ENV_PATH);
+    if (envExisted) cpSync(ENV_PATH, join(snap, ".env"));
+
+    try {
+      let account: Record<string, unknown> | undefined = input.account;
+      let secrets: Record<string, string> | undefined = input.secrets;
+      if (!input.existing) {
+        const draft = {
+          id: input.agentId,
+          name: agent.name || input.agentId,
+          role: agent.role,
+          persona: agent.persona,
+          skills: agent.skills,
+          domain: input.domain,
+          accountId,
+        };
+        const assembled = assembleChannel(draft, input.credentials!);
+        account = assembled.account;
+        secrets = assembled.secrets;
+      } else {
+        account = existingAccount;
+      }
+
+      if (secrets) upsertEnv(secrets);
+      if (account && !input.existing) {
+        upsertChannelAsset(store.channels, input.domain, accountId, {
+          account,
+          displayName: agent.name || input.agentId,
+          policy: {
+            dmPolicy: (account as any)?.dmPolicy,
+            groupPolicy: (account as any)?.groupPolicy,
+            requireMention: (account as any)?.requireMention,
+          },
+          enabled: true,
+        });
+      }
+      store.bindings.push({ agentId: input.agentId, match: { channel: input.domain, accountId } });
+      writeStore(store);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`绑定失败：${apply.message || apply.status}`);
+      onApplied?.();
+      await verifyChannel(input.domain, accountId);
+
+      rmSync(snap, { recursive: true, force: true });
+      return { apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
+        else if (existsSync(ENV_PATH)) rmSync(ENV_PATH, { force: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        }
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+/** 渠道解绑（ADR-013 #57 独立原子操作）。账号与凭证作为平台资产保留。 */
+export async function unbindAgentFromChannel(
+  agentId: string,
+  domain: SupportedChannel,
+  accountId: string,
+  onApplied?: () => void,
+): Promise<{ apply: ApplyResult }> {
+  return withLock(async () => {
+    if (!agentId) throw new Error("agentId 不能为空");
+    if (domain !== "feishu" && domain !== "dingtalk-connector") throw new Error(`渠道非法：${domain}`);
+    if (!accountId) throw new Error("accountId 不能为空");
+
+    const store = readStore();
+    const binding = store.bindings.find(
+      (b) => b.agentId === agentId && b.match.channel === domain && b.match.accountId === accountId,
+    );
+    if (!binding) throw new Error(`数字员工未接入该渠道：${domain}/${accountId}`);
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-unbind-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    try {
+      store.bindings = store.bindings.filter(
+        (b) => !(b.agentId === agentId && b.match.channel === domain && b.match.accountId === accountId),
+      );
+      // 账号与凭证作为平台资产保留（其他 agent 可复用）
+      writeStore(store);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`解绑失败：${apply.message || apply.status}`);
+      onApplied?.();
+
+      rmSync(snap, { recursive: true, force: true });
+      return { apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        }
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+/** 创建一个数字员工（原子，legacy 路径）。新代码请用 createAgentProfile + bindAgentToChannel 组合（ADR-013）。 */
 export async function createAgent(
   input: CreateAgentInput,
   onApplied?: () => void,
@@ -249,7 +609,7 @@ export async function createAgent(
     const store = readStore();
     if (store.agents.some((a) => a.id === input.id)) throw new Error(`agent id 已存在：${input.id}`);
     for (const ch of input.channels) {
-      const existing = store.channels[ch.domain]?.[ch.accountId];
+      const existing = findChannelAsset(store.channels, ch.domain as SupportedChannel, ch.accountId);
       if (!ch.existing && existing) {
         throw new Error(`渠道账号已存在：${ch.domain}/${ch.accountId}`);
       }
@@ -269,13 +629,23 @@ export async function createAgent(
 
     try {
       // 1. workspace 文件
+      const profile = legacyToProfile({ persona: input.persona, profile: input.profile });
+      const jobTitle = profile?.jobTitle || ROLE_LABEL[input.role];
       renderWorkspace(input.id, {
         ID: input.id,
         NAME: input.name,
         ROLE: input.role,
         ROLE_LABEL: ROLE_LABEL[input.role],
-        PERSONA: input.persona || "（未填写人设）",
+        JOB_TITLE: jobTitle,
+        RESPONSIBILITIES: profile?.responsibilities || "（未填写职责）",
+        PERSONA: profile?.personality || "（未填写人设）",
+        TONE: profile?.tone || "（未指定语气）",
+        BOUNDARIES: profile?.boundaries || "（未指定边界）",
+        PROFILE: profile ? JSON.stringify(profile, null, 2) : "（未配置职业档案）",
         SKILLS: input.skills.map((s) => `- ${s}`).join("\n"),
+        PENDING_STATUS: "",
+        PENDING_SKILLS: "false",
+        PENDING_CHANNELS: "false",
       });
 
       // 2. 秘钥（键级 upsert）
@@ -288,7 +658,8 @@ export async function createAgent(
         id: input.id,
         role: input.role,
         name: input.name,
-        persona: input.persona || "",
+        persona: profile?.personality || "",
+        profile,
         workspace: `~/.openclaw/workspaces/${input.id}`,
         skills: input.skills,
         heartbeat: {},
@@ -296,8 +667,18 @@ export async function createAgent(
       };
       store.agents.push(agentEntry);
       for (const ch of input.channels) {
-        store.channels[ch.domain] ??= {};
-        if (!ch.existing) store.channels[ch.domain][ch.accountId] = ch.account;
+        if (!ch.existing) {
+          upsertChannelAsset(store.channels, ch.domain as SupportedChannel, ch.accountId, {
+            account: ch.account,
+            displayName: input.name,
+            policy: {
+              dmPolicy: (ch.account as any)?.dmPolicy,
+              groupPolicy: (ch.account as any)?.groupPolicy,
+              requireMention: (ch.account as any)?.requireMention,
+            },
+            enabled: true,
+          });
+        }
         store.bindings.push({ agentId: input.id, match: { channel: ch.domain, accountId: ch.accountId } });
       }
       writeStore(store);
@@ -377,17 +758,115 @@ function validateUpdateInput(input: UpdateAgentInput): void {
 }
 
 function workspaceVars(id: string, input: UpdateAgentInput): Record<string, string> {
+  const profile = legacyToProfile({ persona: input.persona, profile: input.profile });
   return {
     ID: id,
     NAME: input.name.trim(),
     ROLE: input.role,
     ROLE_LABEL: ROLE_LABEL[input.role],
-    PERSONA: input.persona?.trim() || "（未填写人设）",
+    JOB_TITLE: profile?.jobTitle || ROLE_LABEL[input.role],
+    RESPONSIBILITIES: profile?.responsibilities || "（未填写职责）",
+    PERSONA: profile?.personality || input.persona?.trim() || "（未填写人设）",
+    TONE: profile?.tone || "（未指定语气）",
+    BOUNDARIES: profile?.boundaries || "（未指定边界）",
+    PROFILE: profile ? JSON.stringify(profile, null, 2) : "（未配置职业档案）",
     SKILLS: input.skills.map((s) => `- ${s}`).join("\n"),
+    PENDING_STATUS: "",
+    PENDING_SKILLS: "false",
+    PENDING_CHANNELS: "false",
   };
 }
 
-/** 修改数字员工资料、权限与渠道配置；ID 和 MEMORY.md 保持不变。 */
+/** 仅修改数字员工资料（ADR-013 #57）。渠道操作走 bind/unbindAgentFromChannel。 */
+export async function updateAgentProfile(
+  id: string,
+  input: {
+    name: string;
+    role: "employee" | "admin";
+    /** @deprecated 由 profile.personality 取代。 */
+    persona?: string;
+    profile?: AgentProfile;
+    skills?: string[];
+  },
+): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
+  return withLock(async () => {
+    if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
+    if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
+    if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
+    validateSkills(input.skills ?? [], { allowEmpty: true });
+
+    const store = readStore();
+    const index = store.agents.findIndex((a) => a.id === id);
+    if (index < 0) throw new Error(`agent 不存在：${id}`);
+    const wsDir = workspaceDir(id);
+    if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
+
+    const current = store.agents[index]!;
+    const skills = input.skills ?? current.skills ?? [];
+    const profile = legacyToProfile({ persona: input.persona, profile: input.profile }) ?? current.profile;
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-update-profile-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    cpSync(wsDir, join(snap, "workspace"), { recursive: true });
+    try {
+      const next: AgentEntry = {
+        ...current,
+        name: input.name.trim(),
+        role: input.role,
+        persona: profile?.personality || "",
+        profile,
+        skills,
+        tools: toolsForRole(input.role),
+      };
+      store.agents[index] = next;
+      // 重新渲染 workspace（按 profile + 派生状态）
+      const channels = store.bindings
+        .filter((b) => b.agentId === id)
+        .map((b) => ({ domain: b.match.channel, accountId: b.match.accountId }));
+      const jobTitle = profile?.jobTitle || ROLE_LABEL[next.role];
+      renderWorkspace(id, {
+        ID: id,
+        NAME: next.name!,
+        ROLE: next.role,
+        ROLE_LABEL: ROLE_LABEL[next.role],
+        JOB_TITLE: jobTitle,
+        RESPONSIBILITIES: profile?.responsibilities || "（未填写职责）",
+        PERSONA: profile?.personality || "（未填写人设）",
+        TONE: profile?.tone || "（未指定语气）",
+        BOUNDARIES: profile?.boundaries || "（未指定边界）",
+        PROFILE: profile ? JSON.stringify(profile, null, 2) : "（未配置职业档案）",
+        SKILLS: skills.length > 0 ? skills.map((s) => `- ${s}`).join("\n") : "（待配置技能）",
+        PENDING_STATUS: pendingStatusBlock(skills.length === 0, channels.length === 0),
+        PENDING_SKILLS: skills.length === 0 ? "true" : "false",
+        PENDING_CHANNELS: channels.length === 0 ? "true" : "false",
+      }, { preserveMemory: true });
+      writeStore(store);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
+
+      rmSync(snap, { recursive: true, force: true });
+      return { agent: next, apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        rmSync(wsDir, { recursive: true, force: true });
+        cpSync(join(snap, "workspace"), wsDir, { recursive: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+/** 修改数字员工资料、权限与渠道配置；ID 和 MEMORY.md 保持不变。
+ *  Legacy 路径，新代码请用 updateAgentProfile + bindAgentToChannel / unbindAgentFromChannel 组合。 */
 export async function updateAgent(
   id: string,
   input: UpdateAgentInput,
@@ -422,7 +901,7 @@ export async function updateAgent(
         throw new Error(`数字员工已接入渠道：${input.addChannel.domain}`);
       }
       if (
-        store.channels[input.addChannel.domain]?.[accountId] &&
+        findChannelAsset(store.channels, input.addChannel.domain, accountId) &&
         !input.addChannel.existing &&
         !removeKeys.has(`${input.addChannel.domain}/${accountId}`)
       ) {
@@ -432,7 +911,7 @@ export async function updateAgent(
         id,
         name: input.name.trim(),
         role: input.role,
-        persona: input.persona,
+        persona: input.persona ?? input.profile?.personality,
         skills: input.skills,
         domain: input.addChannel.domain,
         accountId,
@@ -449,11 +928,13 @@ export async function updateAgent(
     if (envExisted) cpSync(ENV_PATH, join(snap, ".env"));
     try {
       const current = store.agents[index];
+      const profile = legacyToProfile({ persona: input.persona, profile: input.profile }) ?? current?.profile;
       const next: AgentEntry = {
         ...current,
         name: input.name.trim(),
         role: input.role,
-        persona: input.persona?.trim() || "",
+        persona: profile?.personality || "",
+        profile,
         skills: input.skills,
         tools: toolsForRole(input.role),
       };
@@ -467,8 +948,18 @@ export async function updateAgent(
       }
       if (addedChannel) {
         upsertEnv(addedChannel.secrets || {});
-        store.channels[addedChannel.domain] ??= {};
-        if (!addedChannel.existing) store.channels[addedChannel.domain][addedChannel.accountId] = addedChannel.account;
+        if (!addedChannel.existing) {
+          upsertChannelAsset(store.channels, addedChannel.domain as SupportedChannel, addedChannel.accountId, {
+            account: addedChannel.account,
+            displayName: input.name.trim(),
+            policy: {
+              dmPolicy: (addedChannel.account as any)?.dmPolicy,
+              groupPolicy: (addedChannel.account as any)?.groupPolicy,
+              requireMention: (addedChannel.account as any)?.requireMention,
+            },
+            enabled: true,
+          });
+        }
         store.bindings.push({
           agentId: id,
           match: { channel: addedChannel.domain, accountId: addedChannel.accountId },

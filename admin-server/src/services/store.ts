@@ -9,20 +9,49 @@ export interface AgentEntry {
   id: string;
   role: "employee" | "admin";
   name?: string;
+  /** @deprecated 由 profile.personality 取代；保留字段做向后兼容读取，渲染时映射。 */
   persona?: string;
+  /** 结构化职业档案（ADR-013）。不进运行时配置（见 config/src/generate-config.ts）。 */
+  profile?: {
+    jobTitle?: string;
+    responsibilities?: string;
+    personality?: string;
+    tone?: string;
+    boundaries?: string;
+    [k: string]: unknown;
+  };
   default?: boolean;
   workspace: string;
+  /** 允许空数组（ADR-013 新员工可能尚未配置技能）。 */
   skills: string[];
   tools?: { allow?: string[]; deny?: string[] };
   [k: string]: unknown;
 }
+export interface ChannelPolicy {
+  dmPolicy?: "open" | "restricted";
+  groupPolicy?: "open" | "disabled";
+  requireMention?: boolean;
+}
+export interface ChannelAsset {
+  id: string;
+  type: "feishu" | "dingtalk";
+  displayName: string;
+  enabled?: boolean;
+  policy?: ChannelPolicy;
+  account?: Record<string, unknown>;
+  envKeys?: string[];
+  /** 集中探活缓存（ADR-013 §渠道独立）。 */
+  health?: { ok: boolean; lastError?: string; updatedAt: string };
+  [k: string]: unknown;
+}
+/** @deprecated 保留旧类型以兼容历史调用方；新代码用 ChannelAsset[]。 */
+export type ChannelsStore = ChannelAsset[];
 export interface Binding {
   agentId: string;
   match: { channel: string; accountId: string };
 }
-export type ChannelsStore = Record<string, Record<string, Record<string, unknown>>>;
 export interface ConfigStore {
-  channels: ChannelsStore;
+  channels: ChannelAsset[];
   agents: AgentEntry[];
   bindings: Binding[];
 }

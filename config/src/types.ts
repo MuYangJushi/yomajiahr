@@ -5,11 +5,46 @@ import { z } from 'zod';
 /** 渠道账号：字段随渠道而异，保持宽松（passthrough），仅做存在性/占位符校验。 */
 export const ChannelAccountSchema = z.object({}).passthrough();
 
-/** channels.json：domain → accountId → account */
-export const ChannelsStoreSchema = z.record(
-  z.string(),
-  z.record(z.string(), ChannelAccountSchema),
-);
+/** 渠道策略（policy）字段。 */
+export const ChannelPolicySchema = z
+  .object({
+    dmPolicy: z.enum(['open', 'restricted']).optional(),
+    groupPolicy: z.enum(['open', 'disabled']).optional(),
+    requireMention: z.boolean().optional(),
+  })
+  .passthrough();
+
+/** 单条渠道账号资产（ADR-013 §数据与接口）。
+ *  - id：账号资产 ID（不可改；与 agent id 解耦）
+ *  - type：feishu | dingtalk
+ *  - displayName：平台显示名
+ *  - account：平台原始字段（appId/appSecret/clientId/clientSecret/...）
+ *  - policy：dmPolicy/groupPolicy/requireMention
+ *  - enabled：是否启用
+ */
+export const ChannelAssetSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.enum(['feishu', 'dingtalk']),
+    displayName: z.string().min(1),
+    account: ChannelAccountSchema.optional(),
+    policy: ChannelPolicySchema.optional(),
+    enabled: z.boolean().optional(),
+    /** 引用本账号的 env 键名（FEISHU_<UPPER_ID>_APP_ID 等），供 secrets 服务回写。 */
+    envKeys: z.array(z.string()).optional(),
+    /** 集中探活缓存（ADR-013 §渠道独立），不进运行时配置（见 generate-config.ts）。 */
+    health: z
+      .object({
+        ok: z.boolean(),
+        lastError: z.string().optional(),
+        updatedAt: z.string(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+/** channels.json：顶层账号资产数组（ADR-013 #64）。生成器派生 domain→accountId 形态供运行时消费。 */
+export const ChannelsStoreSchema = z.array(ChannelAssetSchema);
 
 export const AgentToolsSchema = z
   .object({
@@ -27,8 +62,23 @@ export const AgentSchema = z
     id: z.string().min(1),
     role: AgentRoleSchema.default('employee'),
     name: z.string().optional(),
-    /** 平台编辑字段，仅用于渲染 workspace，不进入 OpenClaw 运行时 agents.list。 */
+    /** @deprecated 由 profile.personality 取代；保留字段做兼容性读取，渲染时自动映射。 */
     persona: z.string().optional(),
+    /**
+     * 结构化职业档案（ADR-013 §数据与接口）。
+     * 仅用于平台编辑 + workspace 模板渲染；**生成 OpenClaw 运行时配置时必须剔除**（见 generate-config.ts）。
+     * 5 个字段全部可选；缺失字段在 workspace 模板里以"待补充"占位。
+     */
+    profile: z
+      .object({
+        jobTitle: z.string().optional(),
+        responsibilities: z.string().optional(),
+        personality: z.string().optional(),
+        tone: z.string().optional(),
+        boundaries: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
     default: z.boolean().optional(),
     workspace: z.string().min(1),
     skills: z.array(z.string()).default([]),

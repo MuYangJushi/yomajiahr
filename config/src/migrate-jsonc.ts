@@ -30,13 +30,29 @@ function inferRole(agent: any): 'admin' | 'employee' {
 export function migrate(jsoncText: string): MigrationOutput {
   const root = parseJsonc(jsoncText) as any;
 
-  // channels：抽出每个 domain 的 accounts，脚手架留在 base
-  const channels: ChannelsStore = {};
+  // channels：抽出每个 domain 的 accounts，脚手架留在 base。
+  // Sprint 8 ADR-013 改造后 store 改为账号资产数组；migrate 工具按 domain→type 转换输出形态。
+  const channels: ChannelsStore = [];
   const baseChannels: any = {};
   for (const [domain, node] of Object.entries<any>(root.channels ?? {})) {
     const { accounts, ...scaffold } = node;
-    channels[domain] = accounts ?? {};
     baseChannels[domain] = scaffold;
+    const type: 'feishu' | 'dingtalk' = domain === 'dingtalk-connector' ? 'dingtalk' : 'feishu';
+    for (const [accountId, account] of Object.entries<any>(accounts ?? {})) {
+      const { dmPolicy, groupPolicy, requireMention, ...rest } = (account as any) ?? {};
+      const policy: Record<string, unknown> = {};
+      if (dmPolicy) policy.dmPolicy = dmPolicy;
+      if (groupPolicy) policy.groupPolicy = groupPolicy;
+      if (requireMention !== undefined) policy.requireMention = requireMention;
+      channels.push({
+        id: accountId,
+        type,
+        displayName: accountId,
+        enabled: true,
+        account: rest,
+        ...(Object.keys(policy).length > 0 ? { policy } : {}),
+      } as any);
+    }
   }
 
   // agents：list 抽出（补 role），defaults 留在 base
