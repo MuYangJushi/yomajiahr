@@ -39,8 +39,13 @@ PLATFORM_DEMO_OPEN_LOGIN_ROLE=ops
 ```
 
 这只允许能够通过企业自建应用 OAuth 的飞书/钉钉内部账号，无法覆盖外部个人账号。
-重启 Admin Portal 后生效。登录页会显示“比赛展示期间临时开放”，服务端启动日志也会输出
-`Demo open login` 警告。
+重启 Admin Portal 后生效。
+
+> ⚠️ **已被「企业开放登录」改造（`feat/login-open-enterprise-members`）取代/收紧**，本节为历史：
+> - 旧 env `PLATFORM_DEMO_OPEN_LOGIN_ROLE` 仍兼容，但建议改用 `PLATFORM_OPEN_ENTERPRISE_LOGIN_ROLE`；
+> - **钉钉开放登录现需额外配 `DINGTALK_LOGIN_CORP_ID`**（企业成员闸门），否则钉钉侧 fail-closed 被拒；
+> - 登录页文案改为「企业开放登录已启用」，启动日志改为 `Open enterprise login`（不再是 `Demo open login`）。
+> - 详见 [enterprise-open-login.md](enterprise-open-login.md)。
 
 角色选择：
 

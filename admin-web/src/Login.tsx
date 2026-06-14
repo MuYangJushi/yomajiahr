@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchProviders, loginWithDemoAccessCode, type Providers } from "./api";
 
 const ERROR_MSG: Record<string, string> = {
-  unauthorized: "账号不在授权名单，请联系管理员",
+  unauthorized: "账号未获授权或不属于本企业，请联系管理员",
   access_denied: "已取消授权",
   login_failed: "登录失败，请重试",
 };
@@ -119,6 +119,11 @@ const STYLES = `
     background: #fffbeb;
     border: 1px solid #fde68a;
     color: #92400e;
+  }
+  .alert-info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
   }
 
   .btn-group { display: flex; flex-direction: column; gap: 10px; }
@@ -330,8 +335,8 @@ export default function Login() {
   const feishuDisabled = !feishuOn || sessionDisabled;
   const dingtalkOn = Boolean(providers?.providers.dingtalk);
   const dingtalkDisabled = !dingtalkOn || sessionDisabled;
-  const demoOpenLogin = Boolean(providers?.demo_open_login.enabled);
-  const demoRole = providers?.demo_open_login.role;
+  const openEnterpriseLogin = Boolean(providers?.open_enterprise_login.enabled);
+  const openEnterpriseRole = providers?.open_enterprise_login.role;
   const demoAccessEnabled = Boolean(providers?.demo_access_code.enabled);
   const demoAccessRole = providers?.demo_access_code.role;
 
@@ -379,9 +384,9 @@ export default function Login() {
           </div>
         )}
 
-        {demoOpenLogin && (
-          <div className="alert alert-warn" role="alert">
-            比赛展示期间临时开放：任意完成认证的飞书或钉钉账号可进入平台（临时角色：{demoRole}）
+        {openEnterpriseLogin && (
+          <div className="alert alert-info" role="alert">
+            企业开放登录已启用：本企业飞书 / 钉钉成员均可登录访问平台（默认角色：{openEnterpriseRole}）
           </div>
         )}
 
@@ -445,7 +450,7 @@ export default function Login() {
         )}
 
         <footer className="login-footer">
-          <span>{demoOpenLogin || demoAccessEnabled ? "比赛展示临时开放" : "仅限授权员工访问"}</span>
+          <span>{openEnterpriseLogin ? "本企业成员开放登录" : demoAccessEnabled ? "比赛展示临时开放" : "仅限授权员工访问"}</span>
           <span className="footer-dot">·</span>
           <span>如需帮助请联系管理员</span>
         </footer>
