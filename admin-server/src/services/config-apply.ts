@@ -12,6 +12,8 @@ export interface ApplyResult {
   version?: string;
   mode?: string;
   ts?: string;
+  requestId?: string;
+  resetSessions?: Array<{ agentId: string; sessionCount: number }>;
   [k: string]: unknown;
 }
 
@@ -36,10 +38,14 @@ export async function triggerApply({
   stateDir,
   repoDir,
   timeoutMs = 30000,
+  resetAgentIds = [],
+  revokedKnowledgeAgentIds = [],
 }: {
   stateDir: string;
   repoDir: string;
   timeoutMs?: number;
+  resetAgentIds?: string[];
+  revokedKnowledgeAgentIds?: string[];
 }): Promise<ApplyResult> {
   const controlDir = join(stateDir, "control");
   mkdirSync(controlDir, { recursive: true });
@@ -47,13 +53,22 @@ export async function triggerApply({
   const resultPath = join(controlDir, "apply-result.json");
   const id = randomUUID();
   const requestedAt = new Date().toISOString();
+  const request = {
+    id,
+    requestedAt,
+    resetAgentIds: [...new Set(resetAgentIds)],
+    revokedKnowledgeAgentIds: [...new Set(revokedKnowledgeAgentIds)],
+  };
+  const tmp = `${requestPath}.${id}.tmp`;
+  writeFileSync(tmp, JSON.stringify(request, null, 2) + "\n");
+  renameSync(tmp, requestPath);
 
   if (isDirectMode()) {
     // —— 开发：直接执行流水线脚本 ——
     const script = join(repoDir, "config", "scripts", "apply-config.sh");
     const result = await new Promise<ApplyResult>((resolve) => {
       const child = spawn("bash", [script], {
-        env: { ...process.env, REPO_DIR: repoDir, STATE_DIR: stateDir },
+        env: { ...process.env, REPO_DIR: repoDir, STATE_DIR: stateDir, PROCESS_APPLY_REQUEST: "1" },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stderr = "";
@@ -71,15 +86,11 @@ export async function triggerApply({
   }
 
   // —— 生产：原子写请求文件，轮询结果 ——
-  const tmp = `${requestPath}.${id}.tmp`;
-  writeFileSync(tmp, JSON.stringify({ id, requestedAt }, null, 2) + "\n");
-  renameSync(tmp, requestPath); // 原子触发 .path 单元
-
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 500));
     const r = readResult(resultPath);
-    if (r && typeof r.ts === "string" && r.ts >= requestedAt) return { ...r, mode: "request" };
+    if (r?.requestId === id) return { ...r, mode: "request" };
   }
   return { status: "pending", message: "apply 已触发，结果未在超时内返回，请稍后查询", mode: "request" };
 }
