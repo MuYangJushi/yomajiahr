@@ -33,13 +33,18 @@ export const ChannelAssetSchema = z
     /** 引用本账号的 env 键名（FEISHU_<UPPER_ID>_APP_ID 等），供 secrets 服务回写。 */
     envKeys: z.array(z.string()).optional(),
     /** 集中探活缓存（ADR-013 §渠道独立），不进运行时配置（见 generate-config.ts）。 */
-    health: z
-      .object({
-        ok: z.boolean(),
+    health: z.union([
+      z.object({
+        configured: z.boolean(),
+        running: z.boolean(),
+        connected: z.boolean(),
+        probe: z.object({ ok: z.boolean() }).optional(),
         lastError: z.string().optional(),
-        updatedAt: z.string(),
-      })
-      .optional(),
+        checkedAt: z.string(),
+      }),
+      // 兼容 ADR-013 早期实现写入的缓存；下次集中探活会升级为上面的完整结构。
+      z.object({ ok: z.boolean(), lastError: z.string().optional(), updatedAt: z.string() }),
+    ]).optional(),
   })
   .passthrough();
 

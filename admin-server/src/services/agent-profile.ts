@@ -15,9 +15,11 @@ const HTTP_TIMEOUT_MS = 30_000;
 export interface ProfileGenerateInput {
   jobTitle: string;
   hints?: string;
-  /** 可选：明确角色（employee | admin），不传时由岗位语义推断；不参与 system prompt 强约束。 */
-  role?: "employee" | "admin";
+  fields?: ProfileField[];
 }
+
+export const PROFILE_FIELDS = ["jobTitle", "responsibilities", "personality", "tone", "boundaries"] as const;
+export type ProfileField = typeof PROFILE_FIELDS[number];
 
 export interface GeneratedProfile {
   jobTitle: string;
@@ -42,6 +44,7 @@ const SYSTEM_PROMPT = `你是 HR 数字员工档案共创助手。
 function buildUserMessage(input: ProfileGenerateInput): string {
   const parts: string[] = [`岗位：${input.jobTitle.trim()}`];
   if (input.hints && input.hints.trim()) parts.push(`补充描述：${input.hints.trim()}`);
+  if (input.fields?.length) parts.push(`本次仅生成这些字段：${input.fields.join(", ")}`);
   parts.push("请按 system 规则输出 JSON。");
   return parts.join("\n");
 }
@@ -53,21 +56,28 @@ function extractJsonObject(text: string): unknown {
   return JSON.parse(body);
 }
 
-function normalize(raw: unknown, fallbackJobTitle: string): GeneratedProfile {
+function clean(value: string): string {
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+}
+
+function normalize(raw: unknown, fallbackJobTitle: string, fields?: ProfileField[]): GeneratedProfile {
   if (raw === null || typeof raw !== "object") throw new Error("模型输出非 JSON 对象");
   const o = raw as Record<string, unknown>;
-  const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+  const str = (v: unknown): string => (typeof v === "string" ? clean(v) : "");
   const resp = str(o.responsibilities);
   const pers = str(o.personality);
   const tone = str(o.tone);
   const bound = str(o.boundaries);
-  if (!resp || !pers || !tone || !bound) {
-    throw new Error(`模型输出缺字段：responsibilities/personality/tone/boundaries 必填`);
+  const required = new Set(fields?.length ? fields : PROFILE_FIELDS);
+  const values = { jobTitle: str(o.jobTitle) || fallbackJobTitle, responsibilities: resp, personality: pers, tone, boundaries: bound };
+  const missing = [...required].filter((field) => !values[field]);
+  if (missing.length) {
+    throw new Error(`模型输出缺字段：${missing.join("/")}`);
   }
   // 5 个字段全部强制上限，避免模型输出超长把 profile 灌爆 workspace。
   const cap = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
   return {
-    jobTitle: str(o.jobTitle) || fallbackJobTitle,
+    jobTitle: clean(values.jobTitle),
     responsibilities: cap(resp, 400),
     personality: cap(pers, 120),
     tone: cap(tone, 80),
@@ -121,5 +131,5 @@ export async function generateAgentProfile(input: ProfileGenerateInput): Promise
   } catch (err) {
     throw new Error(`MiniMax 返回非 JSON：${(err as Error).message}；原文：${text.slice(0, 200)}`);
   }
-  return normalize(parsed, input.jobTitle.trim());
+  return normalize(parsed, input.jobTitle.trim(), input.fields);
 }

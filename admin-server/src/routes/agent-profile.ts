@@ -5,7 +5,7 @@
 // 写 AGENT_PROFILE_GENERATE 审计；调用前需要 ops 角色；调用方不直接生成 agent。
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { generateAgentProfile } from "../services/agent-profile.js";
+import { generateAgentProfile, PROFILE_FIELDS } from "../services/agent-profile.js";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 
@@ -14,7 +14,7 @@ export const agentProfileRouter = Router();
 const GenerateInputSchema = z.object({
   jobTitle: z.string().trim().min(1, "jobTitle 不能为空").max(60, "jobTitle 太长"),
   hints: z.string().trim().max(400, "hints 太长").optional(),
-  role: z.enum(["employee", "admin"]).optional(),
+  fields: z.array(z.enum(PROFILE_FIELDS)).min(1).optional(),
 });
 
 agentProfileRouter.post(
@@ -25,17 +25,27 @@ agentProfileRouter.post(
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
     }
+    const startedAt = Date.now();
     try {
-      const profile = await generateAgentProfile(parsed.data);
+      const generated = await generateAgentProfile(parsed.data);
+      const profile = parsed.data.fields
+        ? Object.fromEntries(parsed.data.fields.map((field) => [field, generated[field]]))
+        : generated;
       appendAuditLog("agent.profile.generate", "agent-profile", {
-        job_title: parsed.data.jobTitle,
-        role: parsed.data.role,
+        fields: parsed.data.fields || PROFILE_FIELDS,
+        duration_ms: Date.now() - startedAt,
+        success: true,
         operator: req.user?.platformUserId || "",
       });
       res.json({ profile });
     } catch (err) {
-      // 任何上游错误一律 502（model/LLM 不可用），message 可读
-      res.status(502).json({ error: (err as Error).message });
+      appendAuditLog("agent.profile.generate", "agent-profile", {
+        fields: parsed.data.fields || PROFILE_FIELDS,
+        duration_ms: Date.now() - startedAt,
+        success: false,
+        operator: req.user?.platformUserId || "",
+      });
+      res.status(503).json({ error: "PROFILE_GENERATE_UNAVAILABLE", message: (err as Error).message });
     }
   },
 );

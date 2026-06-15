@@ -1,210 +1,112 @@
-// 新建数字员工向导（ADR-013 §招募向导）：
-//   Step 1 身份与岗位：id / name / role（岗位 = 系统权限级别，不作真实岗位表达）
-//   Step 2 职业档案：jobTitle 必填；可点「AI 共创」生成 5 段 profile；可手填/覆盖
-//   Step 3 技能分配（可空，状态显示"待配置技能"）
-//   Step 4 确认提交：调 POST /config/agents，createAgentProfile 原子写入
-// 渠道接入不再属于招募向导——统一在「渠道管理」页通过 bindAgentChannel 走独立生命周期。
 import { useState } from "react";
-import { Alert, Button, Form, Input, Modal, Space, Spin, Typography, message } from "antd";
-import {
-  ProForm,
-  ProFormDependency,
-  ProFormRadio,
-  ProFormSelect,
-  ProFormText,
-  ProFormTextArea,
-  StepsForm,
-} from "@ant-design/pro-components";
-import {
-  createAgent,
-  generateAgentProfile,
-  type AgentProfile,
-  type Skill,
-} from "./api";
+import { Alert, Button, Descriptions, Form, Modal, Space, Spin, Typography, message } from "antd";
+import { ProForm, ProFormDependency, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
+import { createAgent, generateAgentProfile, type AgentProfile } from "./api";
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-  skills: Skill[];
-}
-
-interface IdentityValues {
+interface Props { open: boolean; onClose: () => void; onCreated: () => void }
+interface Values {
   id: string;
   name: string;
   role: "employee" | "admin";
-}
-interface ProfileValues {
-  jobTitle: string;
   hints?: string;
   profile: AgentProfile;
 }
-interface SkillsValues {
-  skills: string[];
-}
 
-export default function CreateAgentWizard({ open, onClose, onCreated, skills }: Props) {
+const PROFILE_FIELDS: Array<{ key: keyof AgentProfile; label: string; area?: boolean }> = [
+  { key: "responsibilities", label: "职责", area: true },
+  { key: "personality", label: "个性" },
+  { key: "tone", label: "沟通语气" },
+  { key: "boundaries", label: "工作边界", area: true },
+];
+
+export default function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
-  const [generating, setGenerating] = useState(false);
-
-  async function handleFinish(values: IdentityValues & ProfileValues & SkillsValues): Promise<boolean> {
-    setSubmitting(true);
-    try {
-      await createAgent({
-        id: values.id,
-        name: values.name,
-        role: values.role,
-        profile: values.profile,
-        skills: values.skills,
-      });
-      message.success("数字员工已创建。技能/渠道可在对应页面继续配置。");
-      onCreated();
-      onClose();
-      return true;
-    } catch (err: any) {
-      message.error(err?.response?.data?.error || err.message || "创建失败");
-      return false;
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
+  const [jobTitle, setJobTitle] = useState("");
   return (
-    <Modal
-      title="招募一名 HR 数字员工"
-      open={open}
-      footer={null}
-      onCancel={onClose}
-      width={720}
-      destroyOnClose
-    >
-      <StepsForm<IdentityValues & ProfileValues & SkillsValues>
-        onFinish={handleFinish}
-        submitter={{
-          submitButtonProps: { loading: submitting },
-          render: (props, _doms) => [
-            <Button key="submit" type="primary" loading={submitting} onClick={() => props.submit?.()}>
-              提交
-            </Button>,
-          ],
+    <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={760} destroyOnClose>
+      <StepsForm<Values>
+        onFinish={async (values) => {
+          setSubmitting(true);
+          try {
+            await createAgent({ id: values.id, name: values.name, role: values.role, profile: values.profile });
+            message.success("数字员工已招募，技能与渠道待独立配置");
+            onCreated();
+            onClose();
+            return true;
+          } catch (err: any) {
+            message.error(err?.response?.data?.error || err.message || "创建失败");
+            return false;
+          } finally { setSubmitting(false); }
         }}
+        submitter={{ submitButtonProps: { loading: submitting } }}
       >
-        {/* Step 1: 身份与岗位 */}
-        <StepsForm.StepForm name="identity" title="身份与岗位">
-          <ProFormText
-            name="id"
-            label="ID（创建后不可改）"
-            rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母/数字/连字符" }]}
-            placeholder="如 hr-onboard"
-            fieldProps={{ autoComplete: "off" }}
-          />
-          <ProFormText
-            name="name"
-            label="名称"
-            rules={[{ required: true }]}
-            placeholder="如 入离职助手"
-            fieldProps={{ autoComplete: "off" }}
-          />
-          <ProFormRadio.Group
-            name="role"
-            label="系统权限"
-            initialValue="employee"
-            tooltip="employee=只读/无 exec；admin=可执行管理操作。这是平台权限，不是真实岗位。"
-            options={[
-              { label: "员工（只读）", value: "employee" },
-              { label: "管理员（可写）", value: "admin" },
-            ]}
-            rules={[{ required: true }]}
-          />
+        <StepsForm.StepForm name="identity" title="基础信息" onFinish={async (values) => { setJobTitle(values.profile?.jobTitle || ""); return true; }}>
+          <ProFormText name="name" label="名称" rules={[{ required: true }]} placeholder="如 入离职助手" />
+          <ProFormText name="id" label="不可变 ID" rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母、数字和连字符" }]} placeholder="如 hr-onboard" />
+          <ProFormText name={["profile", "jobTitle"]} label="真实岗位名称" rules={[{ required: true, max: 60 }]} placeholder="如 入离职专员" />
+          <ProFormRadio.Group name="role" label="系统权限级别" initialValue="employee" options={[
+            { label: "employee（只读）", value: "employee" },
+            { label: "admin（管理权限）", value: "admin" },
+          ]} />
         </StepsForm.StepForm>
-
-        {/* Step 2: 职业档案（AI 共创 / 手填） */}
-        <StepsForm.StepForm name="profile" title="职业档案">
-          <ProFormText
-            name={["profile", "jobTitle"]}
-            label="岗位名"
-            rules={[{ required: true, max: 60 }]}
-            placeholder="如 薪酬顾问"
-            fieldProps={{ autoComplete: "off" }}
-          />
-          <ProFormTextArea
-            name="hints"
-            label="补充描述（可选）"
-            placeholder="例：负责薪酬政策答疑与流程指引"
-            fieldProps={{ autoComplete: "off" }}
-          />
-          <AiCoCreateFields
-            skillsHint={skills.length > 0 ? `平台已有技能：${skills.map((s) => s.name).join("、")}` : ""}
-            onGeneratingChange={setGenerating}
-          />
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginTop: 8 }}
-            message="AI 共创结果会覆盖下方 5 个字段；可继续手改，最终以本页填写为准。"
-          />
+        <StepsForm.StepForm name="profile" title="档案共创">
+          <ProfileEditor jobTitle={jobTitle} />
+          <Alert type="info" showIcon message="AI 不可用时可继续手工填写；生成内容只会写入结构化档案，不会覆盖系统规则。" />
         </StepsForm.StepForm>
-
-        {/* Step 3: 技能（可空） */}
-        <StepsForm.StepForm name="skills" title="技能">
-          <ProFormSelect
-            name="skills"
-            label="分配技能"
-            mode="multiple"
-            allowClear
-            placeholder="可留空，状态会显示「待配置技能」并在 AGENTS.md 中提示"
-            options={skills.map((s) => ({ label: `${s.name}`, value: s.name, title: s.description }))}
-            fieldProps={{ optionRender: (o: any) => <span title={o.data.title}>{o.label}</span> }}
-          />
+        <StepsForm.StepForm name="preview" title="预览确认">
+          <ProFormDependency name={["name", "id", "role", "profile"]}>
+            {(values) => <ProfilePreview values={values as Values} />}
+          </ProFormDependency>
+          <Alert type="warning" showIcon message="确认后立即生成 workspace 并应用配置。新员工将显示“待配置技能”和“待接入渠道”。" />
         </StepsForm.StepForm>
       </StepsForm>
-      {generating && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-          <Spin tip="AI 共创中..." />
-        </div>
-      )}
     </Modal>
   );
 }
 
-// 5 段 profile 字段 + 「AI 共创」按钮
-function AiCoCreateFields({ skillsHint, onGeneratingChange }: { skillsHint: string; onGeneratingChange: (b: boolean) => void }) {
+function ProfileEditor({ jobTitle }: { jobTitle: string }) {
   const form = ProForm.useFormInstance();
-  const jobTitle: string = Form.useWatch(["profile", "jobTitle"], form) || "";
-  const hints: string = Form.useWatch("hints", form) || "";
-  const role: "employee" | "admin" = Form.useWatch("role", form) || "employee";
-  const [busy, setBusy] = useState(false);
-
-  async function runCoCreate() {
-    if (!jobTitle.trim()) {
-      message.warning("请先填写岗位名");
-      return;
-    }
-    setBusy(true);
-    onGeneratingChange(true);
+  const hints = Form.useWatch("hints", form) || "";
+  const [busy, setBusy] = useState<string>();
+  async function generate(fields?: Array<keyof AgentProfile>) {
+    if (!jobTitle) return message.warning("请先填写真实岗位名称");
+    setBusy(fields?.[0] || "all");
     try {
-      const p = await generateAgentProfile({ jobTitle, hints, role });
-      // 把 5 段写回表单 profile.* 字段
-      form.setFieldsValue({ profile: { jobTitle, ...p } });
-      message.success("AI 共创完成，可继续微调");
+      const generated = await generateAgentProfile({ jobTitle, hints, fields });
+      const current = form.getFieldValue("profile") || {};
+      form.setFieldValue("profile", { ...current, ...generated, jobTitle });
     } catch (err: any) {
-      message.error(err?.response?.data?.error || err.message || "AI 共创失败");
-    } finally {
-      setBusy(false);
-      onGeneratingChange(false);
-    }
+      message.error(err?.response?.data?.message || err?.response?.data?.error || "AI 生成不可用，请继续手工填写");
+    } finally { setBusy(undefined); }
   }
-
   return (
-    <div style={{ borderTop: "1px dashed #d9d9d9", paddingTop: 12, marginTop: 8 }}>
-      <Space style={{ marginBottom: 8 }}>
-        <Button loading={busy} onClick={runCoCreate}>AI 共创（基于岗位名 + hints）</Button>
-        <Typography.Text type="secondary">{skillsHint}</Typography.Text>
-      </Space>
-      <ProFormTextArea name={["profile", "responsibilities"]} label="职责" placeholder="2~4 条要点" fieldProps={{ rows: 3 }} />
-      <ProFormText name={["profile", "personality"]} label="人设（3~5 形容词）" placeholder="细致、耐心、专业" />
-      <ProFormText name={["profile", "tone"]} label="语气" placeholder="简洁、就事论事" />
-      <ProFormTextArea name={["profile", "boundaries"]} label="边界" placeholder="不替代 HR 完成人工审批" fieldProps={{ rows: 2 }} />
-    </div>
+    <>
+      <ProFormText name={["profile", "jobTitle"]} hidden initialValue={jobTitle} />
+      <ProFormTextArea name="hints" label="共创提示（可选）" fieldProps={{ rows: 2 }} />
+      <Button loading={busy === "all"} onClick={() => generate()}>整体 AI 生成</Button>
+      {PROFILE_FIELDS.map((field) => (
+        <div key={field.key} style={{ marginTop: 12 }}>
+          <Space style={{ marginBottom: 4 }}>
+            <Typography.Text strong>{field.label}</Typography.Text>
+            <Button size="small" loading={busy === field.key} onClick={() => generate([field.key])}>重新生成本段</Button>
+          </Space>
+          {field.area
+            ? <ProFormTextArea name={["profile", field.key]} fieldProps={{ rows: 3 }} />
+            : <ProFormText name={["profile", field.key]} />}
+        </div>
+      ))}
+      {busy && <Spin size="small" style={{ marginLeft: 8 }} />}
+    </>
   );
+}
+
+function ProfilePreview({ values }: { values: Values }) {
+  const p = values.profile || {};
+  return <Descriptions column={1} bordered size="small" style={{ marginBottom: 16 }} items={[
+    { key: "name", label: "名称 / ID", children: `${values.name || ""} / ${values.id || ""}` },
+    { key: "role", label: "岗位 / 权限", children: `${p.jobTitle || ""} / ${values.role || "employee"}` },
+    ...PROFILE_FIELDS.map((field) => ({ key: field.key, label: field.label, children: p[field.key] || "未填写" })),
+    { key: "skills", label: "技能状态", children: "待配置技能" },
+    { key: "channels", label: "渠道状态", children: "待接入渠道" },
+  ]} />;
 }

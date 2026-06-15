@@ -6,11 +6,9 @@ import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-comp
 import {
   fetchAgents,
   fetchChannels,
-  fetchSkills,
   deleteAgent,
   type AgentRow,
   type ChannelsInfo,
-  type Skill,
 } from "./api";
 import CreateAgentWizard from "./CreateAgentWizard";
 import EditAgentModal from "./EditAgentModal";
@@ -25,11 +23,9 @@ export default function Agents() {
   const actionRef = useRef<ActionType>();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRow | null>(null);
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [channels, setChannels] = useState<ChannelsInfo | null>(null);
 
   useEffect(() => {
-    fetchSkills().then(setSkills).catch(() => {});
     const refreshChannels = () => fetchChannels().then(setChannels).catch(() => {});
     refreshChannels();
     const timer = window.setInterval(refreshChannels, 5000);
@@ -51,13 +47,14 @@ export default function Agents() {
     {
       title: "岗位",
       dataIndex: "role",
-      render: (_, r) => <Tag color={ROLE_TAG[r.role]?.color}>{ROLE_TAG[r.role]?.label || r.role}</Tag>,
+      render: (_, r) => <Space><span>{r.profile?.jobTitle || "未填写岗位"}</span><Tag color={ROLE_TAG[r.role]?.color}>{ROLE_TAG[r.role]?.label || r.role}</Tag></Space>,
     },
     {
       title: "技能",
       dataIndex: "skills",
       render: (_, r) => (
         <Space wrap>
+          {r.derived.pendingSkills && <Tag color="warning">待配置技能</Tag>}
           {r.skills.map((s) => (
             <Tag key={s}>{s}</Tag>
           ))}
@@ -69,6 +66,7 @@ export default function Agents() {
       dataIndex: "channels",
       render: (_, r) => (
         <Space wrap>
+          {r.derived.pendingChannels && <Tag color="warning">待接入渠道</Tag>}
           {r.channels.map((c) => (
             <Tag key={`${c.domain}/${c.accountId}`} color="geekblue">
               {DOMAIN_LABEL[c.domain] || c.domain}/{c.accountId}
@@ -160,11 +158,9 @@ export default function Agents() {
           setWizardOpen(false);
           actionRef.current?.reload();
         }}
-        skills={skills}
       />
       <EditAgentModal
         agent={editingAgent}
-        skills={skills}
         onClose={() => setEditingAgent(null)}
         onUpdated={() => {
           setEditingAgent(null);

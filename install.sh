@@ -66,6 +66,24 @@ if [ -z "${TMPDIR:-}" ]; then
   fi
   unset _INSTALL_TMPDIR
 fi
+
+# Persist the same safe temp directory for interactive OpenClaw CLI sessions.
+# systemd units already set TMPDIR explicitly; without this, `openclaw --help`
+# can fail on hosts whose /tmp permissions are hardened or misconfigured.
+if [ "$(uname)" = "Linux" ] && [ -n "${HOME:-}" ]; then
+  _OPENCLAW_PROFILE="$HOME/.profile"
+  _OPENCLAW_TMP_MARKER="# Yoma+HR OpenClaw CLI temp directory"
+  if ! grep -Fq "$_OPENCLAW_TMP_MARKER" "$_OPENCLAW_PROFILE" 2>/dev/null; then
+    {
+      echo
+      echo "$_OPENCLAW_TMP_MARKER"
+      echo 'if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then'
+      echo '  export TMPDIR="/run/user/$(id -u)"'
+      echo 'fi'
+    } >> "$_OPENCLAW_PROFILE"
+  fi
+  unset _OPENCLAW_PROFILE _OPENCLAW_TMP_MARKER
+fi
 OPENCLAW_REGISTRY="${OPENCLAW_REGISTRY:-$(npm config get registry 2>/dev/null || echo 'https://registry.npmjs.org')}"
 OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
@@ -654,10 +672,10 @@ if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_
     # when /tmp is mode 0700 root-owned). Mirror the systemd unit setting.
     if TMPDIR=/run/user/$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000) \
        OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" \
-       openclaw config validate >/tmp/openclaw-validate.log 2>&1; then
+       openclaw config validate >"$TMPDIR/openclaw-validate.log" 2>&1; then
       echo "  config validate: OK"
     else
-      echo "  [WARN] config validate failed (see /tmp/openclaw-validate.log);" >&2
+      echo "  [WARN] config validate failed (see $TMPDIR/openclaw-validate.log);" >&2
       echo "         skipping service restart to keep the previous version live." >&2
       echo "         Investigate log, fix the config, then run:" >&2
       echo "           sudo systemctl restart openclaw-gateway openclaw-admin" >&2

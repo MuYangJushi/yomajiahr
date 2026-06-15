@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ProLayout } from "@ant-design/pro-components";
 import { Dropdown, Spin, Tag } from "antd";
-import { RobotOutlined, BookOutlined, AuditOutlined, LogoutOutlined, ApiOutlined } from "@ant-design/icons";
+import { RobotOutlined, BookOutlined, AuditOutlined, LogoutOutlined, ApiOutlined, ToolOutlined } from "@ant-design/icons";
 import Agents from "./Agents";
 import Knowledge from "./Knowledge";
 import Audit from "./Audit";
@@ -12,8 +12,9 @@ import { fetchMe, logout, type Me, type PlatformRole } from "./api";
 
 const MENU = [
   { path: "/agents", name: "数字员工", icon: <RobotOutlined /> },
-  { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
+  { path: "/skills", name: "技能配置（规划中）", icon: <ToolOutlined />, disabled: true },
   { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
+  { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
   { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
 ];
 
