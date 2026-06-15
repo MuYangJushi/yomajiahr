@@ -12,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
+  awaitApplyJob,
   createKnowledgeBase,
   deleteKnowledgeCollection,
   fetchCollectionChunks,
@@ -285,7 +286,17 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
       store.knowledgeBases = store.knowledgeBases.map((b) =>
         b.id === kb.id ? { ...b, boundAgents: bound } : b,
       );
-      await saveKnowledgeBindings(store);
+      const result = await saveKnowledgeBindings(store);
+      if (result.jobId) {
+        // 异步 apply：立即解除按钮 loading + 提示"应用中"，后台轮询完成后替换提示。
+        const key = `apply-${result.jobId}`;
+        message.loading({ content: "绑定提交，配置应用中…", key, duration: 0 });
+        setSaving(false);
+        const job = await awaitApplyJob(result.jobId);
+        if (job.status === "success") message.success({ content: "绑定已保存并应用", key });
+        else message.error({ content: `绑定保存失败：${job.message || job.status}`, key, duration: 6 });
+        return;
+      }
       message.success("绑定已保存");
     } catch {
       message.error("保存失败（需 admin 权限）");

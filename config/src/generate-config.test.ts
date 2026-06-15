@@ -1,10 +1,12 @@
 // 绑定驱动 per-agent MCP 注册与 knowledge_search 工具暴露（ADR-011 #49）。
 // 运行：npm run build && node --test dist/*.test.js（Node 原生 test runner）。
 import assert from 'node:assert/strict';
-import { dirname, resolve } from 'node:path';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { generateConfig } from './generate-config.js';
+import { generateConfig, isPlaceholderValue } from './generate-config.js';
 import type { ConfigStore, KnowledgeStore } from './types.js';
 
 const configDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,6 +14,31 @@ const BASE_PATH = resolve(configDir, 'openclaw.base.jsonc');
 const ENV_PATH = resolve(configDir, '.env.example');
 
 const FASTGPT_DATASET = 'ds_hr_policy_001';
+
+/** 写一份临时 .env 文件，供 isAssetConfigured 在测试中视作"已配置"。 */
+function writeTempEnv(values: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'gen-config-'));
+  const path = join(dir, '.env');
+  // 把模板里出现的所有 key 也带上，避免 validate-config 的占位符校验失败。
+  const exampleKeys = [
+    'MINIMAX_API_KEY', 'DASHSCOPE_API_KEY', 'OPENCLAW_GATEWAY_TOKEN',
+    'FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET',
+    'FEISHU_ADMIN_BOT_APP_ID', 'FEISHU_ADMIN_BOT_APP_SECRET',
+    'DINGTALK_HR_BOT_CLIENT_ID', 'DINGTALK_HR_BOT_CLIENT_SECRET',
+    'DINGTALK_ADMIN_BOT_CLIENT_ID', 'DINGTALK_ADMIN_BOT_CLIENT_SECRET',
+    'OPENCLAW_WEB_AUTH_TOKEN', 'FASTGPT_BASE_URL', 'FASTGPT_API_KEY', 'FASTGPT_KB_ID',
+    'KNOWLEDGE_MCP_TOKEN',
+  ];
+  const lines: string[] = [];
+  for (const key of exampleKeys) {
+    lines.push(`${key}=${values[key] ?? 'real-value-placeholder'}`);
+  }
+  for (const [k, v] of Object.entries(values)) {
+    if (!exampleKeys.includes(k)) lines.push(`${k}=${v}`);
+  }
+  writeFileSync(path, lines.join('\n') + '\n');
+  return path;
+}
 
 /** 构造最小可校验的内存 store；caller 覆盖 knowledge 与 agents.allow。 */
 function makeStore(overrides: Partial<ConfigStore> = {}): ConfigStore {
@@ -54,8 +81,11 @@ function fastgptStore(bindings: Record<string, string[]>): KnowledgeStore {
   };
 }
 
-function gen(store: ConfigStore) {
-  return generateConfig({ basePath: BASE_PATH, store, envPath: ENV_PATH }).config as any;
+/** 默认：用一份"凭证就绪"的临时 .env（所有相关 key 都填了非占位值），让生成器派生所有渠道账号。
+ *  传 `placeholders: true` 切回 .env.example（占位字面量），用于测试跳过派生。 */
+function gen(store: ConfigStore, opts: { placeholders?: boolean } = {}) {
+  const envPath = opts.placeholders ? ENV_PATH : writeTempEnv({});
+  return generateConfig({ basePath: BASE_PATH, store, envPath, envExamplePath: ENV_PATH }).config as any;
 }
 
 function allowOf(config: any, agentId: string): string[] {
@@ -133,8 +163,8 @@ test('provider=local 或 externalKbId 为空 → 不视为有效绑定', () => {
 test('空闲渠道账号保留在 store，但不注入 Gateway runtime', () => {
   const store = makeStore();
   store.channels = [
-    { id: 'occupied', type: 'feishu', displayName: '占用', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
-    { id: 'available', type: 'feishu', displayName: '空闲', enabled: true, account: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' } },
+    { id: 'occupied', type: 'feishu', displayName: '占用', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+    { id: 'available', type: 'feishu', displayName: '空闲', enabled: true, account: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' }, envKeys: ['FEISHU_ADMIN_BOT_APP_ID', 'FEISHU_ADMIN_BOT_APP_SECRET'] },
   ];
   store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'occupied' } }];
 
@@ -146,8 +176,8 @@ test('空闲渠道账号保留在 store，但不注入 Gateway runtime', () => {
 test('重复 (id,type) 渠道资产 → generateConfig 抛唯一性校验错误', () => {
   const store = makeStore();
   store.channels = [
-    { id: 'hr-employee', type: 'feishu', displayName: 'A', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
-    { id: 'hr-employee', type: 'feishu', displayName: 'B', enabled: true, account: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' } },
+    { id: 'hr-employee', type: 'feishu', displayName: 'A', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+    { id: 'hr-employee', type: 'feishu', displayName: 'B', enabled: true, account: { appId: '${FEISHU_ADMIN_BOT_APP_ID}' }, envKeys: ['FEISHU_ADMIN_BOT_APP_ID', 'FEISHU_ADMIN_BOT_APP_SECRET'] },
   ];
   assert.throws(() => gen(store), /\(id,type\) 必须唯一/);
 });
@@ -155,10 +185,74 @@ test('重复 (id,type) 渠道资产 → generateConfig 抛唯一性校验错误'
 test('同 id 不同 type（feishu + dingtalk）→ 合法，不报重复', () => {
   const store = makeStore();
   store.channels = [
-    { id: 'hr-employee', type: 'feishu', displayName: 'F', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
-    { id: 'hr-employee', type: 'dingtalk', displayName: 'D', enabled: true, account: { clientId: '${DINGTALK_HR_BOT_CLIENT_ID}' } },
+    { id: 'hr-employee', type: 'feishu', displayName: 'F', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+    { id: 'hr-employee', type: 'dingtalk', displayName: 'D', enabled: true, account: { clientId: '${DINGTALK_HR_BOT_CLIENT_ID}' }, envKeys: ['DINGTALK_HR_BOT_CLIENT_ID', 'DINGTALK_HR_BOT_CLIENT_SECRET'] },
   ];
   assert.doesNotThrow(() => gen(store));
+});
+
+// ============================================================================
+// #4 占位符账号不进运行时（fix/usage-bugs）
+// ============================================================================
+
+test('凭证未配置（envKeys 缺失）→ 渠道账号不派生进 runtime', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'noenv', type: 'feishu', displayName: '无 envKeys', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' } },
+  ];
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'noenv' } }];
+  // envKeys 未声明 → isAssetConfigured 判定为 false → 跳过派生。
+  const config = gen(store);
+  assert.deepEqual(Object.keys(config.channels.feishu?.accounts ?? {}), []);
+});
+
+test('凭证留 .env.example 模板值 → 渠道账号不派生进 runtime', () => {
+  const store = makeStore();
+  store.channels = [
+    {
+      id: 'hr-admin', type: 'dingtalk', displayName: 'HR 管理员', enabled: true,
+      account: { clientId: '${DINGTALK_ADMIN_BOT_CLIENT_ID}', clientSecret: '${DINGTALK_ADMIN_BOT_CLIENT_SECRET}' },
+      envKeys: ['DINGTALK_ADMIN_BOT_CLIENT_ID', 'DINGTALK_ADMIN_BOT_CLIENT_SECRET'],
+    },
+  ];
+  store.bindings = [{ agentId: 'hr-admin', match: { channel: 'dingtalk-connector', accountId: 'hr-admin' } }];
+  // 直接走 .env.example：模板里 DINGTALK_ADMIN_BOT_CLIENT_ID 是 "dingxxxxxxxxxxxxxxxx"，
+  // isPlaceholderValue 命中 /x{8,}/ → 跳过派生。
+  const result = generateConfig({ basePath: BASE_PATH, store, envPath: ENV_PATH, envExamplePath: ENV_PATH });
+  const config = result.config as any;
+  assert.deepEqual(Object.keys(config.channels['dingtalk-connector']?.accounts ?? {}), []);
+  assert.ok(result.skippedChannelAssets?.some((s) => s.type === 'dingtalk' && s.id === 'hr-admin'));
+});
+
+test('凭证已就绪 → 渠道账号正常派生进 runtime', () => {
+  const store = makeStore();
+  store.channels = [
+    {
+      id: 'hr-onboard', type: 'dingtalk', displayName: '入离职助手', enabled: true,
+      account: { clientId: '${DINGTALK_HR_ONBOARD_CLIENT_ID}', clientSecret: '${DINGTALK_HR_ONBOARD_CLIENT_SECRET}' },
+      envKeys: ['DINGTALK_HR_ONBOARD_CLIENT_ID', 'DINGTALK_HR_ONBOARD_CLIENT_SECRET'],
+    },
+  ];
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'dingtalk-connector', accountId: 'hr-onboard' } }];
+  const envPath = writeTempEnv({
+    DINGTALK_HR_ONBOARD_CLIENT_ID: 'ding5v63pitgcfuigtlv',
+    DINGTALK_HR_ONBOARD_CLIENT_SECRET: 'real-secret-aBcDeFg',
+  });
+  const config = generateConfig({ basePath: BASE_PATH, store, envPath, envExamplePath: ENV_PATH }).config as any;
+  assert.ok(config.channels['dingtalk-connector']?.accounts?.['hr-onboard']);
+});
+
+test('isPlaceholderValue 命中各类模板尾巴', () => {
+  assert.equal(isPlaceholderValue(undefined, 'sk-...'), true, 'undefined → placeholder');
+  assert.equal(isPlaceholderValue('', 'sk-...'), true, '空串 → placeholder');
+  assert.equal(isPlaceholderValue('   ', 'sk-...'), true, '只有空白 → placeholder');
+  assert.equal(isPlaceholderValue('${DINGTALK_HR_BOT_CLIENT_ID}', undefined), true, '${...} 字面量 → placeholder');
+  assert.equal(isPlaceholderValue('change-me', 'change-me'), true, 'change-me → placeholder');
+  assert.equal(isPlaceholderValue('cli_xxxxxxxxxxxxxxxx', 'cli_xxxxxxxxxxxxxxxx'), true, '与模板同值 → placeholder');
+  assert.equal(isPlaceholderValue('xxxxxxxx', undefined), true, '纯 x 占位 → placeholder');
+  assert.equal(isPlaceholderValue('dingxxxxxxxxxxxxxxxx', undefined), true, 'x{8,} 模板尾巴 → placeholder');
+  assert.equal(isPlaceholderValue('ding5v63pitgcfuigtlv', undefined), false, '真凭证 → 已配置');
+  assert.equal(isPlaceholderValue('sk-real-key-123', 'sk-...'), false, '不同于模板的真值 → 已配置');
 });
 
 // ============================================================================

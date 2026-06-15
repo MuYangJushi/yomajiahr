@@ -14,6 +14,7 @@ import {
   unbindAgentFromChannel,
   updateAgentProfile,
 } from "../services/orchestrator.js";
+import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
@@ -37,6 +38,10 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
 });
 
 // 仅创建数字员工档案（ADR-013 #58）。允许空 skills / 无渠道；状态显示"待配置"。
+//
+// 异步化（fix/usage-bugs #1）：HTTP 立即 202 + jobId；后台跑 createAgentProfile（含 triggerApply）。
+// 校验类错误（id 已存在 / role 越权）需要立刻 400/403，所以走 Promise.race(800ms)：早完成的同步报；
+// 没完成（apply 在跑）就返回 202 让前端轮询 GET /config/apply-jobs/:id。
 agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res: Response) => {
   try {
     const { skills, channels, ...profileInput } = req.body || {};
@@ -47,15 +52,33 @@ agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res
     if (role === "admin" && req.user?.platformRole !== "admin") {
       return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
     }
-    const result = await createAgentProfile({ ...profileInput, role });
-    appendAuditLog("agent.create", result.agent.id, {
-      agent_id: result.agent.id,
-      name: result.agent.name,
-      role: result.agent.role,
-      skills: result.agent.skills,
-      operator: req.user?.platformUserId || "",
-    });
-    res.status(201).json(result);
+    const operator = req.user?.platformUserId || "";
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        const result = await createAgentProfile({ ...profileInput, role });
+        appendAuditLog("agent.create", result.agent.id, {
+          agent_id: result.agent.id,
+          name: result.agent.name,
+          role: result.agent.role,
+          skills: result.agent.skills,
+          operator,
+        });
+        return result;
+      },
+      "agent.create",
+    );
+    // 800ms 内完成：直接 201 兼容旧客户端；否则交给前端轮询 jobId。
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.status(201).json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      const status = /agent id 已存在|workspace 已存在/.test(message) ? 409 : 400;
+      return res.status(status).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     const message = (err as Error).message;
     const status = /agent id 已存在|workspace 已存在/.test(message) ? 409 : 400;
@@ -63,7 +86,7 @@ agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res
   }
 });
 
-// 仅修改数字员工档案（ADR-013 #58）。技能分配/取消：调用方走技能配置接口（下一份 ADR）。
+// 仅修改数字员工档案（ADR-013 #58）。技能分配/取消：调用方走技能配置接口（下一份 ADR）。异步 apply。
 agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
@@ -74,34 +97,67 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
     if (profileInput.role === "admin" && req.user?.platformRole !== "admin") {
       return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
     }
-    const result = await updateAgentProfile(id, profileInput);
-    appendAuditLog("agent.update", id, {
-      agent_id: id,
-      name: result.agent.name,
-      role: result.agent.role,
-      skills: result.agent.skills,
-      operator: req.user?.platformUserId || "",
-    });
-    res.json(result);
+    const operator = req.user?.platformUserId || "";
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        const result = await updateAgentProfile(id, profileInput);
+        appendAuditLog("agent.update", id, {
+          agent_id: id,
+          name: result.agent.name,
+          role: result.agent.role,
+          skills: result.agent.skills,
+          operator,
+        });
+        return result;
+      },
+      "agent.update",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      return res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     const message = (err as Error).message;
     res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
   }
 });
 
-// 渠道绑定（ADR-013 #58）。新账号（带 credentials）或复用现有空闲账号。
+// 渠道绑定（ADR-013 #58）。新账号（带 credentials）或复用现有空闲账号。异步 apply。
 agentsRouter.post("/config/agents/:id/channels", requireRole("ops"), onboardingLimiter, async (req: Request, res: Response) => {
   const agentId = String(req.params.id);
+  const operator = req.user?.platformUserId || "";
   try {
-    const result = await bindAgentToChannel({ agentId, ...req.body });
-    appendAuditLog("agent.channel.bind", agentId, {
-      agent_id: agentId,
-      domain: req.body?.domain,
-      account_id: req.body?.accountId || agentId,
-      existing: Boolean(req.body?.existing),
-      operator: req.user?.platformUserId || "",
-    });
-    res.status(201).json(result);
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        const result = await bindAgentToChannel({ agentId, ...req.body });
+        appendAuditLog("agent.channel.bind", agentId, {
+          agent_id: agentId,
+          domain: req.body?.domain,
+          account_id: req.body?.accountId || agentId,
+          existing: Boolean(req.body?.existing),
+          operator,
+        });
+        return result;
+      },
+      "agent.channel.bind",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.status(201).json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      const status = /agent 不存在/.test(message) ? 404 : /已接入|已存在|已被/.test(message) ? 409 : 400;
+      return res.status(status).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     const message = (err as Error).message;
     const status = /agent 不存在/.test(message) ? 404 : /已接入|已存在|已被/.test(message) ? 409 : 400;

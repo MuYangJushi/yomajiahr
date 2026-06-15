@@ -1,9 +1,11 @@
 // .env 键级 upsert（保留既有键/注释/非 bot 秘钥；原子 + chmod 600）。
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { STATE_DIR } from "../config.js";
+import { join, resolve } from "node:path";
+import { REPO_DIR, STATE_DIR } from "../config.js";
 
 export const ENV_PATH = join(STATE_DIR, ".env");
+/** 模板（占位符判定的对照源）；与 generate-config CLI 默认 .env-example 一致。 */
+const ENV_EXAMPLE_PATH = resolve(REPO_DIR, "config", ".env.example");
 
 const KEY_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/;
 
@@ -73,4 +75,46 @@ export function runtimeEnv(): Record<string, string> {
     out[m[1]] = line.slice(eq + 1);
   }
   return out;
+}
+
+/** 读取 .env / .env.example 的 key→value 映射；行为与 generate-config 的 readEnvMap 一致。 */
+function readEnvValueMap(path: string): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!existsSync(path)) return map;
+  const text = readFileSync(path, "utf-8");
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!m) continue;
+    let value = m[2]!;
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    map.set(m[1]!, value);
+  }
+  return map;
+}
+
+/** 占位符值判定（与 config/src/generate-config.ts 的 isPlaceholderValue 同源）：
+ *  - 空 / 只有空白 / `${...}` 字面量 / 与 .env.example 模板同值 / 已知模板尾巴（change-me、xxxxxxxx）
+ *  → 视为「未配置」。
+ *  这是 admin-server 与生成器共同的"凭证就绪"判定；任何一处变了另一处必须同步。
+ */
+export function isPlaceholderValue(actual: string | undefined, template: string | undefined): boolean {
+  if (actual === undefined) return true;
+  const v = actual.trim();
+  if (v === "") return true;
+  if (/^\$\{[A-Z0-9_]+\}$/.test(v)) return true;
+  if (template !== undefined && v === template.trim()) return true;
+  if (/^change[-_]me/i.test(v)) return true;
+  if (/^x{4,}$/i.test(v)) return true;
+  if (/x{8,}/.test(v)) return true;
+  return false;
+}
+
+/** 判定一组 envKeys 是否全部已配置（在 .env 中且不是占位值）。 */
+export function envKeysAllConfigured(envKeys: string[] | undefined): boolean {
+  if (!envKeys || envKeys.length === 0) return false;
+  const envMap = readEnvValueMap(ENV_PATH);
+  const exampleMap = readEnvValueMap(ENV_EXAMPLE_PATH);
+  return envKeys.every((key) => !isPlaceholderValue(envMap.get(key), exampleMap.get(key)));
 }
