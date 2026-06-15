@@ -5,7 +5,6 @@ import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
 import { listAgents } from "../services/orchestrator.js";
 import { triggerApply } from "../services/config-apply.js";
-import { resetCurrentAgentSessions } from "../services/sessions.js";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import {
   KnowledgeStore,
@@ -156,11 +155,11 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
       return;
     }
     const affectedAgents = await resolveCollectionBoundAgents(collectionId, datasetId);
-    const resetSessions = resetCurrentAgentSessions(affectedAgents);
     await removeCollection(collectionId);
-    const apply = resetSessions.length > 0
-      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 })
+    const apply = affectedAgents.length > 0
+      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, resetAgentIds: affectedAgents })
       : undefined;
+    const resetSessions = apply?.resetSessions ?? [];
     appendAuditLog("DELETE", collectionId, {
       source: "fastgpt",
       resetSessions,
@@ -263,22 +262,33 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
     const next = validateKnowledgeStore(req.body, listAgents().map((agent) => agent.id));
     prev = readKnowledgeStore(); // 快照：apply 失败时复原
     ownsRollback = true;
-    const resetSessions = resetCurrentAgentSessions(
-      prev.knowledgeBases.flatMap((oldKb) => {
-        const nextKb = next.knowledgeBases.find((kb) => kb.id === oldKb.id);
-        return oldKb.boundAgents.filter((agentId) => !nextKb?.boundAgents.includes(agentId));
-      }),
-    );
+    const revokedAgentIds = [
+      ...new Set(
+        prev.knowledgeBases.flatMap((oldKb) => {
+          const nextKb = next.knowledgeBases.find((kb) => kb.id === oldKb.id);
+          return oldKb.boundAgents.filter((agentId) => !nextKb?.boundAgents.includes(agentId));
+        }),
+      ),
+    ];
     writeKnowledgeStore(next);
-    appendAuditLog("BIND_KB", "knowledge.json", {
-      operator: req.user?.platformUserId || "",
-      bases: next.knowledgeBases.map((b) => ({ id: b.id, boundAgents: b.boundAgents })),
-      resetSessions,
-    });
     // 应用：权威校验 + 重启网关 + 探活（apply-config.sh 自带 runtime 回滚）。
     // 超时设大：脚本探活窗默认 30s，加余量；慢路径返回 "pending" 表示 apply 仍可能成功，
     // 此时**不**回滚（避免对正在进行的 apply 重复触发，参见 config-apply.ts 注释）——只回传 pending 让前端轮询。
-    const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 });
+    const apply = await triggerApply({
+      stateDir: STATE_DIR,
+      repoDir: REPO_DIR,
+      timeoutMs: 60_000,
+      resetAgentIds: revokedAgentIds,
+      revokedKnowledgeAgentIds: revokedAgentIds,
+    });
+    appendAuditLog(apply.status === "failed" ? "BIND_KB_FAILED" : "BIND_KB", "knowledge.json", {
+      operator: req.user?.platformUserId || "",
+      bases: next.knowledgeBases.map((b) => ({ id: b.id, boundAgents: b.boundAgents })),
+      revokedAgentIds,
+      resetSessions: apply.resetSessions ?? [],
+      applyStatus: apply.status,
+      applyMessage: apply.message,
+    });
     if (apply.status === "failed") {
       // 显式失败：apply-config.sh 已回滚运行时配置；复原绑定文件并再 apply 一次让 runtime 与 store 一致。
       try {

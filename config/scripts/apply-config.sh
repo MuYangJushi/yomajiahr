@@ -12,6 +12,7 @@
 #   READY_SUSTAIN  连续就绪所需秒数（默认 11，需 > systemd RestartSec=10）
 #   HEALTH_URL     就绪探测地址（默认 http://127.0.0.1:$GATEWAY_PORT/health）
 #   PROBE_FORCE_FAIL=1  仅测试用：强制探活失败以验证回滚
+#   PROCESS_APPLY_REQUEST=1  处理管理平台 apply-request 中的会话清理/撤权验证
 #
 set -uo pipefail
 
@@ -31,7 +32,11 @@ STAGING="$STATE_DIR/openclaw.json.staging"
 LASTGOOD="$STATE_DIR/openclaw.json.last-good"
 CONTROL="$STATE_DIR/control"
 RESULT="$CONTROL/apply-result.json"
+REQUEST="$CONTROL/apply-request.json"
 VERSIONS="$STATE_DIR/config-versions"
+RESET_SESSIONS_JSON='[]'
+ACTIVE_REQUEST=""
+REQUEST_ID=""
 
 mkdir -p "$CONTROL" "$VERSIONS"
 
@@ -39,8 +44,8 @@ json_str() { node -e 'process.stdout.write(JSON.stringify(String(process.argv[1]
 
 write_result() { # status message [version]
   local status="$1" msg="$2" ver="${3:-}"
-  printf '{"status":"%s","message":%s,"version":%s,"ts":"%s"}\n' \
-    "$status" "$(json_str "$msg")" "$(json_str "$ver")" "$(date -u +%FT%TZ)" \
+  printf '{"status":"%s","message":%s,"version":%s,"requestId":%s,"resetSessions":%s,"ts":"%s"}\n' \
+    "$status" "$(json_str "$msg")" "$(json_str "$ver")" "$(json_str "$REQUEST_ID")" "$RESET_SESSIONS_JSON" "$(date -u +%FT%TZ)" \
     > "$RESULT.tmp" && mv "$RESULT.tmp" "$RESULT"
   chmod 644 "$RESULT" 2>/dev/null || true
 }
@@ -50,6 +55,15 @@ has_systemctl() { command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/syst
 log() { echo "[apply-config] $*" >&2; }
 
 fail() { write_result failed "$1" "${2:-}"; log "FAIL: $1"; exit 1; }
+
+if [ "${PROCESS_APPLY_REQUEST:-0}" = "1" ] && [ -f "$REQUEST" ]; then
+  ACTIVE_REQUEST="$CONTROL/apply-request.processing.$$"
+  cp "$REQUEST" "$ACTIVE_REQUEST" || fail "无法快照 apply 请求"
+  REQUEST_ID=$(node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(String(x.id ?? ""))' "$ACTIVE_REQUEST") \
+    || { rm -f "$ACTIVE_REQUEST"; ACTIVE_REQUEST=""; fail "apply 请求格式非法"; }
+  [ -n "$REQUEST_ID" ] || { rm -f "$ACTIVE_REQUEST"; ACTIVE_REQUEST=""; fail "apply 请求缺少 id"; }
+  trap 'rm -f "$ACTIVE_REQUEST"' EXIT
+fi
 
 set_runtime_permissions() {
   chmod 600 "$RUNTIME"
@@ -156,9 +170,24 @@ log "已快照 last-good + store 版本 $TS"
 # OpenClaw 退出时会校验并可能自动恢复它观察到的配置替换。必须先停旧进程，
 # 否则 systemctl restart 的 stop 阶段可能把刚生成的新配置覆盖回 backup。
 stop_gateway || fail "停止旧 Gateway 失败（未改动运行时配置）"
+
+# 知识解绑/文档删除需要清除当前上下文。必须在 Gateway 完全停止后执行，
+# 否则进程内旧会话可能在 sessions.json 清空后再次写回。
+if [ -n "$ACTIVE_REQUEST" ]; then
+  RESET_SESSIONS_JSON=$(node "$CONFIG_DIR/scripts/reset-agent-sessions.mjs" "$STATE_DIR" "$ACTIVE_REQUEST") \
+    || { start_gateway || true; fail "重置受影响 Agent 当前会话失败（已尝试恢复启动旧 Gateway）"; }
+  log "已重置受影响 Agent 当前会话：$RESET_SESSIONS_JSON"
+fi
+
 mv "$STAGING" "$RUNTIME" || { start_gateway || true; fail "应用运行时配置失败（已尝试恢复启动旧 Gateway）"; }
 set_runtime_permissions
 log "已应用 → $RUNTIME"
+
+# 对知识解绑执行负向验证：store、运行时工具和 MCP 注册必须全部撤权。
+if [ -n "$ACTIVE_REQUEST" ]; then
+  node "$CONFIG_DIR/scripts/verify-knowledge-revocation.mjs" "$STATE_DIR" "$ACTIVE_REQUEST" \
+    || rollback "知识库解绑负向验证失败"
+fi
 
 # —— 4. 启动 ——
 start_gateway || rollback "启动失败"
