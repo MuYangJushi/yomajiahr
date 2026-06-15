@@ -3,7 +3,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog } from "../util.js";
-import { listAgents } from "../services/orchestrator.js";
+import { listAgents, rerenderAgentWorkspace } from "../services/orchestrator.js";
 import { triggerApply } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { REPO_DIR, STATE_DIR } from "../config.js";
@@ -276,7 +276,27 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
             }),
           ),
         ];
+        // 同时收集"新增"绑定的 agent —— 它们的 TOOLS.md 也要从"未绑定"切到"已绑定"。
+        const grantedAgentIds = [
+          ...new Set(
+            next.knowledgeBases.flatMap((newKb) => {
+              const oldKb = prev!.knowledgeBases.find((kb) => kb.id === newKb.id);
+              return newKb.boundAgents.filter((agentId) => !oldKb?.boundAgents.includes(agentId));
+            }),
+          ),
+        ];
         writeKnowledgeStore(next);
+        // fix/usage-bugs：KB 绑定变更后必须刷新 workspace（TOOLS.md 等），
+        // 否则解绑后 AI 仍以为有 knowledge_search 工具 → 用 exec curl 探 FastGPT 端点撞 404。
+        // 先写 store 再渲染：渲染读 knowledge.json 取最新绑定状态。失败不阻塞主流程
+        // （workspace 是辅助 prompt，落后一步可下次绑定/编辑修正）。
+        for (const agentId of new Set([...revokedAgentIds, ...grantedAgentIds])) {
+          try {
+            rerenderAgentWorkspace(agentId);
+          } catch {
+            /* 静默：渲染失败由下次 agent 操作纠正 */
+          }
+        }
         const apply = await triggerApply({
           stateDir: STATE_DIR,
           repoDir: REPO_DIR,
@@ -295,6 +315,10 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
         if (apply.status === "failed") {
           try {
             writeKnowledgeStore(prev);
+            // 回滚绑定后同步回滚 workspace（与上面正向变更对称）。
+            for (const agentId of new Set([...revokedAgentIds, ...grantedAgentIds])) {
+              try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
+            }
             await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
           } catch {
             /* 复原失败：调用方 catch 会拿到原 apply 错误 */
@@ -311,6 +335,18 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
         if (ownsRollback && prev) {
           try {
             writeKnowledgeStore(prev);
+            // 与正向路径相同：回滚绑定后回滚 workspace。这里读不到 grantedAgentIds 局部
+            // 变量（在 try 块外），重读 store 重算 affected：所有 prev 与现状有差异的 agent。
+            const current = readKnowledgeStore();
+            const affected = new Set<string>();
+            for (const oldKb of prev.knowledgeBases) {
+              const newKb = current.knowledgeBases.find((kb) => kb.id === oldKb.id);
+              for (const agentId of oldKb.boundAgents) if (!newKb?.boundAgents.includes(agentId)) affected.add(agentId);
+              for (const agentId of newKb?.boundAgents || []) if (!oldKb.boundAgents.includes(agentId)) affected.add(agentId);
+            }
+            for (const agentId of affected) {
+              try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
+            }
             await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
           } catch {
             /* 复原失败：保持错误返回，运维可手工 apply */
