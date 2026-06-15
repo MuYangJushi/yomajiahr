@@ -41,7 +41,14 @@ export interface ChannelAsset {
   account?: Record<string, unknown>;
   envKeys?: string[];
   /** 集中探活缓存（ADR-013 §渠道独立）。 */
-  health?: { ok: boolean; lastError?: string; updatedAt: string };
+  health?: {
+    configured: boolean;
+    running: boolean;
+    connected: boolean;
+    probe?: { ok: boolean };
+    lastError?: string;
+    checkedAt: string;
+  };
   [k: string]: unknown;
 }
 /** @deprecated 保留旧类型以兼容历史调用方；新代码用 ChannelAsset[]。 */

@@ -87,7 +87,6 @@ export interface CreateAgentInput {
   /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
   profile?: AgentProfile;
-  skills?: string[];
 }
 export async function createAgent(input: CreateAgentInput): Promise<unknown> {
   return (await api.post("/config/agents", input)).data;
@@ -98,7 +97,6 @@ export interface UpdateAgentInput {
   /** @deprecated 由 profile.personality 取代。 */
   persona?: string;
   profile?: AgentProfile;
-  skills?: string[];
 }
 export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
   await api.put(`/config/agents/${encodeURIComponent(id)}`, input);
@@ -118,20 +116,27 @@ export async function bindAgentChannel(id: string, input: BindChannelInput): Pro
 export async function unbindAgentChannel(id: string, domain: string, accountId: string): Promise<unknown> {
   return (await api.delete(`/config/agents/${encodeURIComponent(id)}/channels/${encodeURIComponent(domain)}/${encodeURIComponent(accountId)}`)).data;
 }
-export async function generateAgentProfile(input: { jobTitle: string; hints?: string; role?: "employee" | "admin" }): Promise<AgentProfile> {
+export async function generateAgentProfile(input: { jobTitle: string; hints?: string; fields?: Array<keyof AgentProfile> }): Promise<AgentProfile> {
   return (await api.post("/config/agent-profile/generate", input)).data.profile;
 }
 
 // —— 渠道管理（ADR-013 §渠道独立）——
-export interface ChannelHealth { ok: boolean; lastError?: string; updatedAt: string }
+export interface ChannelHealth {
+  configured: boolean;
+  running: boolean;
+  connected: boolean;
+  probe?: { ok: boolean };
+  lastError?: string;
+  checkedAt: string;
+}
 export interface ChannelAsset {
   id: string;
   type: "feishu" | "dingtalk";
   displayName: string;
   enabled?: boolean;
   policy?: { dmPolicy?: "open" | "restricted"; groupPolicy?: "open" | "disabled"; requireMention?: boolean };
-  account?: Record<string, unknown>;
-  envKeys?: string[];
+  credentialsConfigured: boolean;
+  occupiedBy?: { agentId: string; agentName: string };
   health?: ChannelHealth;
 }
 // 账号资产视图走 /config/channel-assets（独立资源）；
@@ -144,6 +149,31 @@ export async function probeChannels(): Promise<ChannelHealth[]> {
 }
 export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
   await api.delete(`/config/channel-assets/${type}/${encodeURIComponent(id)}`);
+}
+export async function createChannelAsset(input: {
+  id: string; type: "feishu" | "dingtalk"; displayName: string; policy?: ChannelAsset["policy"];
+} & ({ mode: "manual"; clientId: string; secret: string } | { mode: "qrcode" })): Promise<OnboardingSession | void> {
+  return (await api.post("/config/channel-assets", input)).data;
+}
+export async function updateChannelAsset(type: "feishu" | "dingtalk", id: string, input: {
+  displayName?: string; clientId?: string; secret?: string; policy?: ChannelAsset["policy"];
+}): Promise<void> {
+  await api.patch(`/config/channel-assets/${type}/${encodeURIComponent(id)}`, input);
+}
+export async function bindChannelAsset(type: "feishu" | "dingtalk", id: string, agentId: string): Promise<void> {
+  await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/bind`, { agentId });
+}
+export async function unbindChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
+  await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/unbind`);
+}
+export async function probeChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<ChannelHealth> {
+  return (await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/probe`)).data.health;
+}
+export async function fetchChannelOnboarding(id: string): Promise<OnboardingSession> {
+  return (await api.get(`/config/channel-assets/onboarding/${id}`)).data;
+}
+export async function cancelChannelAssetOnboarding(id: string): Promise<void> {
+  await api.delete(`/config/channel-assets/onboarding/${id}`);
 }
 export async function fetchSkills(): Promise<Skill[]> {
   return (await api.get("/config/skills")).data.skills;

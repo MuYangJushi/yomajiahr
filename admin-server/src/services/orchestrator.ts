@@ -18,7 +18,7 @@ import { renderWorkspace, workspaceDir } from "./workspace.js";
 
 // —— 进程级单飞锁：整段「装配→落盘→apply」串行，避免并发交错 ——
 let lock: Promise<unknown> = Promise.resolve();
-function withLock<T>(fn: () => Promise<T>): Promise<T> {
+export function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
   const run = lock.then(fn, fn);
   lock = run.then(
     () => undefined,
@@ -171,7 +171,15 @@ function validateSkills(skills: unknown, { allowEmpty = false }: { allowEmpty?: 
 
 /** 把旧 persona 隐式映射为 profile.personality（ADR-013 向后兼容）。 */
 function legacyToProfile(input: { persona?: string; profile?: AgentProfile }): AgentProfile | undefined {
-  if (input.profile) return input.profile;
+  if (input.profile) {
+    const limits: Record<string, number> = { jobTitle: 60, responsibilities: 2000, personality: 400, tone: 400, boundaries: 1200 };
+    return Object.fromEntries(Object.entries(limits).flatMap(([key, limit]) => {
+      const value = input.profile?.[key];
+      if (value === undefined) return [];
+      if (typeof value !== "string") throw new Error(`profile.${key} 必须为字符串`);
+      return [[key, value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, limit)]];
+    }));
+  }
   if (input.persona) return { personality: input.persona };
   return undefined;
 }
@@ -344,17 +352,15 @@ export async function createAgentProfile(
     /** @deprecated 由 profile.personality 取代。 */
     persona?: string;
     profile?: AgentProfile;
-    skills?: string[];
   },
   onApplied?: () => void,
 ): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
-  return withLock(async () => {
-    const skills = input.skills ?? [];
+  return withConfigLock(async () => {
+    const skills: string[] = [];
     if (typeof input.id !== "string" || !/^[a-z0-9-]+$/.test(input.id)) throw new Error("id 只能含小写字母、数字、连字符");
     if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
     if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
     if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
-    validateSkills(skills, { allowEmpty: true });
 
     const store = readStore();
     if (store.agents.some((a) => a.id === input.id)) throw new Error(`agent id 已存在：${input.id}`);
@@ -366,6 +372,7 @@ export async function createAgentProfile(
 
     try {
       const profile = legacyToProfile({ persona: input.persona, profile: input.profile });
+      if (!profile?.jobTitle) throw new Error("profile.jobTitle 不能为空");
       const jobTitle = profile?.jobTitle || ROLE_LABEL[input.role];
       renderWorkspace(input.id, {
         ID: input.id,
@@ -388,8 +395,6 @@ export async function createAgentProfile(
         id: input.id,
         role: input.role,
         name: input.name,
-        // 旧 persona 字段保留以便历史读取；新写入走 profile
-        persona: profile?.personality || "",
         profile,
         workspace: `~/.openclaw/workspaces/${input.id}`,
         skills,
@@ -433,7 +438,7 @@ export async function bindAgentToChannel(
   input: BindChannelInput,
   onApplied?: () => void,
 ): Promise<{ apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     if (!input.agentId) throw new Error("agentId 不能为空");
     if (input.domain !== "feishu" && input.domain !== "dingtalk-connector") {
       throw new Error(`渠道非法：${input.domain}`);
@@ -470,9 +475,6 @@ export async function bindAgentToChannel(
     const sameDomainBinding = store.bindings.find(
       (b) => b.agentId === input.agentId && b.match.channel === input.domain,
     );
-    if (sameDomainBinding) {
-      throw new Error(`数字员工已接入该渠道：${input.domain}/${sameDomainBinding.match.accountId}`);
-    }
 
     const snap = mkdtempSync(join(tmpdir(), "orch-bind-"));
     cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
@@ -512,13 +514,15 @@ export async function bindAgentToChannel(
           enabled: true,
         });
       }
+      if (sameDomainBinding) {
+        store.bindings = store.bindings.filter((binding) => binding !== sameDomainBinding);
+      }
       store.bindings.push({ agentId: input.agentId, match: { channel: input.domain, accountId } });
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`绑定失败：${apply.message || apply.status}`);
       onApplied?.();
-      await verifyChannel(input.domain, accountId);
 
       rmSync(snap, { recursive: true, force: true });
       return { apply };
@@ -549,7 +553,7 @@ export async function unbindAgentFromChannel(
   accountId: string,
   onApplied?: () => void,
 ): Promise<{ apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     if (!agentId) throw new Error("agentId 不能为空");
     if (domain !== "feishu" && domain !== "dingtalk-connector") throw new Error(`渠道非法：${domain}`);
     if (!accountId) throw new Error("accountId 不能为空");
@@ -598,7 +602,7 @@ export async function createAgent(
   input: CreateAgentInput,
   onApplied?: () => void,
 ): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     // —— 轻量输入预检（深度 ADR 校验由 apply 的 generate-config --check-fs 权威把关）——
     if (typeof input.id !== "string" || !/^[a-z0-9-]+$/.test(input.id)) throw new Error("id 只能含小写字母、数字、连字符");
     if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
@@ -786,14 +790,12 @@ export async function updateAgentProfile(
     /** @deprecated 由 profile.personality 取代。 */
     persona?: string;
     profile?: AgentProfile;
-    skills?: string[];
   },
 ): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
     if (input.role !== "employee" && input.role !== "admin") throw new Error("role 非法");
     if (input.persona !== undefined && typeof input.persona !== "string") throw new Error("persona 非法");
-    validateSkills(input.skills ?? [], { allowEmpty: true });
 
     const store = readStore();
     const index = store.agents.findIndex((a) => a.id === id);
@@ -802,18 +804,18 @@ export async function updateAgentProfile(
     if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
 
     const current = store.agents[index]!;
-    const skills = input.skills ?? current.skills ?? [];
+    const skills = current.skills ?? [];
     const profile = legacyToProfile({ persona: input.persona, profile: input.profile }) ?? current.profile;
 
     const snap = mkdtempSync(join(tmpdir(), "orch-update-profile-"));
     cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
     cpSync(wsDir, join(snap, "workspace"), { recursive: true });
     try {
+      const { persona: _legacyPersona, ...currentWithoutLegacyPersona } = current;
       const next: AgentEntry = {
-        ...current,
+        ...currentWithoutLegacyPersona,
         name: input.name.trim(),
         role: input.role,
-        persona: profile?.personality || "",
         profile,
         skills,
         tools: toolsForRole(input.role),
@@ -871,7 +873,7 @@ export async function updateAgent(
   id: string,
   input: UpdateAgentInput,
 ): Promise<{ agent: AgentEntry; apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     validateUpdateInput(input);
     const store = readStore();
     const index = store.agents.findIndex((a) => a.id === id);
@@ -994,7 +996,7 @@ export async function updateAgent(
 
 /** 删除非内置数字员工，并释放其渠道账号、清理 workspace 与知识库绑定。 */
 export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
-  return withLock(async () => {
+  return withConfigLock(async () => {
     const store = readStore();
     const agent = store.agents.find((a) => a.id === id);
     if (!agent) throw new Error(`agent 不存在：${id}`);

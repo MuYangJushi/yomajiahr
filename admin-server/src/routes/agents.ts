@@ -39,7 +39,15 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
 // 仅创建数字员工档案（ADR-013 #58）。允许空 skills / 无渠道；状态显示"待配置"。
 agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res: Response) => {
   try {
-    const result = await createAgentProfile(req.body);
+    const { skills, channels, ...profileInput } = req.body || {};
+    if (skills !== undefined || channels !== undefined) {
+      return res.status(400).json({ error: "招募接口不接受 skills/channels；请在独立生命周期中配置" });
+    }
+    const role = profileInput.role ?? "employee";
+    if (role === "admin" && req.user?.platformRole !== "admin") {
+      return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
+    }
+    const result = await createAgentProfile({ ...profileInput, role });
     appendAuditLog("agent.create", result.agent.id, {
       agent_id: result.agent.id,
       name: result.agent.name,
@@ -59,7 +67,14 @@ agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res
 agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    const result = await updateAgentProfile(id, req.body);
+    const { skills, channels, addChannel, removeChannels, ...profileInput } = req.body || {};
+    if ([skills, channels, addChannel, removeChannels].some((value) => value !== undefined)) {
+      return res.status(400).json({ error: "员工资料接口不接受技能或渠道变更" });
+    }
+    if (profileInput.role === "admin" && req.user?.platformRole !== "admin") {
+      return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
+    }
+    const result = await updateAgentProfile(id, profileInput);
     appendAuditLog("agent.update", id, {
       agent_id: id,
       name: result.agent.name,

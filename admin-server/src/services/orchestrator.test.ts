@@ -425,25 +425,23 @@ test("unbindAgentFromChannel 释放 binding 但保留账号与凭证供复用", 
   assert.equal(listed.derived.pendingChannels, true);
 });
 
-test("updateAgentProfile 改写 name/role/skills 并保留 MEMORY.md", async () => {
+test("updateAgentProfile 只改资料和权限，保留 skills 与 MEMORY.md", async () => {
   const memPath = join(stateDir, "workspaces", "profile-only", "MEMORY.md");
   writeFileSync(memPath, "# 关键记忆\n- 不可丢\n");
   await updateAgentProfile("profile-only", {
     name: "档案员-改名",
     role: "admin",
-    skills: ["hr-general"],
     profile: { jobTitle: "HR 高级顾问" },
   });
   const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
   const stored = agents.find((a: any) => a.id === "profile-only");
   assert.equal(stored.name, "档案员-改名");
   assert.equal(stored.role, "admin");
-  assert.deepEqual(stored.skills, ["hr-general"]);
+  assert.deepEqual(stored.skills, []);
   assert.equal(stored.profile.jobTitle, "HR 高级顾问");
   // MEMORY.md 保留
   assert.equal(readFileSync(memPath, "utf-8"), "# 关键记忆\n- 不可丢\n");
   // 派生状态更新
   const listed = listAgents().find((a) => a.id === "profile-only")!;
-  assert.equal(listed.derived.pendingSkills, false);
+  assert.equal(listed.derived.pendingSkills, true);
 });
-

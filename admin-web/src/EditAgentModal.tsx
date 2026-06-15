@@ -1,132 +1,54 @@
-// 修改数字员工（ADR-013 §招募向导）：仅改资料 + 权限 + 技能。
-// 渠道的解绑/绑定/复用统一在「渠道管理」页通过独立 API 完成，不再在本弹窗中编辑。
-import { ModalForm, ProFormRadio, ProFormSelect, ProFormText, ProFormTextArea } from "@ant-design/pro-components";
-import { Alert, Tag, message } from "antd";
-import { updateAgent, type AgentRow, type Skill } from "./api";
+import { useRef, useState } from "react";
+import { ModalForm, ProFormRadio, ProFormText, ProFormTextArea, type ProFormInstance } from "@ant-design/pro-components";
+import { Alert, Button, Space, message } from "antd";
+import { generateAgentProfile, updateAgent, type AgentProfile, type AgentRow } from "./api";
 
-interface Props {
-  agent: AgentRow | null;
-  skills: Skill[];
-  onClose: () => void;
-  onUpdated: () => void;
-}
+interface Props { agent: AgentRow | null; onClose: () => void; onUpdated: () => void }
+const FIELDS: Array<{ key: keyof AgentProfile; label: string; area?: boolean }> = [
+  { key: "responsibilities", label: "职责", area: true }, { key: "personality", label: "个性" },
+  { key: "tone", label: "沟通语气" }, { key: "boundaries", label: "工作边界", area: true },
+];
 
-const DOMAIN_LABEL: Record<string, string> = {
-  feishu: "飞书",
-  "dingtalk-connector": "钉钉",
-};
-
-export default function EditAgentModal({ agent, skills, onClose, onUpdated }: Props) {
+export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
+  const [busy, setBusy] = useState<string>();
+  const formRef = useRef<ProFormInstance>();
   return (
     <ModalForm
-      key={agent?.id || "closed"}
-      title={`修改数字员工：${agent?.name || ""}`}
-      open={Boolean(agent)}
-      initialValues={agent || undefined}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      modalProps={{ destroyOnClose: true }}
+      key={agent?.id || "closed"} title={`编辑数字员工：${agent?.name || ""}`} open={Boolean(agent)}
+      formRef={formRef}
+      initialValues={{ ...agent, ...agent?.profile }} onOpenChange={(open) => !open && onClose()} modalProps={{ destroyOnClose: true }}
       onFinish={async (values) => {
         if (!agent) return false;
         try {
-          await updateAgent(agent.id, {
-            name: values.name,
-            role: values.role,
-            profile: {
-              ...(agent.profile || {}),
-              jobTitle: values.jobTitle,
-              responsibilities: values.responsibilities,
-              personality: values.personality,
-              tone: values.tone,
-              boundaries: values.boundaries,
-            },
-            skills: values.skills,
-          });
-          message.success("数字员工已更新");
-          onUpdated();
-          return true;
-        } catch (err: any) {
-          message.error(err?.response?.data?.error || err.message || "更新失败");
-          return false;
-        }
+          await updateAgent(agent.id, { name: values.name, role: values.role, profile: Object.fromEntries(["jobTitle", ...FIELDS.map((f) => f.key)].map((key) => [key, values[key]])) });
+          message.success("员工资料已保存"); onUpdated(); return true;
+        } catch (err: any) { message.error(err?.response?.data?.error || err.message || "更新失败"); return false; }
       }}
     >
-      <ProFormText name="id" label="ID" disabled />
-      <ProFormText name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]} />
-      <ProFormRadio.Group
-        name="role"
-        label="系统权限"
-        tooltip="这是平台权限级别，不是真实岗位（岗位由 profile.jobTitle 表达）"
-        options={[
-          { label: "员工（只读）", value: "employee" },
-          { label: "管理员（可写）", value: "admin" },
-        ]}
-        rules={[{ required: true }]}
-      />
-
-      <Alert
-        type="info"
-        showIcon
-        style={{ margin: "8px 0" }}
-        message="职业档案：岗位名 + 5 段结构化描述。AGENTS.md 会按此渲染「待配置技能 / 待接入渠道」状态提示。"
-      />
-      <ProFormText
-        name="jobTitle"
-        label="岗位名"
-        rules={[{ required: true, max: 60 }]}
-        initialValue={agent?.profile?.jobTitle}
-        fieldProps={{ autoComplete: "off" }}
-      />
-      <ProFormTextArea
-        name="responsibilities"
-        label="职责"
-        initialValue={agent?.profile?.responsibilities}
-        fieldProps={{ rows: 3 }}
-      />
-      <ProFormText
-        name="personality"
-        label="人设（3~5 形容词）"
-        initialValue={agent?.profile?.personality || agent?.persona}
-      />
-      <ProFormText name="tone" label="语气" initialValue={agent?.profile?.tone} />
-      <ProFormTextArea
-        name="boundaries"
-        label="边界"
-        initialValue={agent?.profile?.boundaries}
-        fieldProps={{ rows: 2 }}
-      />
-
-      <ProFormSelect
-        name="skills"
-        label="分配技能"
-        mode="multiple"
-        allowClear
-        placeholder="可留空，AGENTS.md 会显示「待配置技能」"
-        options={skills.map((s) => ({ label: s.name, value: s.name, title: s.description }))}
-        fieldProps={{ optionRender: (o: any) => <span title={o.data.title}>{o.label}</span> }}
-      />
-
-      <Alert
-        type="info"
-        showIcon
-        style={{ margin: "12px 0 0" }}
-        message="渠道绑定 / 解绑 / 账号复用请在「渠道管理」页完成。"
-      />
-      {agent?.channels.length ? (
-        <div style={{ marginTop: 8 }}>
-          当前接入：
-          {agent.channels.map((c) => (
-            <Tag key={`${c.domain}/${c.accountId}`} color="geekblue" style={{ marginLeft: 4 }}>
-              {DOMAIN_LABEL[c.domain] || c.domain}/{c.accountId}
-            </Tag>
-          ))}
+      <ProFormText name="id" label="不可变 ID" disabled />
+      <ProFormText name="name" label="名称" rules={[{ required: true }]} />
+      <ProFormText name="jobTitle" label="真实岗位名称" rules={[{ required: true, max: 60 }]} />
+      <ProFormRadio.Group name="role" label="系统权限级别" options={[
+        { label: "employee（只读）", value: "employee" }, { label: "admin（管理权限）", value: "admin" },
+      ]} />
+      <Alert type="info" showIcon message="本页面只修改员工资料与权限，不处理技能和渠道。" />
+      {FIELDS.map((field) => (
+        <div key={field.key} style={{ marginTop: 12 }}>
+          <Space>
+            <Button size="small" loading={busy === field.key} onClick={async () => {
+              if (!agent) return;
+              setBusy(field.key);
+              try {
+                const p = await generateAgentProfile({ jobTitle: String(formRef.current?.getFieldValue("jobTitle") || ""), fields: [field.key] });
+                formRef.current?.setFieldValue(field.key, p[field.key]);
+                message.success(`${field.label}已生成，请确认后保存`);
+              } catch (err: any) { message.error(err?.response?.data?.message || "AI 生成不可用"); }
+              finally { setBusy(undefined); }
+            }}>AI 重新生成{field.label}</Button>
+          </Space>
+          {field.area ? <ProFormTextArea name={field.key} label={field.label} fieldProps={{ rows: 3 }} /> : <ProFormText name={field.key} label={field.label} />}
         </div>
-      ) : (
-        <div style={{ marginTop: 8 }}>
-          <Tag color="warning">暂未接入渠道</Tag>
-        </div>
-      )}
+      ))}
     </ModalForm>
   );
 }
