@@ -7,7 +7,8 @@ import {
   BIND_HOST,
   DEMO_ACCESS_ENABLED,
   DEMO_ACCESS_ROLE,
-  DEMO_OPEN_LOGIN_ROLE,
+  DINGTALK_LOGIN_CORP_ID,
+  OPEN_ENTERPRISE_LOGIN_ROLE,
   MAX_UPLOAD_FILE_MB,
   PORT,
   ensureDirs,
@@ -36,8 +37,11 @@ app.listen(PORT, bindHost, () => {
     "INFO",
     `  Auth: ${AUTH_TOKEN ? "enabled (token)" : "localhost-only (no OPENCLAW_WEB_AUTH_TOKEN)"}`,
   );
-  if (DEMO_OPEN_LOGIN_ROLE) {
-    log("WARN", `  Demo open login: enabled for every authenticated Feishu/DingTalk account as ${DEMO_OPEN_LOGIN_ROLE}`);
+  if (OPEN_ENTERPRISE_LOGIN_ROLE) {
+    log("WARN", `  Open enterprise login: enabled — 本企业飞书/钉钉成员登录即授 ${OPEN_ENTERPRISE_LOGIN_ROLE}`);
+    if (!DINGTALK_LOGIN_CORP_ID) {
+      log("WARN", "  ⚠ DINGTALK_LOGIN_CORP_ID 未配置 — 钉钉开放登录将 fail-closed（仅飞书成员可开放登录）");
+    }
   }
   if (DEMO_ACCESS_ENABLED) {
     log("WARN", `  Demo access code login: enabled as ${DEMO_ACCESS_ROLE}`);

@@ -7,7 +7,7 @@ import {
   DEMO_ACCESS_CODE,
   DEMO_ACCESS_ENABLED,
   DEMO_ACCESS_ROLE,
-  DEMO_OPEN_LOGIN_ROLE,
+  OPEN_ENTERPRISE_LOGIN_ROLE,
   DEV_LOCALHOST_ADMIN,
   PUBLIC_BASE_URL,
   SESSION_SECRET,
@@ -54,9 +54,9 @@ authRouter.get("/auth/providers", (_req: Request, res: Response) => {
       feishu: feishuConfigured() && Boolean(SESSION_SECRET),
       dingtalk: dingtalkConfigured() && Boolean(SESSION_SECRET),
     },
-    demo_open_login: {
-      enabled: Boolean(DEMO_OPEN_LOGIN_ROLE),
-      role: DEMO_OPEN_LOGIN_ROLE || null,
+    open_enterprise_login: {
+      enabled: Boolean(OPEN_ENTERPRISE_LOGIN_ROLE),
+      role: OPEN_ENTERPRISE_LOGIN_ROLE || null,
     },
     demo_access_code: {
       enabled: DEMO_ACCESS_ENABLED,
@@ -136,7 +136,7 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
     const identity = await feishuExchangeCode(code, redirectUri);
     const user = resolveUser(identity);
     if (!user) {
-      log("WARN", `飞书登录被拒（不在授权名单）：${identity.name} union_id=${identity.unionId}`);
+      log("WARN", `飞书登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId}`);
       return res.redirect("/console/login?error=unauthorized");
     }
 
@@ -187,7 +187,7 @@ authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) =>
     const identity = await dingtalkExchangeCode(code);
     const user = resolveUser(identity);
     if (!user) {
-      log("WARN", `钉钉登录被拒（不在授权名单）：${identity.name} union_id=${identity.unionId}`);
+      log("WARN", `钉钉登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId} corp_id=${identity.corpId || "-"}`);
       return res.redirect("/console/login?error=unauthorized");
     }
 

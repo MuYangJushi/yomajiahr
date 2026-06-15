@@ -55,4 +55,6 @@ export interface IdpIdentity {
   email?: string;
   /** 部门/用户组（③ 角色自动判定用）。 */
   departmentIds?: string[];
+  /** 钉钉所属企业 corpId（企业开放登录的成员闸门用；飞书自建应用无此字段）。 */
+  corpId?: string;
 }

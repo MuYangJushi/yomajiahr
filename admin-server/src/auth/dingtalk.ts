@@ -13,9 +13,22 @@ import {
   DINGTALK_LOGIN_BASE,
   DINGTALK_LOGIN_CLIENT_ID,
   DINGTALK_LOGIN_CLIENT_SECRET,
+  DINGTALK_LOGIN_CORP_ID,
   DINGTALK_LOGIN_SCOPE,
 } from "../config.js";
 import type { IdpIdentity } from "./types.js";
+
+/**
+ * 实际请求的授权 scope。企业开放登录的 corpId 闸门要求 token 回传组织 id，而钉钉**仅当 scope 含
+ * `corpid`** 时才让用户在登录页选择组织并回传 corpId；故配了本企业 corpId 时强制并入 `corpid`，
+ * 否则 token.corpId 恒空、闸门会把所有钉钉成员 fail-closed 拒掉。
+ */
+function effectiveScope(): string {
+  const parts = new Set((DINGTALK_LOGIN_SCOPE || "openid").split(/\s+/).filter(Boolean));
+  parts.add("openid");
+  if (DINGTALK_LOGIN_CORP_ID) parts.add("corpid");
+  return [...parts].join(" ");
+}
 
 /** 钉钉登录是否已配置（凭据齐全）。 */
 export function dingtalkConfigured(): boolean {
@@ -28,7 +41,7 @@ export function dingtalkAuthorizeUrl(state: string, redirectUri: string): string
   u.searchParams.set("client_id", DINGTALK_LOGIN_CLIENT_ID);
   u.searchParams.set("redirect_uri", redirectUri);
   u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", DINGTALK_LOGIN_SCOPE || "openid");
+  u.searchParams.set("scope", effectiveScope());
   u.searchParams.set("state", state);
   u.searchParams.set("prompt", "consent");
   return u.toString();
@@ -95,5 +108,6 @@ export async function dingtalkExchangeCode(authCode: string): Promise<IdpIdentit
     name: info.nick || "未知用户",
     phone: info.mobile, // 需应用「个人手机号信息」权限才返回
     email: info.email, // 需应用「邮箱等个人信息」权限才返回
+    corpId: token.corpId, // 企业开放登录闸门用：与本企业 DINGTALK_LOGIN_CORP_ID 比对
   };
 }

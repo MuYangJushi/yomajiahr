@@ -57,6 +57,12 @@ export const DINGTALK_LOGIN_BASE = (env.DINGTALK_LOGIN_BASE || "https://login.di
 export const DINGTALK_API_BASE = (env.DINGTALK_API_BASE || "https://api.dingtalk.com").replace(/\/$/, "");
 /** 钉钉授权 scope，默认 openid（手机号/邮箱由应用权限决定，非 scope）。 */
 export const DINGTALK_LOGIN_SCOPE = (env.DINGTALK_LOGIN_SCOPE || "openid").trim();
+/**
+ * 本企业钉钉 corpId（企业开放登录的成员闸门）。钉钉「统一登录」可放进任意钉钉用户，
+ * 故开放登录时必须用 token 响应里的 corpId 比对本企业；未配置 = 钉钉开放登录 fail-closed。
+ * 飞书自建应用换 code 成功即证明本租户成员，无需对应配置。
+ */
+export const DINGTALK_LOGIN_CORP_ID = (env.DINGTALK_LOGIN_CORP_ID || "").trim();
 /** 开发兜底：显式置 1 时，localhost 无凭据请求按 admin 放行（生产请勿开启）。 */
 export const DEV_LOCALHOST_ADMIN = env.ADMIN_PORTAL_DEV_LOCALHOST_ADMIN === "1";
 /** 引导管理员名单（解决首个 admin 的鸡生蛋）：逗号分隔的手机号或 IdP unionId。
@@ -66,12 +72,19 @@ export const BOOTSTRAP_ADMINS = (env.PLATFORM_BOOTSTRAP_ADMINS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 /**
- * 比赛展示临时开放：未命中名单的已认证 IdP 用户获得指定最低权限角色。
- * 空值/非法值/admin 均关闭该通道，避免误配置把任意外部账号提升为管理员。
+ * 企业开放登录：未命中名单的已认证 IdP 用户（须通过企业成员闸门，见 auth/users.ts）
+ * 获得指定基线角色。空值/非法值/admin 均关闭该通道，避免误配置把任意账号提升为管理员。
+ * 旧名 PLATFORM_DEMO_OPEN_LOGIN_ROLE 保留兼容（比赛展示期遗留）。
  */
-const DEMO_OPEN_LOGIN_ROLE_RAW = (env.PLATFORM_DEMO_OPEN_LOGIN_ROLE || "").trim();
-export const DEMO_OPEN_LOGIN_ROLE: "ops" | "audit" | "" =
-  DEMO_OPEN_LOGIN_ROLE_RAW === "ops" || DEMO_OPEN_LOGIN_ROLE_RAW === "audit" ? DEMO_OPEN_LOGIN_ROLE_RAW : "";
+const OPEN_ENTERPRISE_LOGIN_ROLE_RAW = (
+  env.PLATFORM_OPEN_ENTERPRISE_LOGIN_ROLE ||
+  env.PLATFORM_DEMO_OPEN_LOGIN_ROLE ||
+  ""
+).trim();
+export const OPEN_ENTERPRISE_LOGIN_ROLE: "ops" | "audit" | "" =
+  OPEN_ENTERPRISE_LOGIN_ROLE_RAW === "ops" || OPEN_ENTERPRISE_LOGIN_ROLE_RAW === "audit"
+    ? OPEN_ENTERPRISE_LOGIN_ROLE_RAW
+    : "";
 /**
  * 比赛访问码登录：独立于企业 IdP，供外部评委/体验用户临时进入。
  * 访问码至少 16 字符，角色只允许 ops/audit；任一条件不满足即关闭。

@@ -28,7 +28,7 @@ export interface Me {
 export interface Providers {
   session_enabled: boolean;
   providers: { feishu: boolean; dingtalk: boolean };
-  demo_open_login: { enabled: boolean; role: "ops" | "audit" | null };
+  open_enterprise_login: { enabled: boolean; role: "ops" | "audit" | null };
   demo_access_code: { enabled: boolean; role: "ops" | "audit" | null };
 }
 
