@@ -87,16 +87,35 @@ export function validateConfig(
   const agents = agentsParsed.data;
   const bindings = bindingsParsed.data;
 
-  // —— 2. bindings 引用完整性 ——
+  // —— 1.5 channels (id,type) 复合唯一性（ADR-013：数组形态无键级去重，重复会在
+  //   generate-config 派生时按 id 写桶 last-wins 静默丢账号；这里 fail-closed 防御手改/迁移异常）——
+  const seenAssetKeys = new Set<string>();
+  for (const [idx, asset] of channels.entries()) {
+    const key = `${asset.type}/${asset.id}`;
+    if (seenAssetKeys.has(key)) {
+      errors.push(`channels[${idx}]：账号资产 (type=${asset.type}, id=${asset.id}) 重复；(id,type) 必须唯一`);
+    }
+    seenAssetKeys.add(key);
+  }
+
+  // —— 2. bindings 引用完整性（ADR-013：channels 是顶层账号资产数组；按 type 分桶派生 domain→Set<accountId>）——
   const agentIds = new Set(agents.map((a) => a.id));
+  // 派生 domain 名空间（运行时与 bindings.match.channel 保持兼容）：dingtalk → dingtalk-connector
+  const accountsByDomain = new Map<string, Set<string>>();
+  for (const asset of channels) {
+    if (asset.enabled === false) continue;
+    const domain = asset.type === 'dingtalk' ? 'dingtalk-connector' : asset.type;
+    if (!accountsByDomain.has(domain)) accountsByDomain.set(domain, new Set());
+    accountsByDomain.get(domain)!.add(asset.id);
+  }
   for (const [idx, b] of bindings.entries()) {
     if (!agentIds.has(b.agentId))
       errors.push(`bindings[${idx}]：agentId "${b.agentId}" 不存在于 agents.list`);
     const domain = b.match.channel;
-    const acctMap = channels[domain];
-    if (!acctMap) {
+    const accountIds = accountsByDomain.get(domain);
+    if (!accountIds) {
       errors.push(`bindings[${idx}]：channel "${domain}" 不存在于 channels.json`);
-    } else if (!acctMap[b.match.accountId]) {
+    } else if (!accountIds.has(b.match.accountId)) {
       errors.push(`bindings[${idx}]：channel "${domain}" 下不存在账号 "${b.match.accountId}"`);
     }
   }

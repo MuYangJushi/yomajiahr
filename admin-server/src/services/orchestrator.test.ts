@@ -12,7 +12,7 @@ mkdirSync(join(stateDir, "skills", "hr-general"), { recursive: true });
 writeFileSync(join(stateDir, "skills", "hr-general", "SKILL.md"), "---\nname: hr-general\ndescription: test\n---\n");
 writeFileSync(join(stateDir, "config-store", "agents.json"), "[]\n");
 writeFileSync(join(stateDir, "config-store", "bindings.json"), "[]\n");
-writeFileSync(join(stateDir, "config-store", "channels.json"), JSON.stringify({ feishu: {}, "dingtalk-connector": {} }));
+writeFileSync(join(stateDir, "config-store", "channels.json"), JSON.stringify([]));
 writeFileSync(
   join(stateDir, ".env"),
   readFileSync(new URL("../../../config/.env.example", import.meta.url), "utf-8") + "\nEXISTING=value=with=equals\n",
@@ -20,9 +20,22 @@ writeFileSync(
 const fakeBin = join(stateDir, "test-bin");
 mkdirSync(fakeBin, { recursive: true });
 const fakeOpenclaw = join(fakeBin, "openclaw");
-writeFileSync(fakeOpenclaw, `#!/bin/sh
-printf '%s\\n' '{"channelAccounts":{"feishu":[{"accountId":"integration-agent","configured":true,"running":true,"probe":{"ok":true}},{"accountId":"attach-rollback-agent","configured":true,"running":true,"probe":{"ok":true}}],"dingtalk-connector":[{"accountId":"integration-agent","configured":true,"running":true,"connected":true}]}}'
-`);
+// 按 OPENCLAW_TEST_PROBE_ACCOUNTS 合并额外账号（ADR-013 #57 拆分后新路径要走 verifyChannel）。
+writeFileSync(
+  fakeOpenclaw,
+  `#!/bin/sh
+extra="$OPENCLAW_TEST_PROBE_ACCOUNTS"
+node -e '
+const extra = (process.env.OPENCLAW_TEST_PROBE_ACCOUNTS || "").split(",").filter(Boolean);
+const feishu = [
+  { accountId: "integration-agent", configured: true, running: true, probe: { ok: true } },
+  { accountId: "attach-rollback-agent", configured: true, running: true, probe: { ok: true } },
+  ...extra.map((a) => ({ accountId: a, configured: true, running: true, probe: { ok: true } })),
+];
+const dingtalk = [{ accountId: "integration-agent", configured: true, running: true, connected: true }];
+process.stdout.write(JSON.stringify({ channelAccounts: { feishu, "dingtalk-connector": dingtalk } }) + "\\n");
+'`,
+);
 chmodSync(fakeOpenclaw, 0o755);
 const fakeSystemctl = join(fakeBin, "systemctl");
 writeFileSync(fakeSystemctl, `#!/bin/sh
@@ -41,9 +54,14 @@ process.env.READY_SUSTAIN = "1";
 
 const {
   assembleCreateInput,
+  bindAgentToChannel,
   createAgentFromCredentials,
+  createAgentProfile,
   deleteAgent,
+  listAgents,
+  unbindAgentFromChannel,
   updateAgent,
+  updateAgentProfile,
   validateAgentDraft,
 } = await import("./orchestrator.js");
 const { runtimeEnv } = await import("./secrets.js");
@@ -99,7 +117,7 @@ test("完整成功路径写入 Agent、技能、渠道、binding、密钥并通�
   const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   assert.deepEqual(agents[0].skills, ["hr-general"]);
-  assert.equal(channels.feishu["integration-agent"].appSecret, "${FEISHU_INTEGRATION_AGENT_APP_SECRET}");
+  assert.equal(channels.find((c: any) => c.id === "integration-agent" && c.type === "feishu").account.appSecret, "${FEISHU_INTEGRATION_AGENT_APP_SECRET}");
   assert.deepEqual(bindings[0], {
     agentId: "integration-agent",
     match: { channel: "feishu", accountId: "integration-agent" },
@@ -132,7 +150,10 @@ test("修改数字员工时可同时新增另一渠道，并保留 MEMORY.md", a
   assert.ok(!agents[0].tools.allow.includes("memory_search"));
   assert.match(readFileSync(join(stateDir, "workspaces", "integration-agent", "SOUL.md"), "utf-8"), /负责集成测试/);
   assert.equal(readFileSync(memoryPath, "utf-8"), "custom memory\n");
-  assert.equal(channels["dingtalk-connector"]["integration-agent"].clientId, "${DINGTALK_INTEGRATION_AGENT_CLIENT_ID}");
+  assert.equal(
+    channels.find((c: any) => c.id === "integration-agent" && c.type === "dingtalk").account.clientId,
+    "${DINGTALK_INTEGRATION_AGENT_CLIENT_ID}",
+  );
   const runtime = JSON.parse(readFileSync(join(stateDir, "openclaw.json"), "utf-8"));
   assert.equal("persona" in runtime.agents.list[0], false);
   assert.equal(
@@ -158,7 +179,10 @@ test("修改数字员工时可解绑渠道并保留账号与凭据供复用", as
   });
   const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
-  assert.equal(Boolean(channels["dingtalk-connector"]["integration-agent"]), true);
+  assert.equal(
+    Boolean(channels.find((c: any) => c.id === "integration-agent" && c.type === "dingtalk")),
+    true,
+  );
   assert.equal(
     bindings.some((binding: any) => binding.agentId === "integration-agent" && binding.match.channel === "dingtalk-connector"),
     false,
@@ -233,7 +257,10 @@ test("修改时新增渠道失败会恢复渠道、binding 和密钥", async () 
   }
   const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
-  assert.equal(Boolean(channels["dingtalk-connector"]["attach-rollback-agent"]), false);
+  assert.equal(
+    Boolean(channels.find((c: any) => c.id === "attach-rollback-agent" && c.type === "dingtalk")),
+    false,
+  );
   assert.equal(
     bindings.some(
       (b: any) => b.agentId === "attach-rollback-agent" && b.match.channel === "dingtalk-connector",
@@ -260,7 +287,7 @@ test("删除数字员工释放渠道账号并清理 workspace 和知识库绑定
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   const knowledge = JSON.parse(readFileSync(join(stateDir, "config-store", "knowledge.json"), "utf-8"));
   assert.equal(agents.some((a: any) => a.id === "integration-agent"), false);
-  assert.equal(Boolean(channels.feishu["integration-agent"]), true);
+  assert.equal(Boolean(channels.find((c: any) => c.id === "integration-agent" && c.type === "feishu")), true);
   assert.equal(bindings.some((b: any) => b.agentId === "integration-agent"), false);
   assert.deepEqual(knowledge.knowledgeBases[0].boundAgents, []);
   assert.match(readFileSync(join(stateDir, ".env"), "utf-8"), /FEISHU_INTEGRATION_AGENT_/);
@@ -293,8 +320,130 @@ test("配置应用失败时恢复 Agent、渠道、binding、密钥和 workspace
   const channels = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   assert.equal(agents.some((a: any) => a.id === "rollback-agent"), false);
-  assert.equal(Boolean(channels.feishu["rollback-agent"]), false);
+  assert.equal(Boolean(channels.find((c: any) => c.id === "rollback-agent" && c.type === "feishu")), false);
   assert.equal(bindings.some((b: any) => b.agentId === "rollback-agent"), false);
   assert.equal(readFileSync(join(stateDir, ".env"), "utf-8"), envBefore);
   assert.equal(existsSync(join(stateDir, "workspaces", "rollback-agent")), false);
 });
+
+// ============================================================================
+// ADR-013 #57 拆分：createAgentProfile + bindAgentToChannel + unbind + updateAgentProfile
+// ============================================================================
+
+test("createAgentProfile 允许空 skills + 无渠道，listAgents 派生 pendingSkills/pendingChannels", async () => {
+  const result = await createAgentProfile({
+    id: "profile-only",
+    name: "档案员",
+    role: "employee",
+    profile: { jobTitle: "薪酬顾问", responsibilities: "薪酬答疑", personality: "细致", tone: "温和", boundaries: "不审批" },
+  });
+  assert.equal(result.agent.id, "profile-only");
+  assert.deepEqual(result.agent.skills, []);
+  assert.equal(result.agent.profile?.jobTitle, "薪酬顾问");
+  // 关键：profile 不在 store 的"运行时字段"列表里（id/role/name/skills/workspace/tools/heartbeat），
+  // 但 profile 字段本身保留供 workspace 渲染。
+  const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  const stored = agents.find((a: any) => a.id === "profile-only");
+  assert.deepEqual(stored.skills, []);
+  assert.equal(stored.profile.jobTitle, "薪酬顾问");
+
+  const listed = listAgents().find((a) => a.id === "profile-only")!;
+  assert.equal(listed.derived.pendingSkills, true);
+  assert.equal(listed.derived.pendingChannels, true);
+});
+
+test("createAgentProfile 拒绝空名字 / 重复 ID", async () => {
+  await assert.rejects(
+    createAgentProfile({ id: "bad", name: "  ", role: "employee" }),
+    /name 不能为空/,
+  );
+  await assert.rejects(
+    createAgentProfile({ id: "profile-only", name: "重复", role: "employee" }),
+    /agent id 已存在/,
+  );
+});
+
+test("bindAgentToChannel：新建账号 + 占用检查 + 同 agent 同渠道重复拒绝", async () => {
+  // 验证路径要 probe 找到 profile-only，给 fake openclaw 注一个
+  process.env.OPENCLAW_TEST_PROBE_ACCOUNTS = "profile-only";
+  // 新建渠道
+  await bindAgentToChannel({
+    agentId: "profile-only",
+    domain: "feishu",
+    credentials: { clientId: "cli-bind-1", clientSecret: "sec-bind-1" },
+  });
+  const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
+  assert.ok(bindings.some((b: any) => b.agentId === "profile-only" && b.match.accountId === "profile-only"));
+
+  // 同 agent 同渠道再绑（无论新建还是复用） → 拒绝
+  await assert.rejects(
+    bindAgentToChannel({
+      agentId: "profile-only",
+      domain: "feishu",
+      credentials: { clientId: "cli-bind-2", clientSecret: "sec-bind-2" },
+    }),
+    /(已接入该渠道|渠道账号已存在)/,
+  );
+  await assert.rejects(
+    bindAgentToChannel({
+      agentId: "profile-only",
+      domain: "feishu",
+      existing: true,
+      accountId: "profile-only",
+    }),
+    /(已接入该渠道|渠道账号已被)/,
+  );
+
+  // listAgents 派生 pendingChannels = false
+  const listed = listAgents().find((a) => a.id === "profile-only")!;
+  assert.equal(listed.derived.pendingChannels, false);
+  assert.equal(listed.channels.length, 1);
+});
+
+test("unbindAgentFromChannel 释放 binding 但保留账号与凭证供复用", async () => {
+  const channelsBefore = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
+  const envBefore = readFileSync(join(stateDir, ".env"), "utf-8");
+  assert.ok(
+    channelsBefore.find((c: any) => c.id === "profile-only" && c.type === "feishu"),
+    "账号应保留",
+  );
+  assert.ok(envBefore.includes("FEISHU_PROFILE_ONLY_APP_ID"), "凭据应保留");
+
+  await unbindAgentFromChannel("profile-only", "feishu", "profile-only");
+
+  const channelsAfter = JSON.parse(readFileSync(join(stateDir, "config-store", "channels.json"), "utf-8"));
+  const bindingsAfter = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
+  const envAfter = readFileSync(join(stateDir, ".env"), "utf-8");
+  assert.ok(
+    channelsAfter.find((c: any) => c.id === "profile-only" && c.type === "feishu"),
+    "账号保留为平台资产",
+  );
+  assert.equal(bindingsAfter.some((b: any) => b.agentId === "profile-only"), false);
+  assert.ok(envAfter.includes("FEISHU_PROFILE_ONLY_APP_ID"), "凭据保留供复用");
+
+  const listed = listAgents().find((a) => a.id === "profile-only")!;
+  assert.equal(listed.derived.pendingChannels, true);
+});
+
+test("updateAgentProfile 改写 name/role/skills 并保留 MEMORY.md", async () => {
+  const memPath = join(stateDir, "workspaces", "profile-only", "MEMORY.md");
+  writeFileSync(memPath, "# 关键记忆\n- 不可丢\n");
+  await updateAgentProfile("profile-only", {
+    name: "档案员-改名",
+    role: "admin",
+    skills: ["hr-general"],
+    profile: { jobTitle: "HR 高级顾问" },
+  });
+  const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  const stored = agents.find((a: any) => a.id === "profile-only");
+  assert.equal(stored.name, "档案员-改名");
+  assert.equal(stored.role, "admin");
+  assert.deepEqual(stored.skills, ["hr-general"]);
+  assert.equal(stored.profile.jobTitle, "HR 高级顾问");
+  // MEMORY.md 保留
+  assert.equal(readFileSync(memPath, "utf-8"), "# 关键记忆\n- 不可丢\n");
+  // 派生状态更新
+  const listed = listAgents().find((a) => a.id === "profile-only")!;
+  assert.equal(listed.derived.pendingSkills, false);
+});
+

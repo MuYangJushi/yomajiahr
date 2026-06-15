@@ -13,6 +13,8 @@ import { auditRouter } from "./routes/audit.js";
 import { configRouter } from "./routes/config.js";
 import { agentsRouter } from "./routes/agents.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
+import { agentProfileRouter } from "./routes/agent-profile.js";
+import { channelsRouter } from "./routes/channels.js";
 import { mountMcp } from "./mcp.js";
 
 export function createApp() {
@@ -43,6 +45,8 @@ export function createApp() {
   app.use("/api", configRouter);
   app.use("/api", agentsRouter);
   app.use("/api", knowledgeRouter);
+  app.use("/api", agentProfileRouter);
+  app.use("/api", channelsRouter);
 
   // 服务信息
   app.get("/api/info", (_req: Request, res: Response) => {

@@ -1,36 +1,54 @@
-{
-  "feishu": {
-    "hr-employee": {
+[
+  {
+    "id": "hr-employee",
+    "type": "feishu",
+    "displayName": "HR小助手-飞书",
+    "enabled": true,
+    "policy": { "dmPolicy": "open", "groupPolicy": "open", "requireMention": true },
+    "account": {
       "appId": "${FEISHU_HR_BOT_APP_ID}",
-      "appSecret": "${FEISHU_HR_BOT_APP_SECRET}",
-      "dmPolicy": "open",
-      "groupPolicy": "open",
-      "requireMention": true
+      "appSecret": "${FEISHU_HR_BOT_APP_SECRET}"
     },
-    "hr-admin": {
-      "appId": "${FEISHU_ADMIN_BOT_APP_ID}",
-      "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}",
-      "dmPolicy": "open",
-      "groupPolicy": "disabled"
-    }
+    "envKeys": ["FEISHU_HR_BOT_APP_ID", "FEISHU_HR_BOT_APP_SECRET"]
   },
-  "dingtalk-connector": {
-    "hr-employee": {
+  {
+    "id": "hr-admin",
+    "type": "feishu",
+    "displayName": "HR管理员-飞书",
+    "enabled": true,
+    "policy": { "dmPolicy": "open", "groupPolicy": "disabled" },
+    "account": {
+      "appId": "${FEISHU_ADMIN_BOT_APP_ID}",
+      "appSecret": "${FEISHU_ADMIN_BOT_APP_SECRET}"
+    },
+    "envKeys": ["FEISHU_ADMIN_BOT_APP_ID", "FEISHU_ADMIN_BOT_APP_SECRET"]
+  },
+  {
+    "id": "hr-employee",
+    "type": "dingtalk",
+    "displayName": "HR小助手-钉钉",
+    "enabled": true,
+    "policy": { "dmPolicy": "open", "groupPolicy": "open", "requireMention": true },
+    "account": {
       "enabled": true,
       "name": "HR小助手",
       "clientId": "${DINGTALK_HR_BOT_CLIENT_ID}",
-      "clientSecret": "${DINGTALK_HR_BOT_CLIENT_SECRET}",
-      "dmPolicy": "open",
-      "groupPolicy": "open",
-      "requireMention": true
+      "clientSecret": "${DINGTALK_HR_BOT_CLIENT_SECRET}"
     },
-    "hr-admin": {
+    "envKeys": ["DINGTALK_HR_BOT_CLIENT_ID", "DINGTALK_HR_BOT_CLIENT_SECRET"]
+  },
+  {
+    "id": "hr-admin",
+    "type": "dingtalk",
+    "displayName": "HR管理员-钉钉",
+    "enabled": true,
+    "policy": { "dmPolicy": "open", "groupPolicy": "disabled" },
+    "account": {
       "enabled": true,
       "name": "HR管理员",
       "clientId": "${DINGTALK_ADMIN_BOT_CLIENT_ID}",
-      "clientSecret": "${DINGTALK_ADMIN_BOT_CLIENT_SECRET}",
-      "dmPolicy": "open",
-      "groupPolicy": "disabled"
-    }
+      "clientSecret": "${DINGTALK_ADMIN_BOT_CLIENT_SECRET}"
+    },
+    "envKeys": ["DINGTALK_ADMIN_BOT_CLIENT_ID", "DINGTALK_ADMIN_BOT_CLIENT_SECRET"]
   }
-}
+]

@@ -22,7 +22,51 @@ INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIN_NODE_MAJOR=24
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.5.26}"
+# OpenClaw version resolution:
+#   - "latest" (default)  → 解析 npm dist-tags.latest 到具体版本号（避免 openclaw@latest 抖动）
+#   - "beta"              → 解析 npm dist-tags.beta（灰度验证用）
+#   - "2026.6.6"          → 精确版本号（生产锁定用）
+#   - "2026.5.26"         → 仍可锁定到旧版（兜底）
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
+# OPENCLAW_MIN_VERSION 的回退基线：默认从线上探测（保持"基线=当前生产版本"的语义），
+# 仅在用户显式指定或全新装（无现有 openclaw）时回退到 2026.5.26（仓库开发的最初基线）。
+if [ -n "${OPENCLAW_MIN_VERSION:-}" ]; then
+  : # user-provided; respect it
+else
+  _DETECTED_MIN_VERSION=""
+  # 1) 优先看 STATE_DIR 里既有的 openclaw 安装痕迹（飞书/钉钉插件会拉一份 openclaw 进去）
+  for _probe in \
+      "$STATE_DIR/extensions/openclaw-lark/node_modules/openclaw/package.json" \
+      "$STATE_DIR/extensions/dingtalk-connector/node_modules/openclaw/package.json"; do
+    if [ -f "$_probe" ]; then
+      _DETECTED_MIN_VERSION="$(node -e "console.log(require('$_probe').version)" 2>/dev/null || true)"
+      [ -n "$_DETECTED_MIN_VERSION" ] && break
+    fi
+  done
+  # 2) 否则看 PATH 上的 openclaw
+  if [ -z "$_DETECTED_MIN_VERSION" ] && command -v openclaw >/dev/null 2>&1; then
+    _DETECTED_MIN_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  fi
+  # 3) 都没有（全新装）→ 兜底到仓库基线
+  if [ -z "$_DETECTED_MIN_VERSION" ]; then
+    _DETECTED_MIN_VERSION="2026.5.26"
+  fi
+  OPENCLAW_MIN_VERSION="$_DETECTED_MIN_VERSION"
+  export OPENCLAW_MIN_VERSION
+  unset _DETECTED_MIN_VERSION _probe
+fi
+# Pin TMPDIR to a per-user runtime dir so openclaw 2026.6.6+ and tools
+# like mktemp(1) don't fall back to /tmp (which is 0700 root-owned on
+# yomakit, blocking uid 1000 from creating per-uid temp dirs).
+# Only set when not already exported (user override wins).
+if [ -z "${TMPDIR:-}" ]; then
+  _INSTALL_TMPDIR="/run/user/$(id -u 2>/dev/null || echo 1000)"
+  if [ -d "$_INSTALL_TMPDIR" ] && [ -w "$_INSTALL_TMPDIR" ]; then
+    export TMPDIR="$_INSTALL_TMPDIR"
+  fi
+  unset _INSTALL_TMPDIR
+fi
+OPENCLAW_REGISTRY="${OPENCLAW_REGISTRY:-$(npm config get registry 2>/dev/null || echo 'https://registry.npmjs.org')}"
 OPENCLAW_SKIP_INSTALL="${OPENCLAW_SKIP_INSTALL:-0}"
 INSTALL_SYSTEMD=false
 
@@ -268,21 +312,62 @@ npm config set registry https://registry.npmmirror.com
 echo "[2/9] Installing openclaw..."
 if [ "$OPENCLAW_SKIP_INSTALL" = "1" ]; then
   command -v openclaw >/dev/null 2>&1 || { echo "ERROR: OPENCLAW_SKIP_INSTALL=1 but openclaw is not on PATH"; exit 1; }
-  echo "  skipped; using $(openclaw --version 2>/dev/null || echo openclaw)"
+  INSTALLED_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  echo "  skipped; using $INSTALLED_VERSION"
 else
+  # Resolve OPENCLAW_VERSION to a concrete semver.
+  # "latest" / "beta" → resolve via npm dist-tags.
+  # "2026.6.6" / "2026.5.26" → keep as-is.
+  case "$OPENCLAW_VERSION" in
+    latest|beta|alpha)
+      RESOLVED_VERSION="$(npm view "openclaw@$OPENCLAW_VERSION" version --registry="$OPENCLAW_REGISTRY" 2>/dev/null | tail -1)"
+      if [ -z "$RESOLVED_VERSION" ]; then
+        echo "ERROR: failed to resolve dist-tag '$OPENCLAW_VERSION' from $OPENCLAW_REGISTRY" >&2
+        exit 1
+      fi
+      echo "  Resolved $OPENCLAW_VERSION → $RESOLVED_VERSION (from $OPENCLAW_REGISTRY)"
+      OPENCLAW_VERSION="$RESOLVED_VERSION"
+      ;;
+  esac
+  echo "  Minimum required version (auto-detected from current install): $OPENCLAW_MIN_VERSION"
+
+  # Compare against minimum required version (sortable: 2026.5.26 < 2026.6.6)
+  if [ "$OPENCLAW_VERSION" != "$(printf '%s\n%s\n' "$OPENCLAW_VERSION" "$OPENCLAW_MIN_VERSION" | sort -V | tail -1)" ]; then
+    echo "ERROR: openclaw@$OPENCLAW_VERSION is older than minimum required ($OPENCLAW_MIN_VERSION)" >&2
+    echo "       Pass OPENCLAW_VERSION=<newer> or OPENCLAW_MIN_VERSION=<lower> to override." >&2
+    exit 1
+  fi
+
   # Remove existing installation first to avoid ENOTEMPTY rename errors on upgrade
   NPM_PREFIX="$(npm config get prefix)"
   if [ -d "$NPM_PREFIX/lib/node_modules/openclaw" ]; then
     echo "  Removing existing openclaw installation..."
     sudo rm -rf "$NPM_PREFIX/lib/node_modules/openclaw"
   fi
-  # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt)
-  if [ -w "$NPM_PREFIX/lib" ] 2>/dev/null; then
-    npm install -g "openclaw@$OPENCLAW_VERSION"
-  else
-    sudo npm install -g "openclaw@$OPENCLAW_VERSION"
+  # Use sudo if the npm global prefix is not user-writable (e.g. system Node via apt).
+  # NVM_DIR is only set when nvm is installed for the current $HOME; fall through
+  # to NPM_PREFIX otherwise. ${VAR:-} defends against `set -u` on unset vars.
+  NPM_LIB_WRITABLE=false
+  if [ -d "${NVM_DIR:-}/versions/node/$(node -v | tr -d 'v')/lib" ] \
+     && [ -w "${NVM_DIR:-}/versions/node/$(node -v | tr -d 'v')/lib" ]; then
+    NPM_LIB_WRITABLE=true
+  elif [ -w "$NPM_PREFIX/lib" ]; then
+    NPM_LIB_WRITABLE=true
   fi
-  echo "  openclaw $(openclaw --version 2>/dev/null || echo '') installed"
+  if [ "$NPM_LIB_WRITABLE" = true ]; then
+    npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
+  else
+    sudo npm install -g "openclaw@$OPENCLAW_VERSION" --registry="$OPENCLAW_REGISTRY"
+  fi
+  INSTALLED_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
+  if [ -z "$INSTALLED_VERSION" ] || ! command -v openclaw >/dev/null 2>&1; then
+    echo "ERROR: openclaw@$OPENCLAW_VERSION install completed but binary is not on PATH" >&2
+    exit 1
+  fi
+  if [ "$INSTALLED_VERSION" != "$OPENCLAW_VERSION" ]; then
+    echo "WARN: installed version ($INSTALLED_VERSION) differs from requested ($OPENCLAW_VERSION)" >&2
+  fi
+  echo "  openclaw $INSTALLED_VERSION installed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -556,16 +641,45 @@ if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
 fi
 
 if [ "$HAS_SYSTEMD" = true ] && { [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; }; then
-  echo "[systemd] Restarting previously running services..."
-  if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
-    sudo systemctl restart openclaw-gateway
-    echo "  openclaw-gateway restarted"
+  # Pre-restart health gate: validate the new config against the freshly installed
+  # openclaw binary. If the upgrade changed schema/CLI surface, openclaw may
+  # reject the existing openclaw.json — in that case we DO NOT restart the
+  # services (would bring down production on a bad upgrade).
+  echo "[health] Validating $STATE_DIR/openclaw.json against openclaw $INSTALLED_VERSION..."
+  if command -v openclaw >/dev/null 2>&1; then
+    # `openclaw config validate` does not take a --config arg; it reads
+    # $OPENCLAW_CONFIG_PATH. Point it at the runtime config explicitly.
+    # Also export TMPDIR — openclaw 2026.6.6+ refuses to start (and validate)
+    # when the temp dir falls back to /tmp (the runtime user can't mkdir there
+    # when /tmp is mode 0700 root-owned). Mirror the systemd unit setting.
+    if TMPDIR=/run/user/$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000) \
+       OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" \
+       openclaw config validate >/tmp/openclaw-validate.log 2>&1; then
+      echo "  config validate: OK"
+    else
+      echo "  [WARN] config validate failed (see /tmp/openclaw-validate.log);" >&2
+      echo "         skipping service restart to keep the previous version live." >&2
+      echo "         Investigate log, fix the config, then run:" >&2
+      echo "           sudo systemctl restart openclaw-gateway openclaw-admin" >&2
+      GATEWAY_WAS_ACTIVE=false
+      ADMIN_WAS_ACTIVE=false
+    fi
+  else
+    echo "  [WARN] openclaw not on PATH; skipping pre-restart validation"
   fi
-  if [ "$ADMIN_WAS_ACTIVE" = true ]; then
-    sudo systemctl restart openclaw-admin
-    echo "  openclaw-admin restarted"
+
+  if [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; then
+    echo "[systemd] Restarting previously running services..."
+    if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
+      sudo systemctl restart openclaw-gateway
+      echo "  openclaw-gateway restarted"
+    fi
+    if [ "$ADMIN_WAS_ACTIVE" = true ]; then
+      sudo systemctl restart openclaw-admin
+      echo "  openclaw-admin restarted"
+    fi
+    SERVICES_RESTARTED=true
   fi
-  SERVICES_RESTARTED=true
 fi
 
 # ---------------------------------------------------------------------------

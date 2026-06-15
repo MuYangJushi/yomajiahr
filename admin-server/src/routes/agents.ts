@@ -1,6 +1,19 @@
 // 数字员工配置路由（P1 支柱一）：列表 / 新建 / 修改 / 删除 / 技能 / 渠道。
+// ADR-013：recruit / skill-config / channel-bind 拆为三个独立生命周期。
+//   - POST   /config/agents                 → 仅创建数字员工档案（createAgentProfile，允许空 skills 无渠道）
+//   - PUT    /config/agents/:id             → 仅改档案（updateAgentProfile，去掉 addChannel/removeChannels）
+//   - POST   /config/agents/:id/channels    → 绑定渠道（bindAgentToChannel）
+//   - DELETE /config/agents/:id/channels/:domain/:accountId → 解绑（unbindAgentFromChannel）
+//   - 旧 updateAgent 仍保留以供历史调用方兼容（不被 router 直接暴露）。
 import { Router, type Request, type Response } from "express";
-import { deleteAgent, listAgents, updateAgent } from "../services/orchestrator.js";
+import {
+  bindAgentToChannel,
+  createAgentProfile,
+  deleteAgent,
+  listAgents,
+  unbindAgentFromChannel,
+  updateAgentProfile,
+} from "../services/orchestrator.js";
 import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
@@ -23,30 +36,82 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
   }
 });
 
+// 仅创建数字员工档案（ADR-013 #58）。允许空 skills / 无渠道；状态显示"待配置"。
 agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res: Response) => {
-  res.status(410).json({ error: "请使用 /config/agent-onboarding 创建数字员工" });
+  try {
+    const result = await createAgentProfile(req.body);
+    appendAuditLog("agent.create", result.agent.id, {
+      agent_id: result.agent.id,
+      name: result.agent.name,
+      role: result.agent.role,
+      skills: result.agent.skills,
+      operator: req.user?.platformUserId || "",
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = /agent id 已存在|workspace 已存在/.test(message) ? 409 : 400;
+    res.status(status).json({ error: message });
+  }
 });
 
+// 仅修改数字员工档案（ADR-013 #58）。技能分配/取消：调用方走技能配置接口（下一份 ADR）。
 agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    const result = await updateAgent(id, req.body);
+    const result = await updateAgentProfile(id, req.body);
     appendAuditLog("agent.update", id, {
       agent_id: id,
       name: result.agent.name,
       role: result.agent.role,
       skills: result.agent.skills,
-      added_channel: req.body?.addChannel?.domain || undefined,
-      added_account_id: req.body?.addChannel
-        ? req.body.addChannel.accountId || id
-        : undefined,
-      removed_channels: req.body?.removeChannels || [],
       operator: req.user?.platformUserId || "",
     });
     res.json(result);
   } catch (err) {
     const message = (err as Error).message;
     res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
+  }
+});
+
+// 渠道绑定（ADR-013 #58）。新账号（带 credentials）或复用现有空闲账号。
+agentsRouter.post("/config/agents/:id/channels", requireRole("ops"), onboardingLimiter, async (req: Request, res: Response) => {
+  const agentId = String(req.params.id);
+  try {
+    const result = await bindAgentToChannel({ agentId, ...req.body });
+    appendAuditLog("agent.channel.bind", agentId, {
+      agent_id: agentId,
+      domain: req.body?.domain,
+      account_id: req.body?.accountId || agentId,
+      existing: Boolean(req.body?.existing),
+      operator: req.user?.platformUserId || "",
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = /agent 不存在/.test(message) ? 404 : /已接入|已存在|已被/.test(message) ? 409 : 400;
+    res.status(status).json({ error: message });
+  }
+});
+
+// 渠道解绑（ADR-013 #58）。账号与凭证作为平台资产保留。
+agentsRouter.delete("/config/agents/:id/channels/:domain/:accountId", requireRole("ops"), async (req: Request, res: Response) => {
+  const agentId = String(req.params.id);
+  const domain = String(req.params.domain);
+  const accountId = String(req.params.accountId);
+  try {
+    const result = await unbindAgentFromChannel(agentId, domain as any, accountId);
+    appendAuditLog("agent.channel.unbind", agentId, {
+      agent_id: agentId,
+      domain,
+      account_id: accountId,
+      operator: req.user?.platformUserId || "",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = /未接入|未找到/.test(message) ? 404 : 400;
+    res.status(status).json({ error: message });
   }
 });
 
@@ -106,6 +171,8 @@ agentsRouter.get("/config/skills", requireRole("ops"), (_req: Request, res: Resp
   }
 });
 
+// 列出渠道账号资产（向 wizard / 渠道管理页提供"已存在账号"选择）。
+// 新形态（ADR-013）：channels.json 是顶层数组；按 type 分桶派生 domain→accountId 形态。
 agentsRouter.get("/config/channels", requireRole("ops"), (_req: Request, res: Response) => {
   try {
     const { agents, channels, bindings } = readStore();
@@ -115,20 +182,23 @@ agentsRouter.get("/config/channels", requireRole("ops"), (_req: Request, res: Re
       accounts: Array<{ accountId: string; occupied: boolean; occupiedBy?: string; occupiedByName?: string }>;
     }> = {};
     for (const domain of SUPPORTED_CHANNELS) {
-      result[domain] = {
-        accounts: Object.keys(channels[domain] || {}).map((accountId) => {
+      const accounts = channels
+        .filter((c) => (domain === "dingtalk-connector" ? c.type === "dingtalk" : c.type === domain))
+        .map((c) => {
           const binding = bindings.find(
-            (item) => item.match.channel === domain && item.match.accountId === accountId,
+            (item) => item.match.channel === domain && item.match.accountId === c.id,
           );
           return {
-            accountId,
+            accountId: c.id,
+            displayName: c.displayName,
+            enabled: c.enabled !== false,
             occupied: Boolean(binding),
             ...(binding
               ? { occupiedBy: binding.agentId, occupiedByName: agentNames.get(binding.agentId) || binding.agentId }
               : {}),
           };
-        }),
-      };
+        });
+      result[domain] = { accounts };
     }
     res.json({ supported: SUPPORTED_CHANNELS, channels: result, env_keys: [...keys] });
   } catch (err) {

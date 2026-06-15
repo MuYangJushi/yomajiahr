@@ -1,8 +1,13 @@
-// 新建数字员工向导（StepsForm）：身份岗位 → 技能 → 渠道接入 → 提交上线。
-import { useEffect, useState } from "react";
-import { Alert, Button, Collapse, Modal, Space, Spin, Typography, message } from "antd";
-import { QRCodeSVG } from "qrcode.react";
+// 新建数字员工向导（ADR-013 §招募向导）：
+//   Step 1 身份与岗位：id / name / role（岗位 = 系统权限级别，不作真实岗位表达）
+//   Step 2 职业档案：jobTitle 必填；可点「AI 共创」生成 5 段 profile；可手填/覆盖
+//   Step 3 技能分配（可空，状态显示"待配置技能"）
+//   Step 4 确认提交：调 POST /config/agents，createAgentProfile 原子写入
+// 渠道接入不再属于招募向导——统一在「渠道管理」页通过 bindAgentChannel 走独立生命周期。
+import { useState } from "react";
+import { Alert, Button, Form, Input, Modal, Space, Spin, Typography, message } from "antd";
 import {
+  ProForm,
   ProFormDependency,
   ProFormRadio,
   ProFormSelect,
@@ -11,11 +16,9 @@ import {
   StepsForm,
 } from "@ant-design/pro-components";
 import {
-  cancelAgentOnboarding,
-  fetchAgentOnboarding,
-  startAgentOnboarding,
-  type ChannelsInfo,
-  type OnboardingSession,
+  createAgent,
+  generateAgentProfile,
+  type AgentProfile,
   type Skill,
 } from "./api";
 
@@ -24,58 +27,45 @@ interface Props {
   onClose: () => void;
   onCreated: () => void;
   skills: Skill[];
-  channels: ChannelsInfo;
 }
 
-const DOMAIN_LABEL: Record<string, string> = {
-  feishu: "飞书",
-  "dingtalk-connector": "钉钉",
-};
+interface IdentityValues {
+  id: string;
+  name: string;
+  role: "employee" | "admin";
+}
+interface ProfileValues {
+  jobTitle: string;
+  hints?: string;
+  profile: AgentProfile;
+}
+interface SkillsValues {
+  skills: string[];
+}
 
-export default function CreateAgentWizard({ open, onClose, onCreated, skills, channels }: Props) {
-  const [session, setSession] = useState<OnboardingSession | null>(null);
+export default function CreateAgentWizard({ open, onClose, onCreated, skills }: Props) {
+  const [submitting, setSubmitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
-  useEffect(() => {
-    if (!session || ["success", "failed", "expired", "cancelled"].includes(session.status)) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const next = await fetchAgentOnboarding(session.id);
-        setSession(next);
-        if (next.status === "success") {
-          message.success("数字员工已上线");
-          onCreated();
-        }
-      } catch (err: any) {
-        setSession((s) => s ? { ...s, status: "failed", message: err?.response?.data?.error || "状态查询失败" } : s);
-      }
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [session?.id, session?.status]);
-
-  async function closeWizard() {
-    if (session && !["success", "failed", "expired", "cancelled"].includes(session.status)) {
-      await cancelAgentOnboarding(session.id).catch(() => {});
-    }
-    setSession(null);
-    onClose();
-  }
-
-  async function handleFinish(values: any): Promise<boolean> {
-    const { id, name, role, persona, skills: chosenSkills, domain, accountId, existingAccountId, mode, cred1, cred2 } = values;
-    const body = {
-      id, name, role, persona,
-      skills: chosenSkills,
-      domain,
-      accountId: mode === "existing" ? existingAccountId : accountId || undefined,
-      mode: mode || "scan",
-      credentials: mode === "manual" ? { clientId: cred1, clientSecret: cred2 } : undefined,
-    };
+  async function handleFinish(values: IdentityValues & ProfileValues & SkillsValues): Promise<boolean> {
+    setSubmitting(true);
     try {
-      setSession(await startAgentOnboarding(body));
-      return false;
+      await createAgent({
+        id: values.id,
+        name: values.name,
+        role: values.role,
+        profile: values.profile,
+        skills: values.skills,
+      });
+      message.success("数字员工已创建。技能/渠道可在对应页面继续配置。");
+      onCreated();
+      onClose();
+      return true;
     } catch (err: any) {
       message.error(err?.response?.data?.error || err.message || "创建失败");
       return false;
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -84,155 +74,137 @@ export default function CreateAgentWizard({ open, onClose, onCreated, skills, ch
       title="招募一名 HR 数字员工"
       open={open}
       footer={null}
-      onCancel={closeWizard}
-      width={640}
+      onCancel={onClose}
+      width={720}
       destroyOnClose
     >
-      {session ? (
-        <OnboardingProgress
-          session={session}
-          onRetry={() => setSession(null)}
-          onClose={closeWizard}
-        />
-      ) : <StepsForm onFinish={handleFinish}>
+      <StepsForm<IdentityValues & ProfileValues & SkillsValues>
+        onFinish={handleFinish}
+        submitter={{
+          submitButtonProps: { loading: submitting },
+          render: (props, _doms) => [
+            <Button key="submit" type="primary" loading={submitting} onClick={() => props.submit?.()}>
+              提交
+            </Button>,
+          ],
+        }}
+      >
+        {/* Step 1: 身份与岗位 */}
         <StepsForm.StepForm name="identity" title="身份与岗位">
-        <ProFormText
-          name="id"
-          label="ID（创建后不可改）"
-          rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母/数字/连字符" }]}
-          placeholder="如 hr-onboard"
-        />
-        <ProFormText name="name" label="名称" rules={[{ required: true }]} placeholder="如 入离职助手" />
-        <ProFormRadio.Group
-          name="role"
-          label="岗位"
-          initialValue="employee"
-          options={[
-            { label: "员工", value: "employee" },
-            { label: "管理员", value: "admin" },
-          ]}
-          rules={[{ required: true }]}
-        />
-        <ProFormTextArea name="persona" label="人设" placeholder="一句话描述该数字员工的职责与风格" />
-      </StepsForm.StepForm>
+          <ProFormText
+            name="id"
+            label="ID（创建后不可改）"
+            rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母/数字/连字符" }]}
+            placeholder="如 hr-onboard"
+            fieldProps={{ autoComplete: "off" }}
+          />
+          <ProFormText
+            name="name"
+            label="名称"
+            rules={[{ required: true }]}
+            placeholder="如 入离职助手"
+            fieldProps={{ autoComplete: "off" }}
+          />
+          <ProFormRadio.Group
+            name="role"
+            label="系统权限"
+            initialValue="employee"
+            tooltip="employee=只读/无 exec；admin=可执行管理操作。这是平台权限，不是真实岗位。"
+            options={[
+              { label: "员工（只读）", value: "employee" },
+              { label: "管理员（可写）", value: "admin" },
+            ]}
+            rules={[{ required: true }]}
+          />
+        </StepsForm.StepForm>
 
-      <StepsForm.StepForm name="skills" title="技能">
-        <ProFormSelect
-          name="skills"
-          label="分配技能"
-          mode="multiple"
-          rules={[{ required: true, message: "至少分配一个技能" }]}
-          options={skills.map((s) => ({ label: `${s.name}`, value: s.name, title: s.description }))}
-          fieldProps={{ optionRender: (o: any) => <span title={o.data.title}>{o.label}</span> }}
-        />
-      </StepsForm.StepForm>
+        {/* Step 2: 职业档案（AI 共创 / 手填） */}
+        <StepsForm.StepForm name="profile" title="职业档案">
+          <ProFormText
+            name={["profile", "jobTitle"]}
+            label="岗位名"
+            rules={[{ required: true, max: 60 }]}
+            placeholder="如 薪酬顾问"
+            fieldProps={{ autoComplete: "off" }}
+          />
+          <ProFormTextArea
+            name="hints"
+            label="补充描述（可选）"
+            placeholder="例：负责薪酬政策答疑与流程指引"
+            fieldProps={{ autoComplete: "off" }}
+          />
+          <AiCoCreateFields
+            skillsHint={skills.length > 0 ? `平台已有技能：${skills.map((s) => s.name).join("、")}` : ""}
+            onGeneratingChange={setGenerating}
+          />
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginTop: 8 }}
+            message="AI 共创结果会覆盖下方 5 个字段；可继续手改，最终以本页填写为准。"
+          />
+        </StepsForm.StepForm>
 
-      <StepsForm.StepForm name="channel" title="渠道接入">
-        <ProFormSelect
-          name="domain"
-          label="渠道"
-          initialValue="feishu"
-          options={channels.supported.map((d) => ({ label: DOMAIN_LABEL[d] || d, value: d }))}
-          rules={[{ required: true }]}
-        />
-        <ProFormText name="accountId" label="账号 ID" tooltip="留空则用 agent ID" placeholder="留空则同 agent ID" />
-        <ProFormRadio.Group
-          name="mode"
-          label="接入方式"
-          initialValue="scan"
-          options={[
-            { label: "扫码创建新应用", value: "scan" },
-            { label: "选择平台已有账号", value: "existing" },
-            { label: "录入新的已有应用", value: "manual" },
-          ]}
-        />
-        <ProFormDependency name={["domain", "mode"]}>
-          {({ domain, mode }) => mode === "existing" ? (
-            <ProFormSelect
-              name="existingAccountId"
-              label="已有账号"
-              rules={[{ required: true, message: "请选择空闲账号" }]}
-              options={(channels.channels[domain]?.accounts || []).map((account) => ({
-                label: `${account.accountId}${account.occupied ? `（已被 ${account.occupiedByName || account.occupiedBy} 占用）` : "（空闲）"}`,
-                value: account.accountId,
-                disabled: account.occupied,
-              }))}
-            />
-          ) : mode === "manual" ? (
-            <Collapse
-              defaultActiveKey={["manual"]}
-              items={[{
-                key: "manual",
-                label: "已有应用凭证",
-                children: domain === "dingtalk-connector" ? (
-                  <>
-                    <ProFormText name="cred1" label="Client ID" rules={[{ required: true }]} />
-                    <ProFormText.Password name="cred2" label="Client Secret" rules={[{ required: true }]} />
-                  </>
-                ) : (
-                  <>
-                    <ProFormText name="cred1" label="App ID" rules={[{ required: true }]} />
-                    <ProFormText.Password name="cred2" label="App Secret" rules={[{ required: true }]} />
-                  </>
-                ),
-              }]}
-            />
-          ) : <Alert type="info" showIcon message="提交后将显示二维码；扫码授权成功后自动上线。" />}
-        </ProFormDependency>
-      </StepsForm.StepForm>
-      </StepsForm>}
+        {/* Step 3: 技能（可空） */}
+        <StepsForm.StepForm name="skills" title="技能">
+          <ProFormSelect
+            name="skills"
+            label="分配技能"
+            mode="multiple"
+            allowClear
+            placeholder="可留空，状态会显示「待配置技能」并在 AGENTS.md 中提示"
+            options={skills.map((s) => ({ label: `${s.name}`, value: s.name, title: s.description }))}
+            fieldProps={{ optionRender: (o: any) => <span title={o.data.title}>{o.label}</span> }}
+          />
+        </StepsForm.StepForm>
+      </StepsForm>
+      {generating && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <Spin tip="AI 共创中..." />
+        </div>
+      )}
     </Modal>
   );
 }
 
-export function OnboardingProgress({
-  session,
-  onRetry,
-  onClose,
-}: {
-  session: OnboardingSession;
-  onRetry: () => void;
-  onClose: () => void;
-}) {
-  const terminal = ["success", "failed", "expired", "cancelled"].includes(session.status);
-  const error = ["failed", "expired", "cancelled"].includes(session.status);
+// 5 段 profile 字段 + 「AI 共创」按钮
+function AiCoCreateFields({ skillsHint, onGeneratingChange }: { skillsHint: string; onGeneratingChange: (b: boolean) => void }) {
+  const form = ProForm.useFormInstance();
+  const jobTitle: string = Form.useWatch(["profile", "jobTitle"], form) || "";
+  const hints: string = Form.useWatch("hints", form) || "";
+  const role: "employee" | "admin" = Form.useWatch("role", form) || "employee";
+  const [busy, setBusy] = useState(false);
+
+  async function runCoCreate() {
+    if (!jobTitle.trim()) {
+      message.warning("请先填写岗位名");
+      return;
+    }
+    setBusy(true);
+    onGeneratingChange(true);
+    try {
+      const p = await generateAgentProfile({ jobTitle, hints, role });
+      // 把 5 段写回表单 profile.* 字段
+      form.setFieldsValue({ profile: { jobTitle, ...p } });
+      message.success("AI 共创完成，可继续微调");
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || err.message || "AI 共创失败");
+    } finally {
+      setBusy(false);
+      onGeneratingChange(false);
+    }
+  }
+
   return (
-    <Space direction="vertical" align="center" size="large" style={{ width: "100%", padding: "24px 0" }}>
-      {session.qr_url && session.status === "awaiting_scan" ? (
-        <>
-          <QRCodeSVG value={session.qr_url} size={240} />
-          <Button type="link" href={session.qr_url} target="_blank">无法扫码？打开授权链接</Button>
-        </>
-      ) : !terminal ? <Spin size="large" /> : null}
-      <Alert
-        type={error ? "error" : session.status === "success" ? "success" : "info"}
-        showIcon
-        message={STATUS_LABEL[session.status]}
-        description={session.message}
-      />
-      {session.status === "awaiting_scan" && (
-        <Typography.Text type="secondary">
-          授权链接过期时间：{new Date(session.expires_at).toLocaleString()}
-        </Typography.Text>
-      )}
-      {terminal && (
-        <Space>
-          {error && <Button onClick={onRetry}>重新发起</Button>}
-          <Button type={session.status === "success" ? "primary" : "default"} onClick={onClose}>关闭</Button>
-        </Space>
-      )}
-    </Space>
+    <div style={{ borderTop: "1px dashed #d9d9d9", paddingTop: 12, marginTop: 8 }}>
+      <Space style={{ marginBottom: 8 }}>
+        <Button loading={busy} onClick={runCoCreate}>AI 共创（基于岗位名 + hints）</Button>
+        <Typography.Text type="secondary">{skillsHint}</Typography.Text>
+      </Space>
+      <ProFormTextArea name={["profile", "responsibilities"]} label="职责" placeholder="2~4 条要点" fieldProps={{ rows: 3 }} />
+      <ProFormText name={["profile", "personality"]} label="人设（3~5 形容词）" placeholder="细致、耐心、专业" />
+      <ProFormText name={["profile", "tone"]} label="语气" placeholder="简洁、就事论事" />
+      <ProFormTextArea name={["profile", "boundaries"]} label="边界" placeholder="不替代 HR 完成人工审批" fieldProps={{ rows: 2 }} />
+    </div>
   );
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  preparing: "正在准备扫码会话",
-  awaiting_scan: "等待扫码授权",
-  authorized: "授权成功",
-  applying: "正在应用配置并重启网关",
-  verifying: "正在验证目标渠道",
-  success: "数字员工已上线",
-  failed: "创建失败",
-  expired: "授权已过期",
-  cancelled: "已取消",
-};

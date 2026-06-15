@@ -172,11 +172,32 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
   // 深拷贝 base，避免污染
   const config: any = structuredClone(base);
 
-  // —— 渠道：逐层合并（保留脚手架，仅注入 accounts）——
+  // —— 渠道：把账号资产数组（ADR-013）按 type 分桶派生 domain→accountId 形态 —
+  //   平台 store 是顶层数组；运行时仍消费 domain→accountId 形态。生成器派生：
+  //     1) 按 asset.type 分桶（feishu → channels.feishu、dingtalk → channels.dingtalk-connector）
+  //     2) 仅注入存在 binding 的账号（与既有语义一致）
+  //     3) 账号内容来自 asset.account + asset.policy
   config.channels ??= {};
-  for (const [domain, accounts] of Object.entries(store.channels)) {
-    // channels.json 是平台账号资产池；只有存在 binding 的占用账号才注入 Gateway。
-    // 空闲账号保留在平台供复用，但不得继续在线或回落路由到默认 Agent。
+  const runtimeChannels: Record<string, Record<string, unknown>> = {};
+  for (const asset of store.channels) {
+    if (asset.enabled === false) continue;
+    const domain = asset.type === 'dingtalk' ? 'dingtalk-connector' : asset.type;
+    if (!runtimeChannels[domain]) runtimeChannels[domain] = {};
+    const accountObj: Record<string, unknown> = {
+      ...(asset.account ?? {}),
+      ...(asset.policy?.dmPolicy ? { dmPolicy: asset.policy.dmPolicy } : {}),
+      ...(asset.policy?.groupPolicy ? { groupPolicy: asset.policy.groupPolicy } : {}),
+      ...(asset.policy?.requireMention !== undefined ? { requireMention: asset.policy.requireMention } : {}),
+    };
+    // health / envKeys / displayName / enabled 都是平台编辑层语义；不进 OpenClaw 运行时。
+    void (asset as any).health;
+    void (asset as any).envKeys;
+    void (asset as any).displayName;
+    void (asset as any).enabled;
+    runtimeChannels[domain]![asset.id] = accountObj;
+  }
+  // 派生：仅保留存在 binding 的账号。
+  for (const [domain, accounts] of Object.entries(runtimeChannels)) {
     const boundAccountIds = new Set(
       store.bindings
         .filter((binding) => binding.match.channel === domain)
@@ -189,8 +210,10 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
   }
 
   // —— agents.list：整体替换；剥离平台专用字段（不进 OpenClaw 运行时配置）——
+  //    role / persona / profile 都是平台编辑层语义，OpenClaw 运行时不需要；
+  //    profile 由 workspace 模板单独渲染（见 workspaces/_templates/）。
   config.agents ??= {};
-  config.agents.list = store.agents.map(({ role, persona, ...agent }) => agent);
+  config.agents.list = store.agents.map(({ role, persona, profile, ...agent }) => agent);
 
   // —— bindings：整体替换 ——
   config.bindings = store.bindings;
