@@ -53,12 +53,17 @@ export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
           <Space>
             <Button size="small" loading={busy === field.key} onClick={async () => {
               if (!agent) return;
+              const jobTitle = String(formRef.current?.getFieldValue("jobTitle") || "").trim();
+              if (!jobTitle) { message.warning("请先填写真实岗位名称再生成"); return; }
               setBusy(field.key);
               try {
-                const p = await generateAgentProfile({ jobTitle: String(formRef.current?.getFieldValue("jobTitle") || ""), fields: [field.key] });
+                const p = await generateAgentProfile({ jobTitle, fields: [field.key] });
                 formRef.current?.setFieldValue(field.key, p[field.key]);
                 message.success(`${field.label}已生成，请确认后保存`);
-              } catch (err: any) { message.error(err?.response?.data?.message || "AI 生成不可用"); }
+              } catch (err: any) {
+                const data = err?.response?.data || {};
+                message.error(data.message || data.error || "AI 生成不可用");
+              }
               finally { setBusy(undefined); }
             }}>AI 重新生成{field.label}</Button>
           </Space>
