@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Space, Spin, Typography, message } from "antd";
 import { ProForm, ProFormDependency, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
-import { createAgent, generateAgentProfile, type AgentProfile } from "./api";
+import { awaitApplyJob, createAgent, generateAgentProfile, jobIdOf, type AgentProfile } from "./api";
 
 interface Props { open: boolean; onClose: () => void; onCreated: () => void }
 interface Values {
@@ -28,7 +28,27 @@ export default function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         onFinish={async (values) => {
           setSubmitting(true);
           try {
-            await createAgent({ id: values.id, name: values.name, role: values.role, profile: values.profile });
+            const data = await createAgent({ id: values.id, name: values.name, role: values.role, profile: values.profile });
+            const jobId = jobIdOf(data);
+            if (jobId) {
+              // 后端入队异步 apply：立刻关弹窗 + 通知列表刷新；进度提示挂全局轮询，
+              // 用户感知"招募已提交，配置正在应用"。
+              const key = `apply-${jobId}`;
+              message.loading({ content: "招募提交，配置应用中…", key, duration: 0 });
+              onCreated();
+              onClose();
+              awaitApplyJob(jobId).then((job) => {
+                if (job.status === "success") {
+                  message.success({ content: "数字员工已招募，技能与渠道待独立配置", key });
+                  onCreated();
+                } else {
+                  message.error({ content: `招募失败：${job.message || job.status}`, key, duration: 6 });
+                  onCreated();
+                }
+              });
+              return true;
+            }
+            // 800ms 内同步完成
             message.success("数字员工已招募，技能与渠道待独立配置");
             onCreated();
             onClose();

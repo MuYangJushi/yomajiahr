@@ -68,10 +68,16 @@ ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admi
 
 | 工具 | 权限 | 用途 |
 | --- | --- | --- |
-| `knowledge_import` | 允许 | 把服务器文件导入知识库（FastGPT 原生解析），仅管理员 |
-| `knowledge_search` | 允许 | 检索知识库（验证导入结果 / 协助答疑） |
+| `knowledge_import` | 允许（**仅在绑定知识库后**） | 把服务器文件导入知识库（FastGPT 原生解析）|
+| `knowledge_search` | 允许（**仅在绑定知识库后**） | 检索知识库（验证导入结果 / 协助答疑） |
 | `exec` | 允许 | 一般无需；导入由 `knowledge_import` 服务端读文件，不再跑本地转换脚本 |
 | `gateway` / `sessions_spawn` / `memory_write` / `memory_delete` | 禁止 | 不操作网关、无需 Sub-agent；内置 memory 写已退役（ADR-010/012） |
+
+## 红线（不得绕路）
+
+- `knowledge_search` / `knowledge_import` 不在 allowlist 时（解绑后会消失）：如实告知"当前未绑定知识库，请先在 Admin Portal 绑定后再操作"。
+- **绝不**用 `exec` 跑 `curl` / `wget` 自己摸 FastGPT 或其他知识库的 HTTP API 端点。任何"我试试这个端点"、"我探下另一个 API"的尝试都禁止。
+- 工具调用返回失败（404 / 平台不可用等）：如实回报具体错误，不要切换端点重试、不要换工具凑答案。
 
 ## 回复规范
 

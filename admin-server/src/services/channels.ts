@@ -10,7 +10,7 @@ import { REPO_DIR, STATE_DIR } from "../config.js";
 import { appendAuditLog } from "../util.js";
 import { triggerApply, type ApplyResult } from "./config-apply.js";
 import { withConfigLock } from "./orchestrator.js";
-import { ENV_PATH, envKeysSet, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
+import { ENV_PATH, envKeysAllConfigured, envKeysSet, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type ChannelAsset } from "./store.js";
 
 export interface ChannelHealth {
@@ -87,7 +87,7 @@ export function startChannelOnboarding(owner: string, input: {
   return publicOnboarding(session);
 }
 
-const PROBE_TIMEOUT_MS = 15_000;
+const PROBE_TIMEOUT_MS = 5_000;
 const PROBE_STALE_MS = 30_000;
 
 interface OpenclawStatus {
@@ -125,7 +125,14 @@ async function probeOpenclaw(): Promise<OpenclawStatus> {
   });
 }
 
-/** 跑一次集中探活；按 type 分桶写回 channels.json（cache-aside 30s 过期）。 */
+/** 跑一次集中探活；按 type 分桶写回 channels.json（cache-aside 30s 过期）。
+ *
+ *  「凭证未配置」的账号短路：不进入 spawn 调度（gateway 自身也不会为它启动 client，
+ *  见 generate-config.ts 的 isAssetConfigured 跳过逻辑），health 直接落
+ *  `{configured:false, running:false, connected:false, lastError:"凭证未配置"}`。
+ *  这避免了占位符账号（dingtalk-connector 401 退避循环 / feishu probe 持续失败）拖慢
+ *  channels 页面刷新与配置 apply。
+ */
 export async function probeChannels(force = false): Promise<ChannelHealth[]> {
   const snapshot = readStore();
   const now = Date.now();
@@ -138,20 +145,34 @@ export async function probeChannels(force = false): Promise<ChannelHealth[]> {
       return snapshot.channels.map((c) => c.health || { configured: false, running: false, connected: false, lastError: "未探活", checkedAt: new Date(0).toISOString() });
     }
   }
-  const status = await probeOpenclaw();
   const checkedAt = new Date().toISOString();
-  const configuredKeys = envKeysSet();
+  // 先按 envKeys 真实值做配置就绪判定；未配置账号直接落 health，不参与 spawn 探活。
+  const configuredAssets: ChannelAsset[] = [];
+  const healthByAsset = new Map<string, ChannelHealth>();
+  for (const c of snapshot.channels) {
+    if (envKeysAllConfigured(c.envKeys)) {
+      configuredAssets.push(c);
+    } else {
+      healthByAsset.set(`${c.type}/${c.id}`, {
+        configured: false,
+        running: false,
+        connected: false,
+        lastError: "凭证未配置",
+        checkedAt,
+      });
+    }
+  }
+  // 仅当至少有一条已配置账号时才发起 spawn 探活。
+  const status = configuredAssets.length > 0 ? await probeOpenclaw() : ({} as OpenclawStatus);
   const accountsByDomain: Record<string, Map<string, any>> = {};
   for (const [domain, arr] of Object.entries(status.channelAccounts || {})) {
     accountsByDomain[domain] = new Map((arr || []).map((a) => [a.accountId, a]));
   }
-  const healthByAsset = new Map<string, ChannelHealth>();
-  for (const c of snapshot.channels) {
+  for (const c of configuredAssets) {
     const domain = c.type === "dingtalk" ? "dingtalk-connector" : c.type;
     const probeInfo = accountsByDomain[domain]?.get(c.id);
     if (!probeInfo) {
-      const configured = Boolean(c.envKeys?.length && c.envKeys.every((key) => configuredKeys.has(key)));
-      healthByAsset.set(`${c.type}/${c.id}`, { configured, running: false, connected: false, lastError: "Gateway 探活未返回该账号", checkedAt });
+      healthByAsset.set(`${c.type}/${c.id}`, { configured: true, running: false, connected: false, lastError: "Gateway 探活未返回该账号", checkedAt });
     } else {
       const configured = Boolean(probeInfo.configured);
       const running = Boolean(probeInfo.running);

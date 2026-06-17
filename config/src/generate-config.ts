@@ -59,11 +59,67 @@ export function readEnvKeys(path: string): Set<string> {
   return keys;
 }
 
+/** 从 .env / .env.example 收集 key→value（去引号 + trim；不解析 export/多行值）。 */
+export function readEnvMap(path: string): Map<string, string> {
+  const map = new Map<string, string>();
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf-8');
+  } catch {
+    return map;
+  }
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!m) continue;
+    let value = m[2]!;
+    // 去掉成对的首尾引号（与 dotenv 行为一致）
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    map.set(m[1]!, value);
+  }
+  return map;
+}
+
+/** 占位符值识别：admin-server 与生成器同源使用。
+ *  - 空串 / 仅空白：占位符
+ *  - `${...}` 字面量原样残留：占位符（dotenv 没解析到）
+ *  - 与 .env.example 模板里同 key 的值完全一致：占位符（用户没改过）
+ *  - 已知模板尾巴（`change-me`、`xxxxxxxx`、`...`）：占位符
+ */
+export function isPlaceholderValue(actual: string | undefined, template: string | undefined): boolean {
+  if (actual === undefined) return true;
+  const v = actual.trim();
+  if (v === '') return true;
+  if (/^\$\{[A-Z0-9_]+\}$/.test(v)) return true;
+  if (template !== undefined && v === template.trim()) return true;
+  // 模板里常见的"未填写"标识
+  if (/^change[-_]me/i.test(v)) return true;
+  if (/^x{4,}$/i.test(v)) return true;
+  // 形如 "cli_xxxxxxxxxxxxxxxx"、"dingxxxxxxxxxxxxxxxx"：模板未替换
+  if (/x{8,}/.test(v)) return true;
+  return false;
+}
+
+/** 判定某 channel asset 的凭证是否完整：envKeys 必须全部在 .env 中有非占位值。
+ *  channels.ts probe 与生成器派生逻辑共用此判定。
+ */
+export function isAssetConfigured(
+  envKeys: string[] | undefined,
+  envMap: Map<string, string>,
+  exampleMap: Map<string, string>,
+): boolean {
+  if (!envKeys || envKeys.length === 0) return false;
+  return envKeys.every((key) => !isPlaceholderValue(envMap.get(key), exampleMap.get(key)));
+}
+
 export interface GenerateOptions {
   basePath: string; // openclaw.base.jsonc
   storeDir?: string; // config-store/（与 store 二选一）
   store?: ConfigStore; // 内存 store（portal 预校验用；优先于 storeDir）
-  envPath?: string; // .env / .env.example（占位符校验）
+  envPath?: string; // .env / .env.example（占位符校验 + 凭证就绪判定）
+  /** 模板文件（凭证就绪判定的对照源）；不传则走 envPath 同侧目录的 .env.example。 */
+  envExamplePath?: string;
   checkFilesystem?: boolean;
   skillsDir?: string;
   resolveWorkspace?: (workspace: string) => string;
@@ -72,6 +128,8 @@ export interface GenerateOptions {
 export interface GenerateResult {
   config: RuntimeConfig;
   store: ConfigStore;
+  /** 派生时被跳过的渠道账号（凭证未配置等）；不影响 store，仅用于诊断。 */
+  skippedChannelAssets?: Array<{ type: string; id: string; reason: string }>;
 }
 
 /**
@@ -172,15 +230,32 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
   // 深拷贝 base，避免污染
   const config: any = structuredClone(base);
 
+  // —— 凭证就绪判定（#4：占位符账号不进运行时）——
+  //   .env 中该 envKeys 全部存在且不是占位字面量（含 .env.example 模板默认值），才视为"已配置"。
+  //   未配置的渠道账号一律不派生进 openclaw.json：dingtalk-connector / lark-connector 不会为其
+  //   起 client，避免 401/400 退避循环 + 让 apply 速度回到秒级。store 仍保留账号供平台后续编辑。
+  const envMap = opts.envPath ? readEnvMap(opts.envPath) : new Map<string, string>();
+  const examplePath = opts.envExamplePath
+    ?? (opts.envPath && /\.env(\.[a-zA-Z0-9_-]+)?$/.test(opts.envPath)
+      ? opts.envPath.replace(/\.env(\.[a-zA-Z0-9_-]+)?$/, '.env.example')
+      : undefined);
+  const exampleMap = examplePath && examplePath !== opts.envPath ? readEnvMap(examplePath) : new Map<string, string>();
+
   // —— 渠道：把账号资产数组（ADR-013）按 type 分桶派生 domain→accountId 形态 —
   //   平台 store 是顶层数组；运行时仍消费 domain→accountId 形态。生成器派生：
   //     1) 按 asset.type 分桶（feishu → channels.feishu、dingtalk → channels.dingtalk-connector）
-  //     2) 仅注入存在 binding 的账号（与既有语义一致）
+  //     2) 仅注入存在 binding 且凭证已就绪的账号
   //     3) 账号内容来自 asset.account + asset.policy
   config.channels ??= {};
   const runtimeChannels: Record<string, Record<string, unknown>> = {};
+  const skippedAssets: Array<{ type: string; id: string; reason: string }> = [];
   for (const asset of store.channels) {
     if (asset.enabled === false) continue;
+    if (!isAssetConfigured(asset.envKeys, envMap, exampleMap)) {
+      // 占位符账号不派生进 runtime；store 保留 + 前端展示「凭证未配置」。
+      skippedAssets.push({ type: asset.type, id: asset.id, reason: '凭证未配置' });
+      continue;
+    }
     const domain = asset.type === 'dingtalk' ? 'dingtalk-connector' : asset.type;
     if (!runtimeChannels[domain]) runtimeChannels[domain] = {};
     const accountObj: Record<string, unknown> = {
@@ -236,7 +311,7 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
     throw new Error('配置校验失败：\n  - ' + errors.join('\n  - '));
   }
 
-  return { config, store };
+  return { config, store, skippedChannelAssets: skippedAssets.length ? skippedAssets : undefined };
 }
 
 /** 输出字节风格与旧 install.sh 一致：2 空格缩进 + 尾换行。 */
@@ -273,14 +348,17 @@ if (isMain()) {
   // 默认从运行时 $STATE_DIR/config-store 读取（仓库内的是 config-store.seed 模板，不在此默认）。
   const storeDir = resolve(args.store ?? resolve(stateDir, 'config-store'));
   const envPath = resolve(args.env ?? resolve(configDir, '.env.example'));
+  // 模板对照：默认走仓库内 .env.example。--env 指向 .env 时，用 .env.example 做凭证就绪判定的对照。
+  const envExamplePath = resolve(args['env-example'] ?? resolve(configDir, '.env.example'));
   const out = args.out ? resolve(args.out) : undefined;
   const checkFs = args['check-fs'] === 'true';
 
   try {
-    const { config } = generateConfig({
+    const { config, skippedChannelAssets } = generateConfig({
       basePath,
       storeDir,
       envPath,
+      envExamplePath,
       checkFilesystem: checkFs,
       skillsDir: args['skills-dir'] ? resolve(args['skills-dir']) : undefined,
       resolveWorkspace: checkFs ? makeWorkspaceResolver(stateDir) : undefined,
@@ -292,6 +370,12 @@ if (isMain()) {
       console.log(`[generate-config] OK → ${out}`);
     } else {
       process.stdout.write(text);
+    }
+    if (skippedChannelAssets?.length) {
+      // 跳过的账号写到 stderr，不污染 stdout（generator 可能被 pipe）。
+      for (const skip of skippedChannelAssets) {
+        console.error(`[generate-config] 跳过未配置渠道：${skip.type}/${skip.id}（${skip.reason}）`);
+      }
     }
   } catch (err) {
     console.error('[generate-config] ' + (err as Error).message);

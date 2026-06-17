@@ -17,6 +17,7 @@ import {
   cancelChannelOnboarding, createChannelAsset, deleteChannelAsset, getChannelOnboarding,
   listChannelAssets, probeChannels, startChannelOnboarding, updateChannelAsset,
 } from "../services/channels.js";
+import { enqueueApplyJob } from "../services/apply-jobs.js";
 
 export const channelsRouter = Router();
 
@@ -48,9 +49,13 @@ const BindSchema = z.object({ agentId: z.string().trim().min(1) });
 
 channelsRouter.get("/config/channel-assets", requireRole("ops"), async (_req: Request, res: Response) => {
   try {
-    // 不强制刷新；缓存过期时由服务端集中探活，避免每个浏览器启动进程。
-    const health = await probeChannels(false);
+    // 仅读 store 缓存中的 health；不在 GET 路径触发 spawn 探活，避免列表加载被
+    // dingtalk-connector 退避循环或 feishu probe 拖慢。前端 mount 后异步发
+    // POST /config/channel-assets/probe 刷新；缓存过期由后台轮询负责。
     const assets = listChannelAssets();
+    const health = assets.map((a) =>
+      a.health || { configured: false, running: false, connected: false, lastError: "未探活", checkedAt: new Date(0).toISOString() },
+    );
     res.json({ channels: assets, health });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -93,10 +98,26 @@ channelsRouter.patch("/config/channel-assets/:type/:id", requireRole("ops"), asy
   const id = String(req.params.id);
   const parsed = UpdateSchema.safeParse(req.body);
   if ((type !== "feishu" && type !== "dingtalk") || !parsed.success) return res.status(400).json({ error: parsed.success ? "type 非法" : parsed.error.issues[0]?.message });
+  const operator = req.user?.platformUserId || "";
   try {
-    await updateChannelAsset(type, id, parsed.data);
-    appendAuditLog("channel.update", id, { type, id, operator: req.user?.platformUserId || "" });
-    res.json({ asset: listChannelAssets().find((item) => item.type === type && item.id === id) });
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        await updateChannelAsset(type, id, parsed.data);
+        appendAuditLog("channel.update", id, { type, id, operator });
+        return { asset: listChannelAssets().find((item) => item.type === type && item.id === id) };
+      },
+      "channel.update",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      return res.status(message === "账号不存在" ? 404 : 400).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     res.status((err as Error).message === "账号不存在" ? 404 : 400).json({ error: (err as Error).message });
   }
@@ -121,10 +142,23 @@ channelsRouter.post("/config/channel-assets/:type/:id/bind", requireRole("ops"),
   const id = String(req.params.id);
   const parsed = BindSchema.safeParse(req.body);
   if (!parsed.success || (type !== "feishu" && type !== "dingtalk")) return res.status(400).json({ error: "入参非法" });
+  const operator = req.user?.platformUserId || "";
   try {
-    await bindAgentToChannel({ agentId: parsed.data.agentId, domain: type === "dingtalk" ? "dingtalk-connector" : "feishu", accountId: id, existing: true });
-    appendAuditLog("channel.bind", id, { type, id, agent_id: parsed.data.agentId, operator: req.user?.platformUserId || "" });
-    res.json({ asset: listChannelAssets().find((item) => item.type === type && item.id === id) });
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        await bindAgentToChannel({ agentId: parsed.data.agentId, domain: type === "dingtalk" ? "dingtalk-connector" : "feishu", accountId: id, existing: true });
+        appendAuditLog("channel.bind", id, { type, id, agent_id: parsed.data.agentId, operator });
+        return { asset: listChannelAssets().find((item) => item.type === type && item.id === id) };
+      },
+      "channel.bind",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.json({ ...raced.value, jobId });
+    if (raced.kind === "error") return res.status(409).json({ error: raced.err.message, jobId });
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     res.status(409).json({ error: (err as Error).message });
   }

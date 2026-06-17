@@ -53,18 +53,22 @@ process.env.PROBE_WINDOW = "1";
 process.env.READY_SUSTAIN = "1";
 
 const {
+  agentHasKbBinding,
   assembleCreateInput,
   bindAgentToChannel,
   createAgentFromCredentials,
   createAgentProfile,
   deleteAgent,
+  knowledgeToolsBlock,
   listAgents,
+  rerenderAgentWorkspace,
   unbindAgentFromChannel,
   updateAgent,
   updateAgentProfile,
   validateAgentDraft,
 } = await import("./orchestrator.js");
 const { runtimeEnv } = await import("./secrets.js");
+const { writeKnowledgeStore } = await import("./knowledge.js");
 
 const baseDraft = {
   id: "test-agent",
@@ -444,4 +448,83 @@ test("updateAgentProfile 只改资料和权限，保留 skills 与 MEMORY.md", a
   // 派生状态更新
   const listed = listAgents().find((a) => a.id === "profile-only")!;
   assert.equal(listed.derived.pendingSkills, true);
+});
+
+test("knowledgeToolsBlock：未绑库时禁止绕路、不出现 knowledge_search 名字", () => {
+  const employeeBlock = knowledgeToolsBlock("employee", false);
+  assert.match(employeeBlock, /当前未绑定/);
+  assert.match(employeeBlock, /没有/);
+  // 关键：未绑库时不能出现 knowledge_search/knowledge_import（避免 AI 据此妄称工具可用）
+  assert.equal(employeeBlock.includes("`knowledge_search`"), false);
+  assert.equal(employeeBlock.includes("`knowledge_import`"), false);
+  // 必含明确禁绕路指令（exec/curl/网络请求）
+  assert.match(employeeBlock, /exec|curl|网络请求/);
+});
+
+test("knowledgeToolsBlock：admin 绑库后只暴露 knowledge_search/import，不暴露原始 API", () => {
+  const block = knowledgeToolsBlock("admin", true);
+  assert.match(block, /`knowledge_search`/);
+  assert.match(block, /`knowledge_import`/);
+  // 普通员工绑库后没有 import
+  const employeeBlock = knowledgeToolsBlock("employee", true);
+  assert.match(employeeBlock, /`knowledge_search`/);
+  assert.equal(employeeBlock.includes("`knowledge_import`"), false);
+});
+
+test("rerenderAgentWorkspace：解绑 KB 后 TOOLS.md 不再写有 knowledge_search", async () => {
+  // 准备：员工绑库 → workspace 写有 knowledge_search
+  await createAgentProfile({
+    id: "kb-rebind-agent",
+    name: "解绑测试员",
+    role: "admin",
+    profile: { jobTitle: "测试" },
+  });
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [{
+      id: "kb-test", name: "test", provider: "fastgpt",
+      externalKbId: "ds-x", boundAgents: ["kb-rebind-agent"],
+    }],
+  });
+  rerenderAgentWorkspace("kb-rebind-agent");
+  const toolsPathBound = join(stateDir, "workspaces", "kb-rebind-agent", "TOOLS.md");
+  const boundContent = readFileSync(toolsPathBound, "utf-8");
+  assert.match(boundContent, /`knowledge_search`/);
+  assert.match(boundContent, /`knowledge_import`/);
+
+  // 解绑 → workspace 不应再写有 knowledge_search/import 名字
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [{
+      id: "kb-test", name: "test", provider: "fastgpt",
+      externalKbId: "ds-x", boundAgents: [],
+    }],
+  });
+  rerenderAgentWorkspace("kb-rebind-agent");
+  const unboundContent = readFileSync(toolsPathBound, "utf-8");
+  // 关键回归点：解绑后 TOOLS.md 不能让 AI 误以为 knowledge_search 可用
+  assert.equal(unboundContent.includes("`knowledge_search`"), false);
+  assert.equal(unboundContent.includes("`knowledge_import`"), false);
+  assert.match(unboundContent, /未绑定/);
+  // 必含禁绕路红线
+  assert.match(unboundContent, /绝不|禁止/);
+  assert.match(unboundContent, /exec|curl|网络请求/);
+
+  await deleteAgent("kb-rebind-agent");
+});
+
+test("agentHasKbBinding：仅 provider=fastgpt + externalKbId 非空 + boundAgents 含该 agent 才算已绑", () => {
+  // 默认 FASTGPT_KB_ID 兜底（旧部署无 knowledge.json）：测试环境无该 env 变量，应返回 false
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [
+      { id: "kb-1", name: "n", provider: "fastgpt", externalKbId: "ds1", boundAgents: ["foo"] },
+      { id: "kb-2", name: "n", provider: "fastgpt", externalKbId: "", boundAgents: ["bar"] }, // 空 externalKbId 不算
+      { id: "kb-3", name: "n", provider: "local", boundAgents: ["baz"] }, // local 不算
+    ],
+  });
+  assert.equal(agentHasKbBinding("foo"), true);
+  assert.equal(agentHasKbBinding("bar"), false);
+  assert.equal(agentHasKbBinding("baz"), false);
+  assert.equal(agentHasKbBinding("nobody"), false);
 });
