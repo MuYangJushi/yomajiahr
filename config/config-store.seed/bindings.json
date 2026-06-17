@@ -1,18 +1,1 @@
-[
-  {
-    "agentId": "hr-employee",
-    "match": { "channel": "feishu", "accountId": "hr-employee" }
-  },
-  {
-    "agentId": "hr-admin",
-    "match": { "channel": "feishu", "accountId": "hr-admin" }
-  },
-  {
-    "agentId": "hr-employee",
-    "match": { "channel": "dingtalk-connector", "accountId": "hr-employee" }
-  },
-  {
-    "agentId": "hr-admin",
-    "match": { "channel": "dingtalk-connector", "accountId": "hr-admin" }
-  }
-]
+[]

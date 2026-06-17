@@ -29,16 +29,30 @@ export interface GeneratedProfile {
   boundaries: string;
 }
 
+// 字段语义对标 ClawMax agent 模板（已核验 templates/spec/template-spec.md）：
+//   ⚠️ template-spec 的结构化 agent 字段只有 id/name/role/tags/skills/template；
+//      personality / tone / boundaries / responsibilities 在 ClawMax 侧不是结构化键，
+//      只作为 IDENTITY.md / SOUL.md 的自由文段存在。故这里只能做「语义对齐」而非「字段对齐」：
+//   responsibilities ≈ SOUL「Your Specific Role」（这名员工具体做什么）
+//   personality      ≈ IDENTITY「Vibe」（性格/特质形容词）
+//   boundaries       ≈ SOUL「Boundaries」（明确不做什么）
+//   tone             —— yomajiahr 自有字段，ClawMax 无对应（沟通语气，独立于性格）
+//   ⚠️ 命名差异：ClawMax 结构化字段用 `role` 表示岗位名；yomajiahr 用 `jobTitle`，`role` 留给权限级别
+//      （employee/admin）。将来真做模板互通需在这一层做映射，不能直接对接。
+// 以「一句话描述 → 一次填全 5 段」为目标（对标 ClawMax「描述→填全表」），不是单字段补全。
 const SYSTEM_PROMPT = `你是 HR 数字员工档案共创助手。
-输入是岗位名 + 简短 hint，输出必须是一个 JSON 对象，5 个键全部为中文短句：
-  - "responsibilities"：2~4 条职责要点（用换行或 "；" 分隔；不要给具体数字/制度条款）
-  - "personality"：3~5 个形容词（中文，逗号分隔）
-  - "tone"：语气描述（1~2 句，例："简洁、就事论事"）
-  - "boundaries"：1~2 条明确不做什么（例："不替代 HR 完成人工审批"）
+输入是岗位名（jobTitle）+ 一句话描述（hint），请据此一次性生成完整档案。
+输出必须是一个 JSON 对象，5 个键全部为中文短句，字段语义如下：
+  - "jobTitle"：原样回填输入的真实岗位名称
+  - "responsibilities"：这名员工具体负责什么——2~4 条职责要点（用换行或 "；" 分隔；不要给具体数字/制度条款）
+  - "personality"：性格特质——3~5 个形容词（中文，逗号分隔，例："细致, 耐心, 守秘"）
+  - "tone"：沟通语气——1~2 句，独立于性格（例："简洁、就事论事"）
+  - "boundaries"：明确不做什么——1~2 条（例："不替代 HR 完成人工审批"）
 硬约束：
   1. 不得编造具体公司名、薪资数字、休假天数等任何制度性内容
   2. 不得输出 JSON 以外的任何字符（包括 markdown 代码块）
   3. 边界（boundaries）必须落在"不替代/不审批/不外发"这类不破坏组织流程的范畴
+  4. 各字段须围绕岗位与描述保持一致，整体读起来像同一名员工
 仅输出 JSON，不要任何解释。`;
 
 function buildUserMessage(input: ProfileGenerateInput): string {

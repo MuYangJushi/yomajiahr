@@ -167,6 +167,20 @@ export async function generateAgentProfile(input: { jobTitle: string; hints?: st
   return (await api.post("/config/agent-profile/generate", input)).data.profile;
 }
 
+// —— 系统自带数字员工模板（空白起步 + 从模板创建）——
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  suggestedId: string;
+  role: "employee" | "admin";
+  profile: Required<Pick<AgentProfile, "jobTitle" | "responsibilities" | "personality" | "tone" | "boundaries">>;
+  suggestedSkills: string[];
+}
+export async function fetchAgentTemplates(): Promise<AgentTemplate[]> {
+  return (await api.get("/config/agent-templates")).data.templates;
+}
+
 // —— 渠道管理（ADR-013 §渠道独立）——
 export interface ChannelHealth {
   configured: boolean;

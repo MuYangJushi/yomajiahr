@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { ProLayout } from "@ant-design/pro-components";
 import { Dropdown, Spin, Tag } from "antd";
-import { RobotOutlined, BookOutlined, AuditOutlined, LogoutOutlined, ApiOutlined, ToolOutlined } from "@ant-design/icons";
+import { RobotOutlined, BookOutlined, AuditOutlined, LogoutOutlined, ApiOutlined, ToolOutlined, IdcardOutlined, PartitionOutlined } from "@ant-design/icons";
 import Agents from "./Agents";
+import Templates from "./Templates";
 import Knowledge from "./Knowledge";
 import Audit from "./Audit";
 import Channels from "./Channels";
@@ -12,14 +13,16 @@ import { fetchMe, logout, type Me, type PlatformRole } from "./api";
 
 const MENU = [
   { path: "/agents", name: "数字员工", icon: <RobotOutlined /> },
+  { path: "/templates", name: "员工模板", icon: <IdcardOutlined /> },
   { path: "/skills", name: "技能配置（规划中）", icon: <ToolOutlined />, disabled: true },
+  { path: "/workflows", name: "流程编排（规划中）", icon: <PartitionOutlined />, disabled: true },
   { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
   { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
   { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
 ];
 
 // 在 ProLayout 壳内渲染的页面；不在此表的菜单项跳旧 vanilla 页。
-const SHELL_PAGES = new Set(["/agents", "/channels", "/knowledge", "/audit-log"]);
+const SHELL_PAGES = new Set(["/agents", "/templates", "/channels", "/knowledge", "/audit-log"]);
 
 const ROLE_LABEL: Record<PlatformRole, string> = { admin: "管理员", ops: "运营", audit: "审计只读" };
 
@@ -95,6 +98,8 @@ export default function App() {
       menuItemRender={(item, dom) => (
         <a
           onClick={() => {
+            // 「规划中」禁用项不跳转，避免落到死链。
+            if ((item as { disabled?: boolean }).disabled) return;
             // 壳内页直接切换；其余（审计等迁移中）仍跳旧 vanilla 页。
             if (item.path && SHELL_PAGES.has(item.path)) {
               navigate(item.path);
@@ -109,6 +114,7 @@ export default function App() {
       )}
     >
       {path === "/agents" && <Agents />}
+      {path === "/templates" && <Templates />}
       {path === "/channels" && <Channels />}
       {path === "/knowledge" && <Knowledge />}
       {path === "/audit-log" && <Audit />}

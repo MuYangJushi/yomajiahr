@@ -14,6 +14,7 @@ import {
   unbindAgentFromChannel,
   updateAgentProfile,
 } from "../services/orchestrator.js";
+import { listAgentTemplates } from "../services/agent-templates.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
 import { listSkills } from "../services/workspace.js";
@@ -35,6 +36,11 @@ agentsRouter.get("/config/agents", requireRole("ops"), (_req: Request, res: Resp
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// 系统自带数字员工模板（空白起步 + 从模板创建）。只读建议值，创建仍走 POST /config/agents。
+agentsRouter.get("/config/agent-templates", requireRole("ops"), (_req: Request, res: Response) => {
+  res.json({ templates: listAgentTemplates() });
 });
 
 // 仅创建数字员工档案（ADR-013 #58）。允许空 skills / 无渠道；状态显示"待配置"。

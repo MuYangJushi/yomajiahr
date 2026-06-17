@@ -79,7 +79,8 @@ export default function Agents() {
       title: "操作",
       valueType: "option",
       render: (_, r) => {
-        const protectedAgent = r.default || r.id === "hr-employee" || r.id === "hr-admin";
+        // 空白起步后无永久内置员工；仅默认员工受保护（当前无默认员工，等于全部可删）。
+        const protectedAgent = r.default;
         return [
           <Button
             key="edit"
@@ -97,7 +98,7 @@ export default function Agents() {
             danger
             icon={<DeleteOutlined />}
             disabled={protectedAgent}
-            title={protectedAgent ? "内置数字员工不能删除" : undefined}
+            title={protectedAgent ? "默认数字员工不能删除" : undefined}
             onClick={() => {
               Modal.confirm({
                 title: `删除数字员工“${r.name}”？`,
