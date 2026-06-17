@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Col, Drawer, Form, Input, Modal, QRCode, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
-  bindChannelAsset, cancelChannelAssetOnboarding, createChannelAsset, deleteChannelAsset, fetchAgents, fetchChannelAssets, fetchChannelOnboarding,
-  probeChannelAsset, probeChannels, unbindChannelAsset, updateChannelAsset,
+  awaitApplyJob, bindChannelAsset, cancelChannelAssetOnboarding, createChannelAsset, deleteChannelAsset, fetchAgents, fetchChannelAssets, fetchChannelOnboarding,
+  jobIdOf, probeChannelAsset, probeChannels, unbindChannelAsset, updateChannelAsset,
   type AgentRow, type ChannelAsset,
 } from "./api";
 
@@ -29,8 +29,16 @@ export default function Channels() {
   }
   useEffect(() => {
     void reload();
-    const timer = window.setInterval(() => void reload(true), 5000);
-    return () => window.clearInterval(timer);
+    // mount 后异步触发一次集中探活（不阻塞列表渲染）；下一轮静默 reload 会捎带最新 health。
+    void probeChannels().catch(() => {});
+    // 列表轻量轮询（仅读 store cache，无 spawn）。
+    const listTimer = window.setInterval(() => void reload(true), 5000);
+    // 后台集中探活（30s 一次；spawn openclaw channels status，未配置账号已被短路）。
+    const probeTimer = window.setInterval(() => void probeChannels().catch(() => {}), 30_000);
+    return () => {
+      window.clearInterval(listTimer);
+      window.clearInterval(probeTimer);
+    };
   }, []);
   const summary = useMemo(() => ({
     total: rows.length, healthy: rows.filter((r) => r.health?.configured && r.health.running && r.health.connected).length,
@@ -42,6 +50,24 @@ export default function Channels() {
     if (asset) form.setFieldsValue({ ...asset, ...asset.policy });
     else form.setFieldsValue({ type: "feishu", dmPolicy: "open", groupPolicy: "open", requireMention: true });
   }
+  /** 写操作的统一处理：拿到响应里可能的 jobId，立刻关弹窗 + reload；
+   *  挂全局 message.loading 直到任务终态，最后 reload 一次让 store 真实状态浮上来。 */
+  async function trackApplyJob(data: unknown, label: string) {
+    const jobId = jobIdOf(data);
+    if (!jobId) {
+      // 800ms 内同步完成（含失败已 throw），无需轮询。
+      return { ok: true };
+    }
+    const key = `apply-${jobId}`;
+    message.loading({ content: `${label}进行中…`, key, duration: 0 });
+    const job = await awaitApplyJob(jobId);
+    if (job.status === "success") {
+      message.success({ content: `${label}已应用`, key });
+      return { ok: true };
+    }
+    message.error({ content: `${label}失败：${job.message || job.status}`, key, duration: 6 });
+    return { ok: false };
+  }
   async function submit(values: any) {
     try {
       if (action === "create") {
@@ -51,12 +77,23 @@ export default function Channels() {
         policy: { dmPolicy: values.dmPolicy, groupPolicy: values.groupPolicy, requireMention: values.requireMention },
         } as any);
         if (session) { setOnboarding(session); setAction(null); return; }
+        await trackApplyJob(session, "创建账号");
       }
-      if (action === "edit" && selected) await updateChannelAsset(selected.type, selected.id, {
-        displayName: values.displayName, clientId: values.clientId, secret: values.secret,
-        policy: { dmPolicy: values.dmPolicy, groupPolicy: values.groupPolicy, requireMention: values.requireMention },
-      });
-      if (action === "bind" && selected) await bindChannelAsset(selected.type, selected.id, values.agentId);
+      if (action === "edit" && selected) {
+        const data = await updateChannelAsset(selected.type, selected.id, {
+          displayName: values.displayName, clientId: values.clientId, secret: values.secret,
+          policy: { dmPolicy: values.dmPolicy, groupPolicy: values.groupPolicy, requireMention: values.requireMention },
+        });
+        setAction(null); await reload();
+        await trackApplyJob(data, "保存渠道");
+        return;
+      }
+      if (action === "bind" && selected) {
+        const data = await bindChannelAsset(selected.type, selected.id, values.agentId);
+        setAction(null); await reload();
+        await trackApplyJob(data, "绑定数字员工");
+        return;
+      }
       message.success("操作已应用"); setAction(null); await reload();
     } catch (err: any) { message.error(err?.response?.data?.error || err.message || "操作失败"); }
   }
@@ -74,8 +111,12 @@ export default function Channels() {
     { title: "渠道", dataIndex: "type", render: (v) => <Tag color="blue">{TYPE_LABEL[v as keyof typeof TYPE_LABEL]}</Tag> },
     { title: "配置", render: (_, r) => <Tag color={r.credentialsConfigured ? "success" : "warning"}>{r.credentialsConfigured ? "完整" : "缺少凭证"}</Tag> },
     { title: "运行状态", render: (_, r) => <Space wrap>
-      <Tag color={r.health?.running ? "success" : "default"}>{r.health?.running ? "运行中" : "未运行"}</Tag>
-      <Tag color={r.health?.connected ? "success" : "error"}>{r.health?.connected ? "连接正常" : "未连接"}</Tag>
+      {r.health?.configured === false
+        ? <Tag>凭证未配置</Tag>
+        : <>
+          <Tag color={r.health?.running ? "success" : "default"}>{r.health?.running ? "运行中" : "未运行"}</Tag>
+          <Tag color={r.health?.connected ? "success" : "error"}>{r.health?.connected ? "连接正常" : "未连接"}</Tag>
+        </>}
       {r.health?.lastError && <Typography.Text type="danger">{r.health.lastError}</Typography.Text>}
     </Space> },
     { title: "占用", render: (_, r) => r.occupiedBy ? <Tag color="processing">{r.occupiedBy.agentName}</Tag> : <Tag>空闲</Tag> },
@@ -84,7 +125,11 @@ export default function Channels() {
       <Button size="small" onClick={() => open("edit", r)}>编辑</Button>
       <Button size="small" onClick={async () => { await probeChannelAsset(r.type, r.id); await reload(); }}>探活</Button>
       {r.occupiedBy
-        ? <Button size="small" onClick={async () => { await unbindChannelAsset(r.type, r.id); await reload(); }}>解绑</Button>
+        ? <Button size="small" onClick={async () => {
+            const data = await unbindChannelAsset(r.type, r.id);
+            await reload();
+            await trackApplyJob(data, "解绑数字员工");
+          }}>解绑</Button>
         : <Button size="small" onClick={() => open("bind", r)}>绑定</Button>}
       <Button danger size="small" disabled={Boolean(r.occupiedBy)} onClick={() => Modal.confirm({
         title: `删除空闲账号 ${r.displayName}？`,
@@ -105,7 +150,11 @@ export default function Channels() {
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div><Typography.Title level={3} style={{ margin: 0 }}>渠道管理</Typography.Title><Typography.Text type="secondary">独立管理飞书与钉钉账号资产、绑定和连接状态</Typography.Text></div>
-        <Space><Button onClick={async () => { await probeChannels(); await reload(); }}>全部探活</Button><Button type="primary" onClick={() => { setMode("manual"); open("create"); }}>新增账号</Button></Space>
+        <Space><Button onClick={async () => {
+          message.loading({ content: "正在探活…", key: "probe-all", duration: 0 });
+          try { await probeChannels(); message.success({ content: "探活完成", key: "probe-all" }); await reload(true); }
+          catch (err: any) { message.error({ content: err?.response?.data?.error || "探活失败", key: "probe-all" }); }
+        }}>全部探活</Button><Button type="primary" onClick={() => { setMode("manual"); open("create"); }}>新增账号</Button></Space>
       </div>
       <Row gutter={12}><Col span={6}><Card><Statistic title="账号总数" value={summary.total}/></Card></Col><Col span={6}><Card><Statistic title="连接正常" value={summary.healthy}/></Card></Col><Col span={6}><Card><Statistic title="已占用" value={summary.occupied}/></Card></Col><Col span={6}><Card><Statistic title="异常" value={summary.errors}/></Card></Col></Row>
       <Table rowKey={(r) => `${r.type}/${r.id}`} loading={loading} columns={columns} dataSource={rows} pagination={false} />

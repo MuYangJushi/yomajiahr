@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ModalForm, ProFormRadio, ProFormText, ProFormTextArea, type ProFormInstance } from "@ant-design/pro-components";
 import { Alert, Button, Space, message } from "antd";
-import { generateAgentProfile, updateAgent, type AgentProfile, type AgentRow } from "./api";
+import { awaitApplyJob, generateAgentProfile, jobIdOf, updateAgent, type AgentProfile, type AgentRow } from "./api";
 
 interface Props { agent: AgentRow | null; onClose: () => void; onUpdated: () => void }
 const FIELDS: Array<{ key: keyof AgentProfile; label: string; area?: boolean }> = [
@@ -20,7 +20,23 @@ export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
       onFinish={async (values) => {
         if (!agent) return false;
         try {
-          await updateAgent(agent.id, { name: values.name, role: values.role, profile: Object.fromEntries(["jobTitle", ...FIELDS.map((f) => f.key)].map((key) => [key, values[key]])) });
+          const data = await updateAgent(agent.id, { name: values.name, role: values.role, profile: Object.fromEntries(["jobTitle", ...FIELDS.map((f) => f.key)].map((key) => [key, values[key]])) });
+          const jobId = jobIdOf(data);
+          if (jobId) {
+            const key = `apply-${jobId}`;
+            message.loading({ content: "员工资料已保存，配置应用中…", key, duration: 0 });
+            onUpdated();
+            awaitApplyJob(jobId).then((job) => {
+              if (job.status === "success") {
+                message.success({ content: "员工资料已应用", key });
+                onUpdated();
+              } else {
+                message.error({ content: `保存失败：${job.message || job.status}`, key, duration: 6 });
+                onUpdated();
+              }
+            });
+            return true;
+          }
           message.success("员工资料已保存"); onUpdated(); return true;
         } catch (err: any) { message.error(err?.response?.data?.error || err.message || "更新失败"); return false; }
       }}
@@ -37,12 +53,17 @@ export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
           <Space>
             <Button size="small" loading={busy === field.key} onClick={async () => {
               if (!agent) return;
+              const jobTitle = String(formRef.current?.getFieldValue("jobTitle") || "").trim();
+              if (!jobTitle) { message.warning("请先填写真实岗位名称再生成"); return; }
               setBusy(field.key);
               try {
-                const p = await generateAgentProfile({ jobTitle: String(formRef.current?.getFieldValue("jobTitle") || ""), fields: [field.key] });
+                const p = await generateAgentProfile({ jobTitle, fields: [field.key] });
                 formRef.current?.setFieldValue(field.key, p[field.key]);
                 message.success(`${field.label}已生成，请确认后保存`);
-              } catch (err: any) { message.error(err?.response?.data?.message || "AI 生成不可用"); }
+              } catch (err: any) {
+                const data = err?.response?.data || {};
+                message.error(data.message || data.error || "AI 生成不可用");
+              }
               finally { setBusy(undefined); }
             }}>AI 重新生成{field.label}</Button>
           </Space>

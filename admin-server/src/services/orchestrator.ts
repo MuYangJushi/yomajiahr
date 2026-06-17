@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { triggerApply } from "./config-apply.js";
-import { unbindAgentFromKnowledge } from "./knowledge.js";
+import { unbindAgentFromKnowledge, readKnowledgeStore } from "./knowledge.js";
 import { ENV_PATH, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type AgentEntry } from "./store.js";
 import { renderWorkspace, workspaceDir } from "./workspace.js";
@@ -194,6 +194,62 @@ function pendingStatusBlock(pendingSkills: boolean, pendingChannels: boolean): s
   return `## 当前状态\n\n${items.join("\n")}\n`;
 }
 
+/**
+ * 渲染 TOOLS.md 的「知识库工具」段落。
+ * fix/usage-bugs：KB 解绑后 AI 仍以为有 knowledge_search → 用 exec curl 绕路。
+ *   → 与运行时 tools.allow 一致地"事实陈述"工具是否在场。
+ *   不绑库 / 解绑后：明确告诉 AI 该能力当前关闭、不要绕路。
+ */
+export function knowledgeToolsBlock(role: "employee" | "admin", hasKbBinding: boolean): string {
+  if (!hasKbBinding) {
+    return [
+      "### 知识库工具：当前未绑定",
+      "",
+      "你的工具清单中**没有任何**知识库检索/导入工具。HR 政策类问题暂时无法检索。",
+      "",
+      "- 收到政策/制度/流程类问题：如实告知「我目前未绑定知识库，无法基于政策文档回答，建议您联系 HR」。",
+      "- **绝不**用 `exec` / `curl` / 任何网络请求自行探测 FastGPT 或其他知识库 API。",
+    ].join("\n");
+  }
+  const lines = [
+    "### 知识库工具",
+    "",
+    "HR 知识库经 FastGPT MCP 工具访问（ADR-010）。下列工具在你的运行时 allowlist 中：",
+    "",
+    "- `knowledge_search`：检索 HR 知识库（FastGPT），返回命中切片",
+  ];
+  if (role === "admin") {
+    lines.push("- `knowledge_import`：导入文档到知识库（仅管理员岗位）");
+  }
+  lines.push("");
+  lines.push("文档托管在 **FastGPT**；平台无本地归档/chunk 副本（ADR-010）。始终以 `knowledge_search` 的实际返回为准，不编造字段或内容。");
+  return lines.join("\n");
+}
+
+/**
+ * 派生 agent 当前是否绑定可用的 FastGPT 知识库。镜像生成器 `agentHasFastgptBinding`
+ * 与 admin-server `resolveDatasetIdsForAgent`：只认 provider=fastgpt + externalKbId 非空 + boundAgents 含该 agent。
+ * 旧部署无 knowledge.json 时退默认（与 generator 兜底一致）：仅 default agent 视为已绑定。
+ */
+export function agentHasKbBinding(agentId: string): boolean {
+  const { agents } = readStore();
+  const defaultAgent = agents.find((a) => a.default)?.id;
+  let store: ReturnType<typeof readKnowledgeStore>;
+  try {
+    store = readKnowledgeStore();
+  } catch {
+    return Boolean(defaultAgent) && agentId === defaultAgent;
+  }
+  const kbs = Array.isArray(store.knowledgeBases) ? store.knowledgeBases : [];
+  return kbs.some(
+    (kb) =>
+      kb.provider === "fastgpt" &&
+      Boolean(kb.externalKbId) &&
+      Array.isArray(kb.boundAgents) &&
+      kb.boundAgents.includes(agentId),
+  );
+}
+
 export function validateAgentDraft(input: AgentDraft, opts: { allowEmptySkills?: boolean; allowNoChannel?: boolean } = {}): void {
   if (typeof input.id !== "string" || !/^[a-z0-9-]+$/.test(input.id)) throw new Error("id 只能含小写字母、数字、连字符");
   if (typeof input.name !== "string" || !input.name.trim()) throw new Error("name 不能为空");
@@ -341,6 +397,44 @@ export function listAgents() {
 }
 
 /**
+ * 按当前 store + KB 绑定状态重新渲染指定 agent 的 workspace（保留 MEMORY.md）。
+ * fix/usage-bugs：KB 绑定/解绑后必须刷新 TOOLS.md 与 AGENTS.md，否则 AI 仍以为 knowledge_*
+ * 工具可用 → 解绑后用 exec 绕路撞 FastGPT 端点。无视 agent 是否存在 / workspace 是否存在
+ * （静默跳过），调用方串到 PUT /knowledge/bindings 链路里，挂掉不应阻塞绑定主流程。
+ */
+export function rerenderAgentWorkspace(agentId: string): void {
+  const store = readStore();
+  const agent = store.agents.find((a) => a.id === agentId);
+  if (!agent) return;
+  const wsDir = workspaceDir(agentId);
+  if (!existsSync(wsDir)) return;
+  const channels = store.bindings
+    .filter((b) => b.agentId === agentId)
+    .map((b) => ({ domain: b.match.channel, accountId: b.match.accountId }));
+  const skills = agent.skills ?? [];
+  const profile = agent.profile;
+  const role = agent.role;
+  const name = agent.name || agentId;
+  renderWorkspace(agentId, {
+    ID: agentId,
+    NAME: name,
+    ROLE: role,
+    ROLE_LABEL: ROLE_LABEL[role],
+    JOB_TITLE: profile?.jobTitle || ROLE_LABEL[role],
+    RESPONSIBILITIES: profile?.responsibilities || "（未填写职责）",
+    PERSONA: profile?.personality || "（未填写人设）",
+    TONE: profile?.tone || "（未指定语气）",
+    BOUNDARIES: profile?.boundaries || "（未指定边界）",
+    PROFILE: profile ? JSON.stringify(profile, null, 2) : "（未配置职业档案）",
+    SKILLS: skills.length > 0 ? skills.map((s) => `- ${s}`).join("\n") : "（待配置技能）",
+    PENDING_STATUS: pendingStatusBlock(skills.length === 0, channels.length === 0),
+    PENDING_SKILLS: skills.length === 0 ? "true" : "false",
+    PENDING_CHANNELS: channels.length === 0 ? "true" : "false",
+    KNOWLEDGE_TOOLS_BLOCK: knowledgeToolsBlock(role, agentHasKbBinding(agentId)),
+  }, { preserveMemory: true });
+}
+
+/**
  * 仅创建数字员工档案（ADR-013 #57）。
  * 允许空 skills + 无渠道绑定；状态显示"待配置技能 / 待接入渠道"。
  * 不创建/绑定任何渠道账号；渠道操作走 bindAgentToChannel。
@@ -390,6 +484,7 @@ export async function createAgentProfile(
         PENDING_STATUS: pendingStatusBlock(skills.length === 0, true),
         PENDING_SKILLS: skills.length === 0 ? "true" : "false",
         PENDING_CHANNELS: "true",
+        KNOWLEDGE_TOOLS_BLOCK: knowledgeToolsBlock(input.role, agentHasKbBinding(input.id)),
       });
 
       const agentEntry: AgentEntry = {
@@ -651,6 +746,7 @@ export async function createAgent(
         PENDING_STATUS: "",
         PENDING_SKILLS: "false",
         PENDING_CHANNELS: "false",
+        KNOWLEDGE_TOOLS_BLOCK: knowledgeToolsBlock(input.role, agentHasKbBinding(input.id)),
       });
 
       // 2. 秘钥（键级 upsert）
@@ -779,6 +875,7 @@ function workspaceVars(id: string, input: UpdateAgentInput): Record<string, stri
     PENDING_STATUS: "",
     PENDING_SKILLS: "false",
     PENDING_CHANNELS: "false",
+    KNOWLEDGE_TOOLS_BLOCK: knowledgeToolsBlock(input.role, agentHasKbBinding(id)),
   };
 }
 
@@ -842,6 +939,7 @@ export async function updateAgentProfile(
         PENDING_STATUS: pendingStatusBlock(skills.length === 0, channels.length === 0),
         PENDING_SKILLS: skills.length === 0 ? "true" : "false",
         PENDING_CHANNELS: channels.length === 0 ? "true" : "false",
+        KNOWLEDGE_TOOLS_BLOCK: knowledgeToolsBlock(next.role, agentHasKbBinding(id)),
       }, { preserveMemory: true });
       writeStore(store);
 

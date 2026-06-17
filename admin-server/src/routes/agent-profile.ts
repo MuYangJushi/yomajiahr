@@ -23,7 +23,9 @@ agentProfileRouter.post(
   async (req: Request, res: Response) => {
     const parsed = GenerateInputSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
+      const msg = parsed.error.issues[0]?.message || "入参非法";
+      // 同时返 error/message，避免前端读 .message 时拿不到（旧 EditAgentModal 即此症状）。
+      return res.status(400).json({ error: msg, message: msg });
     }
     const startedAt = Date.now();
     try {

@@ -17,6 +17,53 @@ api.interceptors.response.use(
   },
 );
 
+// —— 异步 apply 任务（fix/usage-bugs #1）——
+// 写操作（招募 / 渠道编辑 / 知识库绑定等）后端 800ms 内未完成会返回 202 + jobId；
+// 前端拿到 jobId 立刻关弹窗 / 刷列表 / 起进度提示，轮询直到终态。
+export type ApplyJobStatus = "queued" | "running" | "success" | "failed";
+export interface ApplyJob {
+  id: string;
+  label: string;
+  status: ApplyJobStatus;
+  message?: string;
+  result?: unknown;
+  startedAt: string;
+  finishedAt?: string;
+}
+export async function fetchApplyJob(jobId: string): Promise<ApplyJob> {
+  return (await api.get(`/config/apply-jobs/${encodeURIComponent(jobId)}`)).data;
+}
+
+/** 轮询 jobId 直到终态。每 1.5s 一次，超时 90s。终态 result/message 由调用方消费。 */
+export async function awaitApplyJob(jobId: string, opts?: { timeoutMs?: number; intervalMs?: number }): Promise<ApplyJob> {
+  const timeoutMs = opts?.timeoutMs ?? 90_000;
+  const intervalMs = opts?.intervalMs ?? 1500;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const job = await fetchApplyJob(jobId);
+      if (job.status === "success" || job.status === "failed") return job;
+    } catch (err: any) {
+      // jobId 在进程重启后会丢失（404）→ 视为终止；调用方通常 reload 列表看现状即可。
+      if (err?.response?.status === 404) {
+        return { id: jobId, label: "", status: "failed", message: "任务状态已丢失（服务可能已重启），请刷新查看最新状态", startedAt: new Date().toISOString() };
+      }
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return { id: jobId, label: "", status: "failed", message: "等待任务完成超时，请刷新查看最新状态", startedAt: new Date().toISOString() };
+}
+
+/** 写操作响应里如果带了 jobId（即后端走了异步路径），返回 jobId 字符串供调用方挂轮询；否则 undefined。 */
+export function jobIdOf(data: unknown): string | undefined {
+  if (data && typeof data === "object" && "jobId" in data) {
+    const id = (data as { jobId?: unknown }).jobId;
+    return typeof id === "string" ? id : undefined;
+  }
+  return undefined;
+}
+
 // —— 认证 ——
 export type PlatformRole = "admin" | "ops" | "audit";
 export interface Me {
@@ -98,11 +145,11 @@ export interface UpdateAgentInput {
   persona?: string;
   profile?: AgentProfile;
 }
-export async function updateAgent(id: string, input: UpdateAgentInput): Promise<void> {
-  await api.put(`/config/agents/${encodeURIComponent(id)}`, input);
+export async function updateAgent(id: string, input: UpdateAgentInput): Promise<unknown> {
+  return (await api.put(`/config/agents/${encodeURIComponent(id)}`, input)).data;
 }
-export async function deleteAgent(id: string): Promise<void> {
-  await api.delete(`/config/agents/${encodeURIComponent(id)}`);
+export async function deleteAgent(id: string): Promise<unknown> {
+  return (await api.delete(`/config/agents/${encodeURIComponent(id)}`)).data;
 }
 export interface BindChannelInput {
   domain: "feishu" | "dingtalk-connector";
@@ -171,14 +218,14 @@ export async function createChannelAsset(input: {
 }
 export async function updateChannelAsset(type: "feishu" | "dingtalk", id: string, input: {
   displayName?: string; clientId?: string; secret?: string; policy?: ChannelAsset["policy"];
-}): Promise<void> {
-  await api.patch(`/config/channel-assets/${type}/${encodeURIComponent(id)}`, input);
+}): Promise<unknown> {
+  return (await api.patch(`/config/channel-assets/${type}/${encodeURIComponent(id)}`, input)).data;
 }
-export async function bindChannelAsset(type: "feishu" | "dingtalk", id: string, agentId: string): Promise<void> {
-  await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/bind`, { agentId });
+export async function bindChannelAsset(type: "feishu" | "dingtalk", id: string, agentId: string): Promise<unknown> {
+  return (await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/bind`, { agentId })).data;
 }
-export async function unbindChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
-  await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/unbind`);
+export async function unbindChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<unknown> {
+  return (await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/unbind`)).data;
 }
 export async function probeChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<ChannelHealth> {
   return (await api.post(`/config/channel-assets/${type}/${encodeURIComponent(id)}/probe`)).data.health;
@@ -311,8 +358,9 @@ export async function searchTest(query: string, topK = 5, datasetId?: string): P
 export async function fetchKnowledgeBindings(): Promise<{ store: KnowledgeStore; agents: AgentRow[] }> {
   return (await api.get("/knowledge/bindings")).data;
 }
-export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<KnowledgeStore> {
-  return (await api.put("/knowledge/bindings", store)).data.store;
+export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<{ store?: KnowledgeStore; jobId?: string }> {
+  const data = (await api.put("/knowledge/bindings", store)).data;
+  return { store: data?.store, jobId: data?.jobId };
 }
 
 // —— #41 多库 ——

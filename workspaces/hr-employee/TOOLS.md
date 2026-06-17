@@ -31,6 +31,12 @@
 - `memory_write`、`memory_delete` — 写操作仅限管理员 Agent
 - `exec` — 本 Agent 无需执行命令
 
+## 红线（系统锁定）
+
+- **绝不**用 `exec` / `curl` / 任何网络请求自行探测知识库 API（FastGPT 或其他平台），也不要尝试改用代码搜索"自己拼检索"。`knowledge_search` 是唯一允许的检索通道。
+- `knowledge_search` 不在你的 allowlist 时（极少见，运维侧解绑后）：如实告知"知识库当前未配置"，**不要**绕路。
+- 工具调用返回错误（如平台不可达）：如实告知错误，不要重试到其他端点、不要换工具兜底。
+
 ## 渠道
 
 - 飞书 Bot「HR小助手」— 全员可用，WebSocket 长连接
