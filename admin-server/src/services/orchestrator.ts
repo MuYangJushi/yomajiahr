@@ -38,10 +38,11 @@ function toolsForRole(role: "employee" | "admin"): { allow: string[]; deny: stri
 }
 
 const ROLE_LABEL = { employee: "员工", admin: "管理员" } as const;
-const BUILTIN_AGENT_IDS = new Set(["hr-employee", "hr-admin"]);
 
+// 空白起步后无永久内置员工：所有员工都从系统模板创建、可删除可重建。
+// 仅保留对「默认员工」的结构性保护（当前无 agent 被设为 default，等于全部可删）。
 function isProtectedAgent(agent: AgentEntry): boolean {
-  return Boolean(agent.default) || BUILTIN_AGENT_IDS.has(agent.id);
+  return Boolean(agent.default);
 }
 
 export interface CreateAgentInput {
