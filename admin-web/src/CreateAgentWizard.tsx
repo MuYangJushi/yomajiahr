@@ -9,7 +9,7 @@ import { createAgent, fetchAgentTemplates, generateAgentProfile, type AgentProfi
 //   3) 渠道接入（Communication，本 Sprint 仅占位，渠道是独立生命周期）
 //   4) 技能配置（Workflows，留空占位，等技能 ADR）   5) 预览确认（Preview）
 // 招募只创建员工 + 结构化档案，绝不在此绑技能/接渠道（ADR-013 三生命周期解耦）。
-interface Props { open: boolean; onClose: () => void; onCreated: () => void }
+interface Props { open: boolean; onClose: () => void; onCreated: () => void; initialTemplate?: AgentTemplate | null }
 interface Values {
   id: string;
   name: string;
@@ -25,11 +25,12 @@ const PROFILE_FIELDS: Array<{ key: keyof AgentProfile; label: string; area?: boo
   { key: "boundaries", label: "工作边界", area: true },
 ];
 
-export default function CreateAgentWizard({ open, onClose, onCreated }: Props) {
+export default function CreateAgentWizard({ open, onClose, onCreated, initialTemplate }: Props) {
   const [submitting, setSubmitting] = useState(false);
-  const [jobTitle, setJobTitle] = useState("");
+  // initialTemplate（从「员工模板」页进入时）预填首屏；instance 按 template 加 key 重挂，故 initializer 取一次即可。
+  const [jobTitle, setJobTitle] = useState(() => initialTemplate?.profile.jobTitle ?? "");
   // 从系统模板预填的整份 profile，跨步带到「档案共创」（沿用 jobTitle 的状态提升模式）。
-  const [seedProfile, setSeedProfile] = useState<AgentProfile | null>(null);
+  const [seedProfile, setSeedProfile] = useState<AgentProfile | null>(() => initialTemplate?.profile ?? null);
   return (
     <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={760} destroyOnClose>
       <StepsForm<Values>
@@ -49,7 +50,9 @@ export default function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         submitter={{ submitButtonProps: { loading: submitting } }}
       >
         {/* ① 身份定位（对标 ClawMax「Team Type」）：名称 / 不可变 ID / 岗位 / 权限级别 */}
-        <StepsForm.StepForm name="identity" title="身份定位" onFinish={async (values) => { setJobTitle(values.profile?.jobTitle || ""); return true; }}>
+        <StepsForm.StepForm name="identity" title="身份定位"
+          initialValues={initialTemplate ? { name: initialTemplate.name, id: initialTemplate.suggestedId, role: initialTemplate.role, profile: { jobTitle: initialTemplate.profile.jobTitle } } : undefined}
+          onFinish={async (values) => { setJobTitle(values.profile?.jobTitle || ""); return true; }}>
           <TemplatePicker onPick={(t) => { setJobTitle(t.profile.jobTitle); setSeedProfile(t.profile); }} />
           <ProFormText name="name" label="名称" rules={[{ required: true }]} placeholder="如 入离职助手" />
           <ProFormText name="id" label="不可变 ID" rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母、数字和连字符" }]} placeholder="如 hr-onboard" />
