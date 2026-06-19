@@ -10,10 +10,10 @@
 
 ```bash
 # 生产部署（安装 systemd 服务，开机自启）
-curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
+curl -fsSL https://raw.githubusercontent.com/MuYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
 
 # 测试部署（不安装 systemd，手动启动）
-curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MuYangJushi/yomajiahr/main/install.sh | bash
 ```
 
 脚本会自动完成：安装 curl/git/ripgrep → 克隆仓库到 `/opt/yomajiahr` → 安装 Node.js 24 → 按需自动使用 `sudo` 安装 openclaw 主包 → 创建目录结构并清理空的旧政策目录 → 编译配置 → 安装飞书官方插件与钉钉官方 connector → 安装 admin-server 依赖 → （可选）安装 systemd 服务。
@@ -111,7 +111,7 @@ cd /opt/yomajiahr
 9. 通过 OpenClaw 插件命令安装钉钉官方 connector（`openclaw plugins install @dingtalk-real-ai/dingtalk-connector`）
 10. 安装 admin-server 依赖
 
-当前仓库默认将 heartbeat 显式开启在 `hr-assistant` 和 `hr-admin` 两个 agent 上，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向聊天渠道用户外发心跳消息。
+系统模板（`hr-employee`/`hr-admin`）默认将 heartbeat 显式开启，公共 cadence 为 30 分钟，`target` 为 `none`，仅用于内部巡检与保活，不会直接向聊天渠道用户外发心跳消息；从模板招募的新员工沿用同一配置。
 
 ### Step 2: 配置环境变量
 
@@ -137,18 +137,17 @@ nano ~/.openclaw/.env
 | `DINGTALK_ADMIN_BOT_CLIENT_SECRET` | 钉钉 HR管理后台 AppSecret / Client Secret |
 | `OPENCLAW_GATEWAY_TOKEN` | Gateway 认证 token（自定义长随机串） |
 | `OPENCLAW_WEB_AUTH_TOKEN` | Admin Portal 认证 token |
+| `FASTGPT_BASE_URL` | FastGPT 平台地址（如走 WireGuard 隧道：`http://10.99.0.1:3000`） |
+| `FASTGPT_API_KEY` | FastGPT API Key（知识库导入/检索） |
 
-### Step 3: 上传知识库文档
+### Step 3: 接入知识库（FastGPT，唯一源）
 
-将 HR 政策文档（Markdown 格式）放入对应分类目录：
+> ⚠️ **2026-06-19 更新**：此前版本描述的本地 `~/.openclaw/data/hr-policies/` 分类目录 + `categories.mjs` 自动分类已随 ADR-010 整体退役。**知识库唯一源是 FastGPT**，不再有本地 markdown 归档。
 
-```bash
-ls ~/.openclaw/data/hr-policies/
-# attendance/  staffing/  compensation/  training/  performance/  general/
-```
-
-也可以通过 Admin Portal 上传 PDF/Word/文本文件，系统会自动转换为 Markdown。
-`install.sh` 会保留 `admin-server/lib/categories.mjs` 中定义的正式分类目录，并自动清理其它空的历史目录；若历史目录内仍有文件，脚本会保留目录并提示先迁移文档。
+1. 部署/确认 FastGPT 栈（独立机器，详见 [yomajiahr-kb/00-overview/deployment-topology.md](https://github.com/MuYangJushi/yomajiahr-kb/blob/main/00-overview/deployment-topology.md) 附录「FastGPT 部署详情」）
+2. 在 `~/.openclaw/.env` 配好 `FASTGPT_BASE_URL` / `FASTGPT_API_KEY`
+3. 登录 Admin Portal → 「知识库」页 → 新建/选择知识库 → 上传 PDF/Word/文本/Markdown，FastGPT 原生解析（`create/localFile`）完成切片+向量化
+4. 在「数字员工」页给需要检索的员工绑定该知识库（绑定后才会生成 `knowledge_search` 工具，见 ADR-011；无绑定→无工具）
 
 ### Step 4: 验证安装
 
@@ -249,34 +248,25 @@ DELETE /api/config/agent-onboarding/:id
 
 ```
 ~/.openclaw/
-  openclaw.json                 # 运行时配置（由 install.sh 编译）
-  .env                          # API 密钥
+  openclaw.json                 # 运行时配置（由 install.sh / config 生成器编译）
+  .env                          # API 密钥（含 FASTGPT_BASE_URL/FASTGPT_API_KEY）
+  config-store/                 # 动态配置真相源
+    agents.json                 # 数字员工（空白起步默认为空数组，见 ADR-014）
+    channels.json               # 渠道账号资产
+    bindings.json                # 员工↔渠道绑定
+    knowledge.json               # 员工↔知识库绑定（运行期产物，首次绑库才出现）
   workspaces/
-    hr-assistant/               # 员工 Agent workspace
-    hr-admin/                   # 管理 Agent workspace
+    <agentId>/                  # 每个数字员工一份，名字由招募时填的 ID 决定（不再固定 hr-assistant）
   skills/
     hr-policy-qa/
     hr-admin/
     hr-general/
-  memory/                       # 语义索引（自动生成）
   data/
-    hr-policies/                # 原始政策文档（Admin Portal 上传源）
-      attendance/
-      staffing/
-      compensation/
-      training/
-      performance/
-      general/
-    hr-chunks/                  # 切片检索索引（Admin Portal 上传时自动生成）
-      attendance/
-      staffing/
-      compensation/
-      training/
-      performance/
-      general/
     hr-admin/
       audit-log.jsonl           # 操作审计日志
 ```
+
+> ❌ 已退役、不会再生成：`~/.openclaw/memory/`（语义索引）、`~/.openclaw/data/hr-policies/`、`~/.openclaw/data/hr-chunks/`——随 ADR-010/012 退役自研 RAG 层与本地 `memory_search` 回退链一起删除，知识库内容全部在 FastGPT 侧。
 
 ---
 
@@ -321,6 +311,6 @@ sudo systemctl status openclaw-gateway --no-pager
 | Gateway 启动失败 | `journalctl -u openclaw-gateway -n 100` |
 | 聊天 Bot 未响应 | `OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw channels status --probe` |
 | Skills 未识别 | `OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json openclaw skills list` |
-| 知识库搜不到文档 | 确认 `~/.openclaw/data/hr-policies/` 下有 .md 文件且含正确 frontmatter |
+| 知识库搜不到文档 | 确认该数字员工在「知识库」页已绑定对应 FastGPT 库（无绑定→无 `knowledge_search` 工具）；确认 `FASTGPT_BASE_URL`/`FASTGPT_API_KEY` 配置正确、WireGuard 隧道可达 |
 | Admin Portal 无法访问 | 确认端口 18790 开放；`journalctl -u openclaw-admin -n 100` |
 | 审计日志为空 | 确认 `~/.openclaw/data/hr-admin/audit-log.jsonl` 存在且有写入权限 |
