@@ -4,7 +4,7 @@
 #
 # Usage:
 #   # Remote (from GitHub, fresh server):
-#   curl -fsSL https://raw.githubusercontent.com/MorrisYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
+#   curl -fsSL https://raw.githubusercontent.com/MuYangJushi/yomajiahr/main/install.sh | bash -s -- --systemd
 #
 #   # Local:
 #   ./install.sh                    # install with defaults (~/.openclaw)
@@ -17,7 +17,7 @@ set -euo pipefail
 # Config
 # ---------------------------------------------------------------------------
 
-GITHUB_REPO_URL="https://github.com/MorrisYangJushi/yomajiahr.git"
+GITHUB_REPO_URL="https://github.com/MuYangJushi/yomajiahr.git"
 INSTALL_DIR="${YOMAJIA_INSTALL_DIR:-/opt/yomajiahr}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -222,7 +222,7 @@ if [ "$(uname)" = "Linux" ] && command -v apt-get &>/dev/null; then
   command -v git  &>/dev/null || NEED_PKGS="$NEED_PKGS git"
   command -v rg   &>/dev/null || NEED_PKGS="$NEED_PKGS ripgrep"
   if [ -n "$NEED_PKGS" ]; then
-    echo "[0/9] Installing prerequisites:$NEED_PKGS..."
+    echo "[0/10] Installing prerequisites:$NEED_PKGS..."
     sudo apt-get update -qq
     sudo apt-get install -y $NEED_PKGS
   fi
@@ -231,7 +231,7 @@ fi
 # Detect remote execution (curl | bash): repo files won't be present at REPO_DIR.
 # Clone the repo and re-exec from the cloned location.
 if [ ! -d "$REPO_DIR/workspaces" ] || [ ! -d "$REPO_DIR/skills" ]; then
-  echo "[0/9] Remote execution detected — cloning repo to $INSTALL_DIR..."
+  echo "[0/10] Remote execution detected — cloning repo to $INSTALL_DIR..."
   if [ ! -d "$INSTALL_DIR/.git" ]; then
     sudo git clone --depth=1 "$GITHUB_REPO_URL" "$INSTALL_DIR"
     sudo chown -R "$(id -u):$(id -g)" "$INSTALL_DIR"
@@ -255,7 +255,7 @@ if [ "$(uname)" = "Linux" ] && command -v systemctl &>/dev/null; then
 fi
 
 if [ "$GATEWAY_WAS_ACTIVE" = true ] || [ "$ADMIN_WAS_ACTIVE" = true ]; then
-  echo "[0/9] Stopping running services before update..."
+  echo "[0/10] Stopping running services before update..."
   if [ "$GATEWAY_WAS_ACTIVE" = true ]; then
     sudo systemctl stop openclaw-gateway
     echo "  openclaw-gateway stopped"
@@ -289,7 +289,7 @@ install_node_via_apt() {
   sudo apt-get install -y nodejs
 }
 
-echo "[1/9] Checking Node.js..."
+echo "[1/10] Checking Node.js..."
 NODE_OK=false
 if command -v node &>/dev/null; then
   NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
@@ -327,7 +327,7 @@ npm config set registry https://registry.npmmirror.com
 # Step 2: Install openclaw
 # ---------------------------------------------------------------------------
 
-echo "[2/9] Installing openclaw..."
+echo "[2/10] Installing openclaw..."
 if [ "$OPENCLAW_SKIP_INSTALL" = "1" ]; then
   command -v openclaw >/dev/null 2>&1 || { echo "ERROR: OPENCLAW_SKIP_INSTALL=1 but openclaw is not on PATH"; exit 1; }
   INSTALLED_VERSION="$(openclaw --version 2>/dev/null | awk '{print $2}')"
@@ -392,7 +392,7 @@ fi
 # Step 3: Create directory structure
 # ---------------------------------------------------------------------------
 
-echo "[3/9] Creating directory structure..."
+echo "[3/10] Creating directory structure..."
 mkdir -p "$STATE_DIR"
 if [ -d "$STATE_DIR/workspaces/hr-assistant" ] && [ ! -e "$STATE_DIR/workspaces/hr-employee" ]; then
   mv "$STATE_DIR/workspaces/hr-assistant" "$STATE_DIR/workspaces/hr-employee"
@@ -413,7 +413,7 @@ echo "  Done"
 # Step 4: Copy workspace files
 # ---------------------------------------------------------------------------
 
-echo "[4/9] Copying workspace files..."
+echo "[4/10] Copying workspace files..."
 for agent in hr-employee hr-admin; do
   src="$REPO_DIR/workspaces/$agent"
   dst="$STATE_DIR/workspaces/$agent"
@@ -434,7 +434,7 @@ done
 # Step 5: Copy skills
 # ---------------------------------------------------------------------------
 
-echo "[5/9] Copying skills..."
+echo "[5/10] Copying skills..."
 for skill_dir in "$REPO_DIR/skills"/*/; do
   skill_name=$(basename "$skill_dir")
   dst="$STATE_DIR/skills/$skill_name"
@@ -447,7 +447,7 @@ done
 # Step 6: Compile config (JSONC -> JSON)
 # ---------------------------------------------------------------------------
 
-echo "[6/9] Building config toolkit & generating config..."
+echo "[6/10] Building config toolkit & generating config..."
 if [ -f "$REPO_DIR/config/openclaw.base.jsonc" ]; then
   # \u6784\u5EFA config \u5DE5\u5177\u5305\uFF08TS\u2192JS\uFF09\u3002\u9700\u8981 devDeps(typescript)\uFF0C\u6545\u7528\u666E\u901A npm install\u3002
   ( cd "$REPO_DIR/config" && npm install --no-audit --no-fund >/dev/null 2>&1 && npm run build >/dev/null 2>&1 ) \
@@ -487,7 +487,7 @@ fi
 # Step 7: Copy .env template
 # ---------------------------------------------------------------------------
 
-echo "[7/9] Checking environment file..."
+echo "[7/10] Checking environment file..."
 if [ -f "$STATE_DIR/.env" ]; then
   ENV_WAS_PRESENT=true
   echo "  $STATE_DIR/.env already exists (skipped)"
@@ -505,7 +505,11 @@ if [ -f "$STATE_DIR/.env" ]; then
   chmod 600 "$STATE_DIR/.env"
 fi
 
-echo "  Installing official Feishu plugin..."
+# ---------------------------------------------------------------------------
+# Step 8: Install official Feishu plugin
+# ---------------------------------------------------------------------------
+
+echo "[8/10] Installing official Feishu plugin..."
 # The official installer command enters interactive bot onboarding and writes to the
 # caller's OpenClaw state directory. For unattended deploys with repo-managed
 # config/env files, use the official non-interactive update path against STATE_DIR.
@@ -556,10 +560,10 @@ normalize_runtime_config
 echo "  official Feishu plugin installed"
 
 # ---------------------------------------------------------------------------
-# Step 8: Install DingTalk connector
+# Step 9: Install DingTalk connector
 # ---------------------------------------------------------------------------
 
-echo "[8/9] Installing official DingTalk connector..."
+echo "[9/10] Installing official DingTalk connector..."
 # The official DingTalk connector also provides a QR-code onboarding command via
 # npx, but production deploys keep credentials in repo-managed config/env files.
 # Install the plugin package only; do not enter interactive onboarding here.
@@ -588,10 +592,10 @@ normalize_runtime_config
 echo "  official DingTalk connector installed"
 
 # ---------------------------------------------------------------------------
-# Step 9: Install admin-server dependencies
+# Step 10: Install admin-server dependencies
 # ---------------------------------------------------------------------------
 
-echo "[9/9] Installing & building admin-server (backend + web)..."
+echo "[10/10] Installing & building admin-server (backend + web)..."
 if [ -f "$REPO_DIR/admin-server/package.json" ]; then
   # 后端：需 devDeps(tsup/typescript) 构建 TS → dist/server.js
   ( cd "$REPO_DIR/admin-server" && npm install --no-audit --no-fund && npm run build ) \
