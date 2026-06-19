@@ -142,9 +142,10 @@ yomajia1（FastGPT v4.8.22 精简栈：app + pgvector + mongo + oneapi）
     ├── SOUL.md         # 渲染 profile.personality + profile.tone + profile.boundaries
     ├── IDENTITY.md     # 渲染 profile.jobTitle + profile.responsibilities
     ├── MEMORY.md       # 长期记忆（模板锁定不可覆盖）
-    ├── TOOLS.md        # 环境备忘（模板锁定不可覆盖，工具名按 per-agent 化泛指 knowledge_search，不硬编码）
-    └── CLAUDE.md       # → AGENTS.md 的 symlink
+    └── TOOLS.md        # 环境备忘（模板锁定不可覆盖，工具名按 per-agent 化泛指 knowledge_search，不硬编码）
 ```
+
+> 旧版本曾生成 `CLAUDE.md` → `AGENTS.md` 的兼容软链，`admin-server/src/services/workspace.ts` 渲染 workspace 时与 `install.sh` 拷贝 workspace 时均会主动 `rm -f` 清理该文件，现在不再生成。
 
 `profile` 字段（`jobTitle`/`responsibilities`/`personality`/`tone`/`boundaries`）由 MiniMax AI 档案共创生成（ADR-013 §2），**只用于平台编辑与 workspace 渲染，不进入 OpenClaw 运行时配置**（生成器渲染时剔除）。
 
