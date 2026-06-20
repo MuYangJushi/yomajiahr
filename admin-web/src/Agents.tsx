@@ -15,9 +15,25 @@ import EditAgentModal from "./EditAgentModal";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
   employee: { color: "blue", label: "员工" },
-  admin: { color: "red", label: "管理员" },
+  admin: { color: "gold", label: "管理员" },
 };
 const DOMAIN_LABEL: Record<string, string> = { feishu: "飞书", "dingtalk-connector": "钉钉" };
+
+// 空状态：design tokens v0.2 的 grad-strip + 标题 + 副文案。
+function AgentEmpty() {
+  return (
+    <div style={{ padding: "64px 0", textAlign: "center" }}>
+      <div
+        style={{
+          width: 48, height: 48, borderRadius: 12, margin: "0 auto 16px",
+          background: "linear-gradient(135deg, #0a84ff, #0071e3)",
+        }}
+      />
+      <div style={{ fontSize: 14, color: "#6e6e73", marginBottom: 4 }}>还没有数字员工</div>
+      <div style={{ fontSize: 13, color: "#aeaeb2" }}>点击右上角「招募数字员工」创建第一个</div>
+    </div>
+  );
+}
 
 export default function Agents() {
   const actionRef = useRef<ActionType>();
@@ -135,6 +151,7 @@ export default function Agents() {
         headerTitle="数字员工"
         search={false}
         pagination={false}
+        locale={{ emptyText: <AgentEmpty /> }}
         columns={columns}
         request={async () => {
           const data = await fetchAgents();

@@ -54,7 +54,7 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
         </Space>
       }
       action={
-        <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh}>
+        <Button size="small" shape="round" icon={<ReloadOutlined />} onClick={onRefresh}>
           刷新
         </Button>
       }

@@ -85,8 +85,11 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
 
         {/* ② 档案共创（对标 ClawMax「Composition」）：一句话描述 → AI 填全表 */}
         <StepsForm.StepForm name="profile" title="档案共创">
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#e8f1fd", borderRadius: 10, padding: "12px 14px", marginBottom: 20, fontSize: 13, color: "#48484a" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #0a84ff, #0071e3)", flex: "none" }} />
+            <div>用 AI 帮你把岗位职责、性格语气、边界规则写成结构化档案——填几句话描述，剩下交给它，每一项都能再改。AI 不可用时可全程手工填写，生成内容只写入结构化档案，不会覆盖系统规则。</div>
+          </div>
           <ProfileEditor jobTitle={jobTitle} seedProfile={seedProfile} />
-          <Alert type="info" showIcon style={{ marginTop: 12 }} message="先用一句话描述这名员工，让 AI 一次生成完整档案；再逐段微调。AI 不可用时可全程手工填写，生成内容只写入结构化档案，不会覆盖系统规则。" />
         </StepsForm.StepForm>
 
         {/* ③ 渠道接入（对标 ClawMax「Communication」）：本 Sprint 占位，渠道是独立生命周期 */}

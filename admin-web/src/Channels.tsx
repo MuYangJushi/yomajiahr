@@ -109,10 +109,10 @@ export default function Channels() {
   const columns: ColumnsType<ChannelAsset> = [
     { title: "账号", render: (_, r) => <><b>{r.displayName}</b><br/><Typography.Text type="secondary">{r.id}（创建后不可改）</Typography.Text></> },
     { title: "渠道", dataIndex: "type", render: (v) => <Tag color="blue">{TYPE_LABEL[v as keyof typeof TYPE_LABEL]}</Tag> },
-    { title: "配置", render: (_, r) => <Tag color={r.credentialsConfigured ? "success" : "warning"}>{r.credentialsConfigured ? "完整" : "缺少凭证"}</Tag> },
+    { title: "配置", render: (_, r) => <Tag color={r.credentialsConfigured ? "success" : "error"}>{r.credentialsConfigured ? "完整" : "缺少凭证"}</Tag> },
     { title: "运行状态", render: (_, r) => <Space wrap>
       {r.health?.configured === false
-        ? <Tag>凭证未配置</Tag>
+        ? <Tag color="error">凭证未配置</Tag>
         : <>
           <Tag color={r.health?.running ? "success" : "default"}>{r.health?.running ? "运行中" : "未运行"}</Tag>
           <Tag color={r.health?.connected ? "success" : "error"}>{r.health?.connected ? "连接正常" : "未连接"}</Tag>
@@ -156,7 +156,7 @@ export default function Channels() {
           catch (err: any) { message.error({ content: err?.response?.data?.error || "探活失败", key: "probe-all" }); }
         }} shape="round">全部探活</Button><Button type="primary" shape="round" onClick={() => { setMode("manual"); open("create"); }}>新增账号</Button></Space>
       </div>
-      <Row gutter={12}><Col span={6}><Card><Statistic title="账号总数" value={summary.total}/></Card></Col><Col span={6}><Card><Statistic title="连接正常" value={summary.healthy}/></Card></Col><Col span={6}><Card><Statistic title="已占用" value={summary.occupied}/></Card></Col><Col span={6}><Card><Statistic title="异常" value={summary.errors}/></Card></Col></Row>
+      <Row gutter={12}><Col span={6}><Card><Statistic title="账号总数" value={summary.total}/></Card></Col><Col span={6}><Card><Statistic title="连接正常" value={summary.healthy} valueStyle={{ color: "#34c759" }}/></Card></Col><Col span={6}><Card><Statistic title="已占用" value={summary.occupied}/></Card></Col><Col span={6}><Card><Statistic title="异常" value={summary.errors} valueStyle={{ color: "#ff3b30" }}/></Card></Col></Row>
       <Table rowKey={(r) => `${r.type}/${r.id}`} loading={loading} columns={columns} dataSource={rows} pagination={false} />
     </Space>
     <Drawer title={action === "create" ? "手工新增渠道账号" : action === "edit" ? "编辑渠道账号" : "绑定数字员工"} open={Boolean(action)} onClose={() => setAction(null)} width={480}

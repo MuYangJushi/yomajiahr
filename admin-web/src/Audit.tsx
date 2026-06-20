@@ -33,7 +33,11 @@ export default function Audit() {
       title: "时间",
       dataIndex: "timestamp",
       width: 180,
-      render: (_, r) => dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss"),
+      render: (_, r) => (
+        <span style={{ fontFamily: '"SF Mono", Menlo, monospace' }}>
+          {dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss")}
+        </span>
+      ),
     },
     {
       title: "动作",
@@ -98,6 +102,7 @@ export default function Audit() {
         actions: [
           <Button
             key="export"
+            shape="round"
             icon={<DownloadOutlined />}
             href={auditExportUrl(filters)}
             target="_blank"
