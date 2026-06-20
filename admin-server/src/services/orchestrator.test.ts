@@ -59,12 +59,14 @@ const {
   createAgentFromCredentials,
   createAgentProfile,
   deleteAgent,
+  getAgentSkillsView,
   knowledgeToolsBlock,
   listAgents,
   rerenderAgentWorkspace,
   unbindAgentFromChannel,
   updateAgent,
   updateAgentProfile,
+  updateAgentSkills,
   validateAgentDraft,
 } = await import("./orchestrator.js");
 const { runtimeEnv } = await import("./secrets.js");
@@ -527,4 +529,111 @@ test("agentHasKbBinding：仅 provider=fastgpt + externalKbId 非空 + boundAgen
   assert.equal(agentHasKbBinding("bar"), false);
   assert.equal(agentHasKbBinding("baz"), false);
   assert.equal(agentHasKbBinding("nobody"), false);
+});
+
+// ============================================================================
+// ADR-015 §3：员工↔技能分配（updateAgentSkills / getAgentSkillsView）
+// ============================================================================
+
+function seedSkillFile(name: string, fm: string, body = "# body\n"): void {
+  mkdirSync(join(stateDir, "skills", name), { recursive: true });
+  writeFileSync(join(stateDir, "skills", name, "SKILL.md"), `---\n${fm}\n---\n${body}`);
+}
+
+test("getAgentSkillsView：返回当前技能 + 可分配列表 + unmet", async () => {
+  seedSkillFile("admin-only-skill", "name: admin-only-skill\ndescription: x\nrequiredRole: admin");
+  seedSkillFile("kb-skill", "name: kb-skill\ndescription: y\nrequiresKnowledge: true");
+  await createAgentProfile({
+    id: "skills-view-agent",
+    name: "技能视图员",
+    role: "employee",
+    profile: { jobTitle: "助理", responsibilities: "助理", personality: "稳", tone: "和", boundaries: "不越权" },
+  });
+  const view = getAgentSkillsView("skills-view-agent");
+  assert.deepEqual(view.skills, []);
+  const names = view.available.map((s) => s.name);
+  assert.ok(names.includes("hr-general"));
+  assert.ok(names.includes("admin-only-skill"));
+  assert.ok(names.includes("kb-skill"));
+  // 未分配技能 → 无 unmet
+  assert.deepEqual(view.unmet, []);
+  await deleteAgent("skills-view-agent");
+});
+
+test("updateAgentSkills：分配 hr-general，apply 成功 + workspace 重渲染 + before/after", async () => {
+  await createAgentProfile({
+    id: "skills-assign-agent",
+    name: "分配员",
+    role: "employee",
+    profile: { jobTitle: "助理", responsibilities: "助理", personality: "稳", tone: "和", boundaries: "不越权" },
+  });
+  const result = await updateAgentSkills("skills-assign-agent", ["hr-general"]);
+  assert.equal(result.apply.status, "success");
+  assert.deepEqual(result.before, []);
+  assert.deepEqual(result.after, ["hr-general"]);
+  // store 落地
+  const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
+  assert.deepEqual(agents.find((a: any) => a.id === "skills-assign-agent").skills, ["hr-general"]);
+  // workspace AGENTS.md 重渲染含技能
+  const agentsMd = readFileSync(join(stateDir, "workspaces", "skills-assign-agent", "AGENTS.md"), "utf-8");
+  assert.match(agentsMd, /- hr-general/);
+  await deleteAgent("skills-assign-agent");
+});
+
+test("updateAgentSkills：角色不兼容阻断（admin 技能分给 employee）", async () => {
+  await createAgentProfile({
+    id: "role-compat-agent",
+    name: "角色兼容员",
+    role: "employee",
+    profile: { jobTitle: "助理", responsibilities: "助理", personality: "稳", tone: "和", boundaries: "不越权" },
+  });
+  await assert.rejects(
+    updateAgentSkills("role-compat-agent", ["admin-only-skill"]),
+    /要求 admin 角色/,
+  );
+  // admin 角色员工可分配 admin 技能
+  await createAgentProfile({
+    id: "role-compat-admin",
+    name: "角色兼容管理员",
+    role: "admin",
+    profile: { jobTitle: "管理员", responsibilities: "管理", personality: "细", tone: "专", boundaries: "守规" },
+  });
+  const ok = await updateAgentSkills("role-compat-admin", ["admin-only-skill"]);
+  assert.deepEqual(ok.after, ["admin-only-skill"]);
+  await deleteAgent("role-compat-agent");
+  await deleteAgent("role-compat-admin");
+});
+
+test("updateAgentSkills：依赖未满足不阻断（requiresKnowledge 未绑库 → unmet 提示）", async () => {
+  await createAgentProfile({
+    id: "unmet-agent",
+    name: "依赖员",
+    role: "employee",
+    profile: { jobTitle: "助理", responsibilities: "助理", personality: "稳", tone: "和", boundaries: "不越权" },
+  });
+  // 确保未绑库（测试环境无 FASTGPT_KB_ID / knowledge.json 兜底）
+  writeKnowledgeStore({ platform: "fastgpt", knowledgeBases: [] });
+  const result = await updateAgentSkills("unmet-agent", ["kb-skill", "hr-general"]);
+  assert.equal(result.apply.status, "success");
+  assert.deepEqual(result.after, ["kb-skill", "hr-general"]);
+  const unmetSkills = result.unmet.map((u) => u.skill);
+  assert.ok(unmetSkills.includes("kb-skill"));
+  assert.ok(!unmetSkills.includes("hr-general"));
+  await deleteAgent("unmet-agent");
+});
+
+test("updateAgentSkills：不存在技能阻断 / 空数组允许 / 去重", async () => {
+  await createAgentProfile({
+    id: "edge-agent",
+    name: "边界员",
+    role: "employee",
+    profile: { jobTitle: "助理", responsibilities: "助理", personality: "稳", tone: "和", boundaries: "不越权" },
+  });
+  await assert.rejects(updateAgentSkills("edge-agent", ["missing-skill"]), /技能不存在/);
+  const cleared = await updateAgentSkills("edge-agent", []);
+  assert.deepEqual(cleared.after, []);
+  const dedup = await updateAgentSkills("edge-agent", ["hr-general", "hr-general"]);
+  assert.deepEqual(dedup.after, ["hr-general"]);
+  await assert.rejects(updateAgentSkills("no-such-agent", ["hr-general"]), /agent 不存在/);
+  await deleteAgent("edge-agent");
 });
