@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ProLayout } from "@ant-design/pro-components";
 import { Dropdown, Spin, Tag } from "antd";
-import { RobotOutlined, BookOutlined, AuditOutlined, LogoutOutlined, ApiOutlined, ToolOutlined, IdcardOutlined, PartitionOutlined } from "@ant-design/icons";
+import { RobotOutlined, LogoutOutlined } from "@ant-design/icons";
 import Agents from "./Agents";
 import Templates from "./Templates";
 import Knowledge from "./Knowledge";
@@ -12,13 +12,14 @@ import Login from "./Login";
 import { fetchMe, logout, type Me, type PlatformRole } from "./api";
 
 const MENU = [
-  { path: "/agents", name: "数字员工", icon: <RobotOutlined /> },
-  { path: "/templates", name: "员工模板", icon: <IdcardOutlined /> },
-  { path: "/skills", name: "技能配置（规划中）", icon: <ToolOutlined />, disabled: true },
-  { path: "/workflows", name: "流程编排（规划中）", icon: <PartitionOutlined />, disabled: true },
-  { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
-  { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
-  { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
+  { path: "/agents", name: "数字员工", icon: "📋" },
+  { path: "/templates", name: "员工模板", icon: "🪪" },
+  { path: "/knowledge", name: "知识库", icon: "📖" },
+  { path: "/channels", name: "渠道管理", icon: "🔗" },
+  { path: "/audit-log", name: "审计", icon: "📝" },
+  { path: "/planned-divider", name: "规划中", isGroupLabel: true, disabled: true },
+  { path: "/skills", name: "技能配置", icon: "🛠️", disabled: true },
+  { path: "/workflows", name: "流程编排", icon: "🧩", disabled: true },
 ];
 
 // 在 ProLayout 壳内渲染的页面；不在此表的菜单项跳旧 vanilla 页。
@@ -63,7 +64,7 @@ export default function App() {
 
   return (
     <ProLayout
-      title="HR 数字员工管理平台"
+      title="Yoma+HR 数字员工平台"
       logo={false}
       layout="side"
       location={{ pathname: path }}
@@ -95,23 +96,33 @@ export default function App() {
           </Dropdown>
         ),
       }}
-      menuItemRender={(item, dom) => (
-        <a
-          onClick={() => {
-            // 「规划中」禁用项不跳转，避免落到死链。
-            if ((item as { disabled?: boolean }).disabled) return;
-            // 壳内页直接切换；其余（审计等迁移中）仍跳旧 vanilla 页。
-            if (item.path && SHELL_PAGES.has(item.path)) {
-              navigate(item.path);
-              setPath(item.path);
-            } else {
-              window.location.href = item.path!;
-            }
-          }}
-        >
-          {dom}
-        </a>
-      )}
+      menuItemRender={(item, dom) => {
+        // 分组标题（如「规划中」）：纯文案，不可点击，不渲染为链接。
+        if ((item as { isGroupLabel?: boolean }).isGroupLabel) {
+          return (
+            <span style={{ color: "rgba(0, 0, 0, 0.35)", fontSize: 12, cursor: "default" }}>
+              {item.name}
+            </span>
+          );
+        }
+        return (
+          <a
+            onClick={() => {
+              // 「规划中」禁用项不跳转，避免落到死链。
+              if ((item as { disabled?: boolean }).disabled) return;
+              // 壳内页直接切换；其余（审计等迁移中）仍跳旧 vanilla 页。
+              if (item.path && SHELL_PAGES.has(item.path)) {
+                navigate(item.path);
+                setPath(item.path);
+              } else {
+                window.location.href = item.path!;
+              }
+            }}
+          >
+            {dom}
+          </a>
+        );
+      }}
     >
       {path === "/agents" && <Agents />}
       {path === "/templates" && <Templates />}
