@@ -3,8 +3,7 @@
 // 服务端 spawn "openclaw channels status --probe --json" 一次，按 type 分桶写回 store。
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { appendAuditLog } from "../util.js";
@@ -224,24 +223,33 @@ function credentialsFor(input: { id: string; type: "feishu" | "dingtalk"; client
 
 async function mutateChannels<T>(operation: (store: ReturnType<typeof readStore>) => T): Promise<T> {
   return withConfigLock(async () => {
-    const snap = mkdtempSync(join(tmpdir(), "channels-"));
-    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
-    const envExisted = existsSync(ENV_PATH);
-    if (envExisted) cpSync(ENV_PATH, join(snap, ".env"));
+    // 快照只用于回滚；不 cpSync 整个目录（非原子，回滚窗口里并发 readStore 可能读到半截 JSON
+    // → 列表 GET 间歇 500）。改用内存快照 + 原子 writeStore / 原子写 .env 还原，保证单文件原子。
+    const prevStore = readStore();
+    const prevEnv = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, "utf-8") : null;
     try {
       const store = readStore();
       const result = operation(store);
       writeStore(store);
       const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR }) as ApplyResult;
       if (apply.status !== "success") throw new Error(`配置应用失败：${apply.message || apply.status}`);
-      rmSync(snap, { recursive: true, force: true });
       return result;
     } catch (err) {
-      cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
-      if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
-      else rmSync(ENV_PATH, { force: true });
-      await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
-      rmSync(snap, { recursive: true, force: true });
+      // 原子还原：writeStore 逐文件 tmp+rename；.env 同样 tmp+rename+chmod。
+      try {
+        writeStore(prevStore);
+        if (prevEnv !== null) {
+          const tmp = `${ENV_PATH}.tmp`;
+          writeFileSync(tmp, prevEnv);
+          renameSync(tmp, ENV_PATH);
+          chmodSync(ENV_PATH, 0o600);
+        } else {
+          rmSync(ENV_PATH, { force: true });
+        }
+        await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+      } catch {
+        /* 复原失败：保持原错误返回，运维可手工 apply */
+      }
       throw err;
     }
   });
