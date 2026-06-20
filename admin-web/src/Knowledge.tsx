@@ -2,9 +2,9 @@
 // 库列表：GET /knowledge/bases + [新建知识库]（原生，走 #45，审计 CREATE_KB）。
 // 单库详情：① 平台视图（项目原生 UI，经 admin-server 调 FastGPT API，做导入/切片/向量化管理）；
 //          ② 召回测试（原生，按本库 datasetId）；③ 绑定数字员工。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Alert, Button, Card, Drawer, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Spin, Switch,
+  Alert, Button, Card, Checkbox, Drawer, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Spin, Switch,
   Table, Tabs, Tag, Typography, Upload, message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -20,6 +20,7 @@ import {
   fetchKnowledgeBindings,
   fetchKnowledgeCollections,
   fetchKnowledgeHealth,
+  fetchSkills,
   saveKnowledgeBindings,
   searchTest,
   uploadKnowledgeDocument,
@@ -29,6 +30,7 @@ import {
   type KbCollection,
   type KnowledgeBinding,
   type KnowledgeHealth,
+  type SkillMeta,
 } from "./api";
 import { PageTopbar, TableCard } from "./shell";
 
@@ -278,17 +280,40 @@ function SearchTestTab({ datasetId }: { datasetId?: string }) {
   );
 }
 
+const BIND_ROLE_TAG: Record<AgentRow["role"], { color: string; label: string }> = {
+  employee: { color: "purple", label: "员工" },
+  admin: { color: "blue", label: "管理员" },
+};
+
+// 绑定数字员工 tab（design 重做：表格版）。每行直观呈现角色、知识问答技能配套、受限分类处理。
+// 数据派生：知识问答技能 = agent.skills ∩ {requiresKnowledge 技能}；受限分类 = kb.restricted + agent.role。
 function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
   const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [skillsMeta, setSkillsMeta] = useState<SkillMeta[]>([]);
   const [bound, setBound] = useState<string[]>(kb.boundAgents);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchKnowledgeBindings().then(({ agents }) => setAgents(agents)).catch(() => {});
+    Promise.all([fetchKnowledgeBindings(), fetchSkills()])
+      .then(([{ agents }, skills]) => { setAgents(agents); setSkillsMeta(skills); })
+      .catch(() => {});
   }, []);
+
+  // 知识问答类技能名集合（requiresKnowledge=true），用于判断员工是否具备问答行为规范。
+  const kbSkillNames = useMemo(
+    () => new Set(skillsMeta.filter((s) => s.requiresKnowledge).map((s) => s.name)),
+    [skillsMeta],
+  );
+  const qaSkillsOf = (a: AgentRow) => a.skills.filter((s) => kbSkillNames.has(s));
 
   const toggle = (agentId: string) =>
     setBound((b) => (b.includes(agentId) ? b.filter((a) => a !== agentId) : [...b, agentId]));
+
+  // 已勾选绑定但无知识问答技能 → 依赖未满足提示（ADR-016 §5.1，只提示不自动修复）。
+  const unmet = useMemo(
+    () => agents.filter((a) => bound.includes(a.id) && qaSkillsOf(a).length === 0),
+    [agents, bound, kbSkillNames],
+  );
 
   const save = async () => {
     setSaving(true);
@@ -317,25 +342,77 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
     }
   };
 
+  const columns: ColumnsType<AgentRow> = [
+    {
+      title: "绑定", width: 64,
+      render: (_, a) => <Checkbox checked={bound.includes(a.id)} onChange={() => toggle(a.id)} />,
+    },
+    {
+      title: "数字员工",
+      render: (_, a) => (
+        <Space direction="vertical" size={2}>
+          <Space>
+            <b>{a.name}</b>
+            <Typography.Text type="secondary" style={{ fontFamily: "'SF Mono', Menlo, monospace", fontSize: 13 }}>{a.id}</Typography.Text>
+            {bound.includes(a.id) && qaSkillsOf(a).length === 0 && <Tag color="orange">依赖未满足</Tag>}
+          </Space>
+          <Typography.Text type="secondary">{a.profile?.jobTitle || "未填写岗位"}</Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: "角色", width: 110,
+      render: (_, a) => <Tag color={BIND_ROLE_TAG[a.role].color}>{BIND_ROLE_TAG[a.role].label}</Tag>,
+    },
+    {
+      title: "知识问答技能", width: 200,
+      render: (_, a) => {
+        const qa = qaSkillsOf(a);
+        if (qa.length) return <Tag color="success">已配 {qa.join("、")}</Tag>;
+        return <Tag color={bound.includes(a.id) ? "orange" : "default"}>未分配</Tag>;
+      },
+    },
+    {
+      title: "受限分类", width: 130,
+      render: (_, a) => {
+        if (!kb.restricted) return <Tag>无</Tag>;
+        return a.role === "admin" ? <Tag>不限</Tag> : <Tag color="error">回答层拦截</Tag>;
+      },
+    },
+  ];
+
   return (
-    <Card
-      title="哪些数字员工可检索本知识库"
-      extra={<Button type="primary" loading={saving} onClick={save}>保存绑定</Button>}
-    >
-      <Space wrap>
-        {agents.map((a) => (
-          <Tag.CheckableTag key={a.id} checked={bound.includes(a.id)} onChange={() => toggle(a.id)}>
-            {a.name} ({a.id})
-          </Tag.CheckableTag>
-        ))}
-      </Space>
-      <Alert
-        style={{ marginTop: 16 }}
-        type="info"
-        showIcon
-        message="受限分类（compensation/performance）即使绑定，员工侧仍在回答层拦截（hr-policy-qa 数据分级）"
+    <div>
+      <PageTopbar
+        title="绑定数字员工"
+        sub="勾选可检索本知识库的数字员工 → 保存即生效。绑定授予 knowledge_search 检索工具；是否能正确问答还取决于该员工是否分配了知识问答类技能。"
       />
-    </Card>
+      <div style={{ maxWidth: 420, marginBottom: 16 }}>
+        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 6 }}>知识库</Typography.Text>
+        <div style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: "8px 11px", color: "#1d1d1f" }}>
+          {kb.name}（{kb.provider}{kb.externalKbId ? ` · KB ${kb.externalKbId}` : ""}）
+        </div>
+      </div>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 16 }}
+        message="绑定 ≠ 授予问答能力"
+        description="绑定仅授予 knowledge_search 检索工具。受限分类（compensation/performance）即使绑定，员工侧仍在回答层拦截（hr-policy-qa 数据分级）。"
+      />
+      {unmet.length > 0 && (
+        <Alert
+          type="warning" showIcon style={{ marginBottom: 16 }}
+          message="依赖未满足"
+          description={`${unmet.map((a) => `「${a.name}」`).join("、")}已勾选本库，但未分配 hr-policy-qa 等知识问答类技能，运行时可访问检索工具但缺问答规范（ADR-016 §5.1）。`}
+        />
+      )}
+      <TableCard>
+        <Table<AgentRow> rowKey="id" dataSource={agents} columns={columns} pagination={false} />
+      </TableCard>
+      <div style={{ marginTop: 16 }}>
+        <Button type="primary" shape="round" loading={saving} onClick={save}>保存绑定</Button>
+        <Typography.Text type="secondary" style={{ marginLeft: 12 }}>已绑定 {bound.length} 个员工</Typography.Text>
+      </div>
+    </div>
   );
 }
 

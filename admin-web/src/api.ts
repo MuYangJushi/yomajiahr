@@ -295,6 +295,10 @@ export async function updateSkill(name: string, input: UpdateSkillInput): Promis
 export async function deleteSkill(name: string): Promise<void> {
   await api.delete(`/config/skills/${encodeURIComponent(name)}`);
 }
+// AI 生成技能正文（design 重做技能编辑抽屉 → 落地）。返回 Markdown 正文，前端填入编辑器。
+export async function generateSkillBody(input: { name: string; description?: string; hints?: string }): Promise<string> {
+  return (await api.post("/config/skills/generate-body", input)).data.body;
+}
 // —— 员工↔技能分配（ADR-015 §3）——
 export async function fetchAgentSkills(id: string): Promise<SkillAssignment> {
   return (await api.get(`/config/agents/${encodeURIComponent(id)}/skills`)).data;

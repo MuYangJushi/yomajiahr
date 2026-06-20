@@ -20,10 +20,18 @@ import {
   updateSkill,
   type SkillRole,
 } from "../services/skills.js";
+import { generateSkillBody } from "../services/skill-body.js";
 
 export const skillsRouter = Router();
 
 const RoleSchema = z.enum(["employee", "admin"]);
+
+// AI 生成技能正文（design 重做：技能编辑抽屉加 AI）。仅生成 Markdown 正文，不落盘、不改 frontmatter。
+const GenerateBodySchema = z.object({
+  name: z.string().trim().min(1, "name 不能为空").max(120, "name 太长"),
+  description: z.string().trim().max(500).optional(),
+  hints: z.string().trim().max(400, "hints 太长").optional(),
+});
 
 const CreateSchema = z.object({
   name: z.string().trim().regex(SKILL_NAME_RE, "技能 ID 非法"),
@@ -45,6 +53,29 @@ skillsRouter.get("/config/skills", requireRole("ops"), (_req: Request, res: Resp
     res.json({ skills: listSkillMetas() });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// AI 生成技能正文：不落盘、不 apply，仅返回 Markdown 正文供编辑器填充。写 skill.body.generate 审计。
+skillsRouter.post("/config/skills/generate-body", requireRole("ops"), async (req: Request, res: Response) => {
+  const parsed = GenerateBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message || "入参非法";
+    return res.status(400).json({ error: msg, message: msg });
+  }
+  const startedAt = Date.now();
+  const operator = req.user?.platformUserId || "";
+  try {
+    const body = await generateSkillBody(parsed.data);
+    appendAuditLog("skill.body.generate", parsed.data.name, {
+      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: true, operator,
+    });
+    res.json({ body });
+  } catch (err) {
+    appendAuditLog("skill.body.generate", parsed.data.name, {
+      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: false, operator,
+    });
+    res.status(503).json({ error: "SKILL_BODY_GENERATE_UNAVAILABLE", message: (err as Error).message });
   }
 });
 
