@@ -7,7 +7,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
-  awaitApplyJob, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, jobIdOf, saveAgentSkills, updateSkill,
+  awaitApplyJob, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobIdOf, saveAgentSkills, updateSkill,
   type AgentRow, type Skill, type SkillAssignment, type SkillMeta, type SkillRole,
 } from "./api";
 
@@ -34,6 +34,7 @@ function SkillCatalog() {
   const [action, setAction] = useState<Action>(null);
   const [selected, setSelected] = useState<SkillMeta>();
   const [form] = Form.useForm();
+  const [aiBusy, setAiBusy] = useState<"body" | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -77,6 +78,24 @@ function SkillCatalog() {
       }
       setAction(null); await reload();
     } catch (err: any) { message.error(err?.response?.data?.error || err.message || "保存失败"); }
+  }
+
+  // AI 生成技能正文（design 重做：技能编辑加 AI）。仅填充正文，不自动保存；失败提示可手工填。
+  async function aiGenerateBody() {
+    const name = action === "edit" ? selected?.name : form.getFieldValue("name");
+    if (!name) { message.warning("请先填写技能 ID"); return; }
+    setAiBusy("body");
+    try {
+      const body = await generateSkillBody({
+        name,
+        description: form.getFieldValue("description"),
+        hints: form.getFieldValue("hints"),
+      });
+      form.setFieldValue("body", body);
+      message.success("已生成技能正文，请确认后保存");
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.response?.data?.error || "AI 生成不可用，请手工填写");
+    } finally { setAiBusy(null); }
   }
 
   async function remove(skill: SkillMeta) {
@@ -148,7 +167,19 @@ function SkillCatalog() {
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item name="body" label="技能正文（Markdown）" tooltip="frontmatter 之外的正文；name/description/requiredRole/requiresKnowledge 由上方表单维护，请勿在正文里重复写 frontmatter">
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#e8f1fd", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: "#48484a" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#0a84ff,#0071e3)", flex: "none" }} />
+          <div>用 AI 根据技能用途生成行为约定正文——描述触发场景与期望行为，AI 写成规范 Markdown（先检索 / 按来源引用 / 未命中不编造等）。生成内容只写入正文，可逐段再改，不改系统红线（AGENTS/TOOLS/MEMORY）。</div>
+        </div>
+        <Form.Item name="hints" label="一句话描述这个技能要做什么（可选）">
+          <Input.TextArea rows={2} maxLength={400} placeholder="如：员工问考勤/假期/福利政策时触发，先检索知识库按来源引用，未命中不编造" />
+        </Form.Item>
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" shape="round" loading={aiBusy === "body"} onClick={aiGenerateBody}>AI 生成技能正文</Button>
+          <Typography.Text type="secondary" style={{ marginLeft: 12 }}>会填入下方正文，可生成后再改</Typography.Text>
+        </div>
+        <Form.Item name="body" tooltip="frontmatter 之外的正文；name/description/requiredRole/requiresKnowledge 由上方表单维护，请勿在正文里重复写 frontmatter"
+          label={<Space>技能正文（Markdown）<Button type="link" size="small" loading={aiBusy === "body"} onClick={aiGenerateBody}>AI 重新生成正文</Button></Space>}>
           <Input.TextArea rows={14} style={{ fontFamily: "monospace" }} placeholder="# 技能标题&#10;行为约定..." />
         </Form.Item>
       </Form>
