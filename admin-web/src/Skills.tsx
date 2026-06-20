@@ -117,11 +117,11 @@ function SkillCatalog() {
     {
       title: "技能", render: (_, r) => (<><b>{r.name}</b><br /><Typography.Text type="secondary">{r.description}</Typography.Text></>),
     },
-    { title: "角色要求", render: (_, r) => r.requiredRole ? <Tag color="purple">{ROLE_LABEL[r.requiredRole]}</Tag> : <Tag>不限</Tag> },
-    { title: "依赖知识库", render: (_, r) => r.requiresKnowledge ? <Tag color="orange">是</Tag> : <Tag>否</Tag> },
-    { title: "已分配员工", render: (_, r) => assignedCount.get(r.name) ?? 0 },
+    { title: "角色要求", width: 110, align: "center", render: (_, r) => r.requiredRole ? <Tag color="purple">{ROLE_LABEL[r.requiredRole]}</Tag> : <Tag>不限</Tag> },
+    { title: "依赖知识库", width: 120, align: "center", render: (_, r) => r.requiresKnowledge ? <Tag color="orange">是</Tag> : <Tag>否</Tag> },
+    { title: "已分配员工", width: 120, align: "center", render: (_, r) => assignedCount.get(r.name) ?? 0 },
     {
-      title: "操作", render: (_, r) => (<Space>
+      title: "操作", width: 180, align: "center", render: (_, r) => (<Space wrap={false}>
         <Button size="small" onClick={() => open("edit", r)}>编辑</Button>
         <Button danger size="small" disabled={(assignedCount.get(r.name) ?? 0) > 0} onClick={() => Modal.confirm({
           title: `删除技能 ${r.name}？`,
@@ -141,7 +141,8 @@ function SkillCatalog() {
         </div>
         <Button type="primary" shape="round" onClick={() => open("create")}>新建技能</Button>
       </div>
-      <Table rowKey="name" loading={loading} columns={columns} dataSource={rows} pagination={false} />
+      <Table rowKey="name" loading={loading} columns={columns} dataSource={rows} pagination={false}
+        tableLayout="fixed" scroll={{ x: 880 }} />
     </Space>
     <Drawer title={action === "create" ? "新建技能" : "编辑技能"} open={Boolean(action)} onClose={() => setAction(null)} width={560}
       extra={<Button type="primary" shape="round" onClick={() => form.submit()}>保存</Button>}>
