@@ -158,7 +158,7 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
     const affectedAgents = await resolveCollectionBoundAgents(collectionId, datasetId);
     await removeCollection(collectionId);
     const apply = affectedAgents.length > 0
-      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, resetAgentIds: affectedAgents })
+      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.delete", resetAgentIds: affectedAgents, revokedKnowledgeAgentIds: affectedAgents })
       : undefined;
     const resetSessions = apply?.resetSessions ?? [];
     appendAuditLog("DELETE", collectionId, {
@@ -168,7 +168,7 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
     });
     if (apply?.status === "failed") {
       res.status(502).json({
-        error: "文档已删除且当前会话已归档，但 Gateway 重启失败；需重试应用配置以清除进程内上下文",
+        error: "文档已删除且当前会话已归档，但应用配置失败；需重试应用配置以清除进程内上下文",
         resetSessions,
         apply,
       });
@@ -226,7 +226,7 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
     // 审计顺序：apply 之后才落库——若 apply 失败，审计记 FAILED；否则记 CREATED，使审计与 apply 终态一致。
     const apply =
       binding.boundAgents.length > 0
-        ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000 })
+        ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.base.create" })
         : undefined;
     const applyFailed = apply?.status === "failed";
     appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, {
@@ -301,6 +301,8 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
           stateDir: STATE_DIR,
           repoDir: REPO_DIR,
           timeoutMs: 60_000,
+          mode: "runtime-only",
+          operation: "knowledge.bind",
           resetAgentIds: revokedAgentIds,
           revokedKnowledgeAgentIds: revokedAgentIds,
         });
@@ -311,6 +313,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
           resetSessions: apply.resetSessions ?? [],
           applyStatus: apply.status,
           applyMessage: apply.message,
+          applyMode: apply.mode,
         });
         if (apply.status === "failed") {
           try {
@@ -319,7 +322,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
             for (const agentId of new Set([...revokedAgentIds, ...grantedAgentIds])) {
               try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
             }
-            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "knowledge.bind" });
           } catch {
             /* 复原失败：调用方 catch 会拿到原 apply 错误 */
           }
@@ -347,7 +350,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Req
             for (const agentId of affected) {
               try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
             }
-            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "knowledge.bind" });
           } catch {
             /* 复原失败：保持错误返回，运维可手工 apply */
           }

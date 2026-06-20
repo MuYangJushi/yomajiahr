@@ -9,7 +9,7 @@ export const configRouter = Router();
 
 configRouter.post("/config/apply", requireRole("admin"), async (_req: Request, res: Response) => {
   try {
-    const result = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+    const result = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "restart", operation: "gateway.restart" });
     const code = result.status === "success" ? 200 : result.status === "failed" ? 422 : 202;
     res.status(code).json(result);
   } catch (err) {

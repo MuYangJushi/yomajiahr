@@ -501,7 +501,7 @@ export async function createAgentProfile(
       store.agents.push(agentEntry);
       writeStore(store);
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.create" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`上线失败：${apply.message || apply.status}`);
       onApplied?.();
 
@@ -512,7 +512,7 @@ export async function createAgentProfile(
       try {
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         rmSync(wsDir, { recursive: true, force: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.create" })) as ApplyResult;
         if (rollbackApply.status !== "success") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
         }
@@ -617,7 +617,7 @@ export async function bindAgentToChannel(
       store.bindings.push({ agentId: input.agentId, match: { channel: input.domain, accountId } });
       writeStore(store);
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "restart", operation: "agent.channel.bind" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`绑定失败：${apply.message || apply.status}`);
       onApplied?.();
 
@@ -629,7 +629,7 @@ export async function bindAgentToChannel(
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
         else if (existsSync(ENV_PATH)) rmSync(ENV_PATH, { force: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "restart", operation: "agent.channel.bind" })) as ApplyResult;
         if (rollbackApply.status !== "success") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
         }
@@ -670,7 +670,7 @@ export async function unbindAgentFromChannel(
       // 账号与凭证作为平台资产保留（其他 agent 可复用）
       writeStore(store);
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "restart", operation: "agent.channel.unbind" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`解绑失败：${apply.message || apply.status}`);
       onApplied?.();
 
@@ -680,7 +680,7 @@ export async function unbindAgentFromChannel(
       let rollbackMessage = "已恢复原配置";
       try {
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "restart", operation: "agent.channel.unbind" })) as ApplyResult;
         if (rollbackApply.status !== "success") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
         }
@@ -944,7 +944,7 @@ export async function updateAgentProfile(
       }, { preserveMemory: true });
       writeStore(store);
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.update.profile" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
 
       rmSync(snap, { recursive: true, force: true });
@@ -955,7 +955,7 @@ export async function updateAgentProfile(
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.update.profile" })) as ApplyResult;
         if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -972,6 +972,8 @@ export interface AgentSkillsView {
   skills: string[];
   available: SkillMeta[];
   unmet: Array<{ skill: string; reason: string }>;
+  /** ADR-016 §5.1：技能/知识库绑定状态不匹配的提示（不自动修复）。 */
+  warnings: Array<{ code: string; message: string }>;
 }
 
 /** 计算技能依赖未满足项（requiresKnowledge 但员工未绑 FastGPT 库）。仅提示，不阻断分配。 */
@@ -993,13 +995,32 @@ export function getAgentSkillsView(agentId: string): AgentSkillsView {
   const agent = agents.find((a) => a.id === agentId);
   if (!agent) throw new Error(`agent 不存在：${agentId}`);
   const skills = agent.skills ?? [];
-  return { skills, available: listSkillMetas(), unmet: computeSkillUnmet(agentId, skills) };
+  return { skills, available: listSkillMetas(), unmet: computeSkillUnmet(agentId, skills), warnings: computeSkillWarnings(agentId, skills) };
+}
+
+/**
+ * ADR-016 §5.1：技能与知识库绑定状态不匹配的提示（只提示，不自动修复，不阻断）。
+ * - 已绑知识库但未分配任何 requiresKnowledge 知识问答类 skill → 提示缺少问答行为规范。
+ * - 分配了 requiresKnowledge skill 但未绑知识库 → 沿用 unmet，不重复 warning。
+ */
+function computeSkillWarnings(agentId: string, skills: string[]): Array<{ code: string; message: string }> {
+  const hasKb = agentHasKbBinding(agentId);
+  const hasQaSkill = skills.some((name) => getSkill(name)?.requiresKnowledge);
+  const warnings: Array<{ code: string; message: string }> = [];
+  if (hasKb && !hasQaSkill) {
+    warnings.push({
+      code: "kb-without-qa-skill",
+      message: "已绑定知识库，但未分配知识问答类技能。该员工可以访问知识库工具，但缺少问答行为规范（如先检索、按来源引用、未命中不编造），建议分配 hr-policy-qa 等知识问答技能。",
+    });
+  }
+  return warnings;
 }
 
 export interface AgentSkillsUpdateResult {
   before: string[];
   after: string[];
   unmet: Array<{ skill: string; reason: string }>;
+  warnings: Array<{ code: string; message: string }>;
   apply: ApplyResult;
 }
 
@@ -1039,18 +1060,18 @@ export async function updateAgentSkills(id: string, nextSkills: string[]): Promi
       // 重渲染 workspace（按新 skills 刷 AGENTS.md 的技能列表 + 待配置状态）。
       rerenderAgentWorkspace(id);
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.skill.update" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`技能更新失败：${apply.message || apply.status}`);
 
       rmSync(snap, { recursive: true, force: true });
-      return { before, after: dedup, unmet: computeSkillUnmet(id, dedup), apply };
+      return { before, after: dedup, unmet: computeSkillUnmet(id, dedup), warnings: computeSkillWarnings(id, dedup), apply };
     } catch (err) {
       let rollbackMessage = "已恢复原配置";
       try {
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "agent.skill.update" })) as ApplyResult;
         if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -1196,6 +1217,9 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
     const agent = store.agents.find((a) => a.id === id);
     if (!agent) throw new Error(`agent 不存在：${id}`);
     if (isProtectedAgent(agent)) throw new Error("内置数字员工不能删除");
+    // ADR-016 §3.1：删除带渠道绑定的 agent 等同解绑渠道 → restart；纯无渠道 → runtime-only。
+    const hadChannels = store.bindings.some((b) => b.agentId === id);
+    const deleteMode: "restart" | "runtime-only" = hadChannels ? "restart" : "runtime-only";
     const wsDir = workspaceDir(id);
     const snap = mkdtempSync(join(tmpdir(), "orch-delete-"));
     cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
@@ -1211,7 +1235,7 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
       unbindAgentFromKnowledge(id);
       rmSync(wsDir, { recursive: true, force: true });
 
-      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: deleteMode, operation: "agent.delete" })) as ApplyResult;
       if (apply.status !== "success") throw new Error(`删除失败：${apply.message || apply.status}`);
       rmSync(join(STATE_DIR, "agents", id), { recursive: true, force: true });
       rmSync(snap, { recursive: true, force: true });
@@ -1224,7 +1248,7 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
         else rmSync(ENV_PATH, { force: true });
         rmSync(wsDir, { recursive: true, force: true });
         if (existsSync(join(snap, "workspace"))) cpSync(join(snap, "workspace"), wsDir, { recursive: true });
-        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: deleteMode, operation: "agent.delete" })) as ApplyResult;
         if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;

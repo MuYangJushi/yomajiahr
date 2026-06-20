@@ -134,3 +134,57 @@ test("agentsUsingSkill 读 store.agents[].skills", () => {
   // 清理 store
   writeFileSync(join(stateDir, "config-store", "agents.json"), "[]\n");
 });
+
+// ADR-016 §1：SKILL.md frontmatter emoji/tags 往返 + 旧技能无字段兼容。
+
+test("createSkill 写 emoji/tags frontmatter，getSkill 读回一致", () => {
+  createSkill({
+    name: "leave-assistant",
+    description: "假勤助手",
+    requiredRole: "employee",
+    requiresKnowledge: true,
+    emoji: "🌴",
+    tags: ["hr", "leave"],
+    body: "# 假勤\n",
+  });
+  const s = getSkill("leave-assistant")!;
+  assert.equal(s.emoji, "🌴");
+  assert.deepEqual(s.tags, ["hr", "leave"]);
+  // 文件内容包含 emoji/tags 行
+  const text = readFileSync(join(stateDir, "skills", "leave-assistant", "SKILL.md"), "utf-8");
+  assert.match(text, /^emoji: 🌴$/m);
+  assert.match(text, /^tags: \[hr, leave\]$/m);
+});
+
+test("updateSkill 改 emoji/tags，传 null 清除", () => {
+  updateSkill("leave-assistant", { emoji: "🗓️", tags: ["vacation"] });
+  const s = getSkill("leave-assistant")!;
+  assert.equal(s.emoji, "🗓️");
+  assert.deepEqual(s.tags, ["vacation"]);
+  // null 清除
+  updateSkill("leave-assistant", { emoji: null, tags: null });
+  const s2 = getSkill("leave-assistant")!;
+  assert.equal(s2.emoji, undefined);
+  assert.equal(s2.tags, undefined);
+});
+
+test("旧技能无 emoji/tags 字段 → 读回 undefined，不报错（向后兼容）", () => {
+  seedSkill("legacy-skill", "name: legacy-skill\ndescription: 旧技能\nrequiresKnowledge: true");
+  const s = getSkill("legacy-skill")!;
+  assert.equal(s.emoji, undefined);
+  assert.equal(s.tags, undefined);
+  assert.equal(s.requiresKnowledge, true);
+});
+
+test("listSkillMetas 透出 emoji/tags", () => {
+  const metas = listSkillMetas();
+  const leave = metas.find((m) => m.name === "leave-assistant");
+  // 若此前 test 已 update 为 null，重新设回以便断言
+  if (!leave?.emoji) {
+    updateSkill("leave-assistant", { emoji: "🌴", tags: ["hr", "leave"] });
+  }
+  const metas2 = listSkillMetas();
+  const m = metas2.find((x) => x.name === "leave-assistant")!;
+  assert.equal(m.emoji, "🌴");
+  assert.deepEqual(m.tags, ["hr", "leave"]);
+});

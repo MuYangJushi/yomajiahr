@@ -346,6 +346,9 @@ test("createAgentProfile 允许空 skills + 无渠道，listAgents 派生 pendin
   assert.equal(result.agent.id, "profile-only");
   assert.deepEqual(result.agent.skills, []);
   assert.equal(result.agent.profile?.jobTitle, "薪酬顾问");
+  // ADR-016 §3：创建 agent 走 runtime-only，不重启 gateway。
+  assert.equal(result.apply.mode, "runtime-only");
+  assert.equal(result.apply.status, "success");
   // 关键：profile 不在 store 的"运行时字段"列表里（id/role/name/skills/workspace/tools/heartbeat），
   // 但 profile 字段本身保留供 workspace 渲染。
   const agents = JSON.parse(readFileSync(join(stateDir, "config-store", "agents.json"), "utf-8"));
@@ -373,11 +376,14 @@ test("bindAgentToChannel：新建账号 + 占用检查 + 同 agent 同渠道重�
   // 验证路径要 probe 找到 profile-only，给 fake openclaw 注一个
   process.env.OPENCLAW_TEST_PROBE_ACCOUNTS = "profile-only";
   // 新建渠道
-  await bindAgentToChannel({
+  const bindResult = await bindAgentToChannel({
     agentId: "profile-only",
     domain: "feishu",
     credentials: { clientId: "cli-bind-1", clientSecret: "sec-bind-1" },
   });
+  // ADR-016 §3：渠道绑定走 restart。
+  assert.equal(bindResult.apply.mode, "restart");
+  assert.equal(bindResult.apply.status, "success");
   const bindings = JSON.parse(readFileSync(join(stateDir, "config-store", "bindings.json"), "utf-8"));
   assert.ok(bindings.some((b: any) => b.agentId === "profile-only" && b.match.accountId === "profile-only"));
 

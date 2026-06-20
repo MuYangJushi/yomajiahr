@@ -38,6 +38,8 @@ const CreateSchema = z.object({
   description: z.string().trim().min(1, "description 不能为空").max(500),
   requiredRole: RoleSchema.optional(),
   requiresKnowledge: z.boolean().optional(),
+  emoji: z.string().trim().max(16).optional(),
+  tags: z.array(z.string().trim()).max(20).optional(),
   body: z.string().optional(),
 });
 
@@ -45,6 +47,8 @@ const UpdateSchema = z.object({
   description: z.string().trim().min(1).max(500).optional(),
   requiredRole: RoleSchema.nullable().optional(),
   requiresKnowledge: z.boolean().optional(),
+  emoji: z.string().trim().max(16).nullable().optional(),
+  tags: z.array(z.string().trim()).max(20).nullable().optional(),
   body: z.string().optional(),
 });
 
@@ -96,6 +100,8 @@ skillsRouter.post("/config/skills", requireRole("ops"), (req: Request, res: Resp
       description: parsed.data.description,
       requiredRole: parsed.data.requiredRole as SkillRole | undefined,
       requiresKnowledge: parsed.data.requiresKnowledge,
+      emoji: parsed.data.emoji,
+      tags: parsed.data.tags,
       body: parsed.data.body ?? "",
     });
     appendAuditLog("skill.create", skill.name, {
@@ -103,6 +109,8 @@ skillsRouter.post("/config/skills", requireRole("ops"), (req: Request, res: Resp
       description: skill.description,
       requiredRole: skill.requiredRole,
       requiresKnowledge: skill.requiresKnowledge,
+      emoji: skill.emoji,
+      tags: skill.tags,
       operator,
     });
     res.status(201).json({ skill });
@@ -122,6 +130,8 @@ skillsRouter.put("/config/skills/:name", requireRole("ops"), (req: Request, res:
       description: parsed.data.description,
       requiredRole: parsed.data.requiredRole as SkillRole | null | undefined,
       requiresKnowledge: parsed.data.requiresKnowledge,
+      emoji: parsed.data.emoji,
+      tags: parsed.data.tags,
       body: parsed.data.body,
     });
     appendAuditLog("skill.update", skill.name, {
@@ -129,6 +139,8 @@ skillsRouter.put("/config/skills/:name", requireRole("ops"), (req: Request, res:
       description: skill.description,
       requiredRole: skill.requiredRole,
       requiresKnowledge: skill.requiresKnowledge,
+      emoji: skill.emoji,
+      tags: skill.tags,
       operator,
     });
     res.json({ skill });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { ProForm, ProFormDependency, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
-import { awaitApplyJob, createAgent, fetchAgentTemplates, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate } from "./api";
+import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate } from "./api";
 
 // 招募向导（ADR-013 #N）。5 步切分对标 ClawMax 招募向导
 // （Team Type → Composition → Communication → Workflows → Preview），本土化为：
@@ -48,7 +48,8 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
               onClose();
               awaitApplyJob(jobId).then((job) => {
                 if (job.status === "success") {
-                  message.success({ content: "数字员工已招募，技能与渠道待独立配置", key });
+                  const mode = (job.result as any)?.apply?.mode;
+                  message.success({ content: `数字员工已招募，可在「对话」即时试聊（${applyModeLabel(mode)}）`, key });
                   onCreated();
                 } else {
                   message.error({ content: `招募失败：${job.message || job.status}`, key, duration: 6 });
