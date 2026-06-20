@@ -251,8 +251,8 @@ export async function fetchChannelAssets(): Promise<{ channels: ChannelAsset[]; 
 export async function probeChannels(): Promise<ChannelHealth[]> {
   return (await api.post("/config/channel-assets/probe")).data.health;
 }
-export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<void> {
-  await api.delete(`/config/channel-assets/${type}/${encodeURIComponent(id)}`);
+export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string): Promise<{ deleted?: { type: string; id: string }; jobId?: string; status?: string }> {
+  return (await api.delete(`/config/channel-assets/${type}/${encodeURIComponent(id)}`)).data;
 }
 export async function createChannelAsset(input: {
   id: string; type: "feishu" | "dingtalk"; displayName: string; policy?: ChannelAsset["policy"];

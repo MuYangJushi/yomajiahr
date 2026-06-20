@@ -127,10 +127,29 @@ channelsRouter.delete("/config/channel-assets/:type/:id", requireRole("ops"), as
   const type = String(req.params.type) as "feishu" | "dingtalk";
   const id = String(req.params.id);
   if (type !== "feishu" && type !== "dingtalk") return res.status(400).json({ error: "type 非法" });
+  const operator = req.user?.platformUserId || "";
+  // 删除渠道账号走 restart apply（停 channel client + 探活），生产常 >30s，不能在 HTTP 请求里同步等
+  // （否则 triggerApply 超时返回 pending → mutateChannels 回滚 → 删除被撤销）。与 PATCH/bind 一致走
+  // enqueueApplyJob + 800ms race：快则同步返回，慢则 202 + jobId，前端 trackApplyJob 轮询终态。
   try {
-    await deleteChannelAsset(type, id);
-    appendAuditLog("channel.delete", id, { type, id, operator: req.user?.platformUserId || "" });
-    res.json({ deleted: { type, id } });
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        await deleteChannelAsset(type, id);
+        appendAuditLog("channel.delete", id, { type, id, operator });
+        return { deleted: { type, id } };
+      },
+      "channel.delete",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      return res.status(message === "CHANNEL_IN_USE" ? 409 : message === "账号不存在" ? 404 : 400).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     const message = (err as Error).message;
     res.status(message === "CHANNEL_IN_USE" ? 409 : message === "账号不存在" ? 404 : 500).json({ error: message });
