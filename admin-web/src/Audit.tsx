@@ -1,11 +1,12 @@
-// 审计页（#44 vanilla→React）。横切设施：所有管理写操作的统一台账，独立一级菜单。
-// 后端 `auditRouter`（GET /audit-log、/audit-log/export）逻辑不变，前端照 Agents/Knowledge 模式用 antd 重写。
-import { useEffect, useRef, useState } from "react";
-import { Button, DatePicker, Input, Select, Space, Tag } from "antd";
-import { DownloadOutlined } from "@ant-design/icons";
-import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-components";
+// 审计页（#44 vanilla→React，脱离 ProTable）。横切设施：所有管理写操作的统一台账。
+// 后端 `auditRouter`（GET /audit-log、/audit-log/export）逻辑不变；前端用 antd Table + 手动服务端分页。
+import { useCallback, useEffect, useState } from "react";
+import { Button, DatePicker, Input, Select, Space, Table, Tag } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import { DownloadOutlined, ReloadOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { auditExportUrl, fetchAuditLog, type AuditEntry, type AuditFilters } from "./api";
+import { PageTopbar, TableCard } from "./shell";
 
 // 动作 → 中文标签 + 配色（含 #40 起新增的 KB_IMPORT、未来 CREATE_KB/BIND_KB）。
 const ACTION_META: Record<string, { label: string; color: string }> = {
@@ -19,21 +20,42 @@ const ACTION_META: Record<string, { label: string; color: string }> = {
 };
 
 const ACTION_OPTIONS = Object.entries(ACTION_META).map(([value, m]) => ({ value, label: m.label }));
+const PAGE_SIZE = 50;
 
 export default function Audit() {
-  const actionRef = useRef<ActionType>();
   const [filters, setFilters] = useState<AuditFilters>({});
+  const [data, setData] = useState<AuditEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    actionRef.current?.reload();
-  }, [filters]);
+  const load = useCallback(async (f: AuditFilters, p: number) => {
+    setLoading(true);
+    try {
+      const res = await fetchAuditLog(f, p, PAGE_SIZE);
+      setData(res.logs);
+      setTotal(res.total);
+    } catch {
+      setData([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const columns: ProColumns<AuditEntry>[] = [
+  // 筛选变化回到第 1 页并重载；分页变化只重载。
+  useEffect(() => { void load(filters, page); }, [filters, page, load]);
+
+  const columns: ColumnsType<AuditEntry> = [
     {
       title: "时间",
       dataIndex: "timestamp",
       width: 180,
-      render: (_, r) => dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss"),
+      render: (_, r) => (
+        <span style={{ fontFamily: '"SF Mono", Menlo, monospace' }}>
+          {dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss")}
+        </span>
+      ),
     },
     {
       title: "动作",
@@ -57,32 +79,23 @@ export default function Audit() {
   ];
 
   return (
-    <ProTable<AuditEntry>
-      headerTitle="审计台账"
-      actionRef={actionRef}
-      rowKey={(r) => `${r.timestamp}-${r.action}-${r.file}`}
-      columns={columns}
-      search={false}
-      options={{ reload: true, density: false, setting: false }}
-      toolbar={{
-        filter: (
-          <Space wrap>
+    <>
+      <PageTopbar
+        title="审计台账"
+        right={
+          <>
             <Select
               allowClear
               placeholder="动作"
-              style={{ width: 140 }}
+              style={{ width: 120 }}
               options={ACTION_OPTIONS}
-              onChange={(action) => {
-                setFilters((f) => ({ ...f, action }));
-              }}
+              onChange={(action) => { setFilters((f) => ({ ...f, action })); setPage(1); }}
             />
             <Input.Search
               allowClear
               placeholder="文档编号"
-              style={{ width: 160 }}
-              onSearch={(doc_id) => {
-                setFilters((f) => ({ ...f, doc_id: doc_id || undefined }));
-              }}
+              style={{ width: 150 }}
+              onSearch={(doc_id) => { setFilters((f) => ({ ...f, doc_id: doc_id || undefined })); setPage(1); }}
             />
             <DatePicker.RangePicker
               onChange={(range) => {
@@ -91,26 +104,38 @@ export default function Audit() {
                   from: range?.[0] ? range[0].format("YYYY-MM-DD") : undefined,
                   to: range?.[1] ? range[1].format("YYYY-MM-DD") : undefined,
                 }));
+                setPage(1);
               }}
             />
-          </Space>
-        ),
-        actions: [
-          <Button
-            key="export"
-            icon={<DownloadOutlined />}
-            href={auditExportUrl(filters)}
-            target="_blank"
-          >
-            导出 CSV
-          </Button>,
-        ],
-      }}
-      request={async (params) => {
-        const data = await fetchAuditLog(filters, params.current ?? 1, params.pageSize ?? 50);
-        return { data: data.logs, total: data.total, success: true };
-      }}
-      pagination={{ pageSize: 50, showSizeChanger: false }}
-    />
+            <Button shape="round" icon={<ReloadOutlined />} onClick={() => void load(filters, page)} />
+            <Button
+              shape="round"
+              icon={<DownloadOutlined />}
+              href={auditExportUrl(filters)}
+              target="_blank"
+            >
+              导出 CSV
+            </Button>
+          </>
+        }
+      />
+      <TableCard>
+        <Table<AuditEntry>
+          rowKey={(r) => `${r.timestamp}-${r.action}-${r.file}`}
+          loading={loading}
+          dataSource={data}
+          columns={columns}
+          pagination={{
+            current: page,
+            pageSize: PAGE_SIZE,
+            total,
+            showSizeChanger: false,
+            onChange: (p) => setPage(p),
+            showTotal: (t) => `总共 ${t} 条`,
+          }}
+          onChange={(pag) => setPage(pag.current ?? 1)}
+        />
+      </TableCard>
+    </>
   );
 }

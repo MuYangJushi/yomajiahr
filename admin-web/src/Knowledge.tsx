@@ -5,12 +5,12 @@
 import { useEffect, useState } from "react";
 import {
   Alert, Button, Card, Drawer, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Spin, Switch,
-  Tabs, Tag, Typography, Upload, message,
+  Table, Tabs, Tag, Typography, Upload, message,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   ArrowLeftOutlined, DeleteOutlined, EyeOutlined, InboxOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
 } from "@ant-design/icons";
-import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   awaitApplyJob,
   createKnowledgeBase,
@@ -30,6 +30,7 @@ import {
   type KnowledgeBinding,
   type KnowledgeHealth,
 } from "./api";
+import { PageTopbar, TableCard } from "./shell";
 
 function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; onRefresh: () => void }) {
   if (!health) return <Spin />;
@@ -54,7 +55,7 @@ function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; o
         </Space>
       }
       action={
-        <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh}>
+        <Button size="small" shape="round" icon={<ReloadOutlined />} onClick={onRefresh}>
           刷新
         </Button>
       }
@@ -149,7 +150,7 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
   };
   useEffect(load, []);
 
-  const columns: ProColumns<KnowledgeBinding>[] = [
+  const columns: ColumnsType<KnowledgeBinding> = [
     {
       title: "名称",
       dataIndex: "name",
@@ -166,7 +167,13 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
       width: 110,
       render: (_, r) => <Tag color={r.provider === "fastgpt" ? "blue" : "default"}>{r.provider}</Tag>,
     },
-    { title: "外部 KB ID", dataIndex: "externalKbId", copyable: true, render: (_, r) => r.externalKbId || "—" },
+    {
+      title: "外部 KB ID",
+      dataIndex: "externalKbId",
+      render: (_, r) => r.externalKbId
+        ? <Typography.Text copyable style={{ color: "#48484a" }}>{r.externalKbId}</Typography.Text>
+        : "—",
+    },
     {
       title: "绑定数字员工",
       render: (_, r) => (r.boundAgents.length ? r.boundAgents.map((a) => <Tag key={a}>{a}</Tag>) : "—"),
@@ -182,21 +189,26 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
 
   return (
     <>
-      <ProTable<KnowledgeBinding>
-        headerTitle="知识库列表"
-        rowKey="id"
-        loading={loading}
-        search={false}
-        pagination={false}
-        options={{ reload: () => load(), density: false, setting: false }}
-        columns={columns}
-        dataSource={bases}
-        toolBarRender={() => [
-          <Button key="new" type="primary" shape="round" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            新建知识库
-          </Button>,
-        ]}
+      <PageTopbar
+        title="知识库列表"
+        right={
+          <>
+            <Button shape="round" icon={<ReloadOutlined />} onClick={load} />
+            <Button type="primary" shape="round" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              新建知识库
+            </Button>
+          </>
+        }
       />
+      <TableCard>
+        <Table<KnowledgeBinding>
+          rowKey="id"
+          loading={loading}
+          dataSource={bases}
+          columns={columns}
+          pagination={false}
+        />
+      </TableCard>
       <NewKbModal open={modalOpen} agents={agents} onClose={() => setModalOpen(false)} onCreated={load} />
     </>
   );
@@ -403,7 +415,7 @@ function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
     return <Tag color={item.color}>{item.label}</Tag>;
   };
 
-  const columns: ProColumns<PlatformCollection>[] = [
+  const columns: ColumnsType<PlatformCollection> = [
     { title: "文档", dataIndex: "title", ellipsis: true },
     { title: "切片数", dataIndex: "chunkCount", width: 100, render: (_, row) => row.chunkCount ?? "—" },
     { title: "状态", dataIndex: "indexStatus", width: 220, render: (_, row) => status(row) },
@@ -456,16 +468,19 @@ function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
         <p className="ant-upload-text">点击或拖拽文档到此处导入</p>
         <p className="ant-upload-hint">原始文件由 FastGPT 解析、切片并向量化，完成状态可在下方查看。</p>
       </Upload.Dragger>
-      <ProTable<PlatformCollection>
-        headerTitle="文档与向量化状态"
-        rowKey="externalDocId"
-        loading={loading}
-        search={false}
-        pagination={false}
-        dataSource={[...pending, ...collections]}
-        columns={columns}
-        options={{ reload: () => void load(), density: false, setting: false }}
+      <PageTopbar
+        title={<span style={{ fontSize: 16 }}>文档与向量化状态</span>}
+        right={<Button shape="round" icon={<ReloadOutlined />} onClick={() => void load()} />}
       />
+      <TableCard>
+        <Table<PlatformCollection>
+          rowKey="externalDocId"
+          loading={loading}
+          dataSource={[...pending, ...collections]}
+          columns={columns}
+          pagination={false}
+        />
+      </TableCard>
       <Drawer title={`切片预览 · ${chunkTitle}`} width={720} open={chunkOpen} onClose={() => setChunkOpen(false)}>
         {chunkLoading ? <Spin /> : (
           <List
