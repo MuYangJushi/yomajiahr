@@ -8,8 +8,6 @@ const ERROR_MSG: Record<string, string> = {
 };
 
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
-
   .login-root {
     min-height: 100vh;
     display: flex;
@@ -30,13 +28,13 @@ const STYLES = `
   .blob-1 {
     width: 520px; height: 520px;
     top: -140px; right: -80px;
-    background: radial-gradient(circle, rgba(14,165,160,0.22) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(10,132,255,0.18) 0%, transparent 70%);
     animation: blobFloat1 9s ease-in-out infinite alternate;
   }
   .blob-2 {
     width: 440px; height: 440px;
     bottom: -130px; left: -100px;
-    background: radial-gradient(circle, rgba(99,102,241,0.16) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(0,113,227,0.12) 0%, transparent 70%);
     animation: blobFloat2 11s ease-in-out infinite alternate;
   }
 
@@ -57,7 +55,7 @@ const STYLES = `
     position: absolute;
     top: 0; left: 44px; right: 44px;
     height: 2.5px;
-    background: linear-gradient(90deg, #0ea5a0, #6366f1);
+    background: linear-gradient(120deg, #00c6fb 0%, #0a84ff 45%, #0040dd 100%);
     border-radius: 0 0 3px 3px;
   }
 
@@ -71,16 +69,16 @@ const STYLES = `
   .brand-icon {
     width: 60px; height: 60px;
     border-radius: 16px;
-    background: linear-gradient(135deg, #0ea5a0 0%, #6366f1 100%);
+    background: linear-gradient(135deg, #00c6fb 0%, #0a84ff 45%, #0040dd 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
-    box-shadow: 0 6px 24px rgba(14,165,160,0.3);
+    box-shadow: 0 6px 24px rgba(0,113,227,0.28);
   }
 
   .brand-title {
-    font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', 'SimSun', serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
     font-size: 22px;
     font-weight: 700;
     color: #1a2a3a;
@@ -145,12 +143,12 @@ const STYLES = `
   }
 
   .btn-feishu {
-    background: linear-gradient(130deg, #0ea5a0 0%, #6366f1 100%);
+    background: linear-gradient(130deg, #00c6fb 0%, #0a84ff 45%, #0040dd 100%);
     color: white;
-    box-shadow: 0 3px 14px rgba(14,165,160,0.28);
+    box-shadow: 0 3px 14px rgba(0,113,227,0.28);
   }
   .btn-feishu:hover:not(:disabled) {
-    box-shadow: 0 7px 22px rgba(14,165,160,0.38);
+    box-shadow: 0 7px 22px rgba(0,113,227,0.38);
     transform: translateY(-1px);
   }
   .btn-feishu:active:not(:disabled) { transform: translateY(0); }
@@ -162,13 +160,14 @@ const STYLES = `
   }
 
   .btn-ding {
-    background: #ffffff;
-    border: 1.5px solid #3296fa;
-    color: #3296fa;
+    background: linear-gradient(135deg, #eaf3fe, #d6e7fc);
+    border: 1px solid #bcd6f5;
+    color: #0071e3;
+    font-weight: 600;
     font-size: 14px;
   }
   .btn-ding:hover:not(:disabled) {
-    box-shadow: 0 6px 18px rgba(50,150,250,0.22);
+    box-shadow: 0 6px 18px rgba(0,113,227,0.18);
     transform: translateY(-1px);
   }
   .btn-ding:active:not(:disabled) { transform: translateY(0); }
@@ -199,7 +198,7 @@ const STYLES = `
     font-size: 14px;
     outline: none;
   }
-  .demo-access-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+  .demo-access-input:focus { border-color: #0071e3; box-shadow: 0 0 0 3px rgba(0,113,227,0.12); }
   .demo-access-submit {
     border: none;
     border-radius: 10px;
@@ -234,7 +233,7 @@ const STYLES = `
   .spinner {
     width: 26px; height: 26px;
     border: 2.5px solid #dde3ec;
-    border-top-color: #0ea5a0;
+    border-top-color: #0071e3;
     border-radius: 50%;
     animation: spin 0.65s linear infinite;
     display: inline-block;

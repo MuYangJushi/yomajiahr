@@ -10,18 +10,23 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       locale={zhCN}
       theme={{
         token: {
-          colorPrimary: "#0ea5a0",
-          colorLink: "#0ea5a0",
-          colorLinkHover: "#0d8f8a",
+          colorPrimary: "#0071e3",
+          colorLink: "#0071e3",
+          colorLinkHover: "#0077ed",
+          colorSuccess: "#34c759",
+          colorWarning: "#ff9500",
+          colorError: "#ff3b30",
+          colorInfo: "#0071e3",
           borderRadius: 8,
           fontFamily:
-            '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif',
         },
         components: {
           Button: { borderRadius: 8 },
-          Table: { borderRadius: 10 },
-          Card: { borderRadius: 10 },
-          Modal: { borderRadius: 14 },
+          Table: { borderRadius: 12 },
+          Card: { borderRadius: 12 },
+          Modal: { borderRadius: 16 },
+          Tag: { borderRadiusSM: 6 },
         },
       }}
     >

@@ -144,6 +144,7 @@ export default function Agents() {
           <Button
             key="new"
             type="primary"
+            shape="round"
             icon={<PlusOutlined />}
             disabled={!channels}
             onClick={() => setWizardOpen(true)}

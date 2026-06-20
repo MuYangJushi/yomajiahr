@@ -174,7 +174,7 @@ function ProfileEditor({ jobTitle, seedProfile }: { jobTitle: string; seedProfil
       <ProFormText name={["profile", "jobTitle"]} hidden initialValue={jobTitle} />
       {/* hero：一句话描述 → AI 生成完整档案（对标 ClawMax「描述→填全表」，而非单字段补全） */}
       <ProFormTextArea name="hints" label="一句话描述这名员工（可选）" fieldProps={{ rows: 2 }} placeholder="如：负责新员工入离职手续答疑与跟进，语气亲切耐心" />
-      <Button type="primary" loading={busy === "all"} onClick={() => generate()}>AI 生成完整档案</Button>
+      <Button type="primary" shape="round" loading={busy === "all"} onClick={() => generate()}>AI 生成完整档案</Button>
       <Typography.Text type="secondary" style={{ marginLeft: 12 }}>下方各段可逐条微调或单独重生成</Typography.Text>
       {PROFILE_FIELDS.map((field) => (
         <div key={field.key} style={{ marginTop: 12 }}>
