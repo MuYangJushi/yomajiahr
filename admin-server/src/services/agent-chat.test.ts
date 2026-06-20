@@ -48,9 +48,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$msg" in
-  SLOW) sleep 10; echo '{"finalAssistantVisibleText":"慢回复"}'; exit 0 ;;
+  SLOW) sleep 10; echo '{"meta":{"finalAssistantVisibleText":"慢回复"}}'; exit 0 ;;
   FAIL) echo "boom" >&2; exit 3 ;;
-  EMPTY) echo '{"finalAssistantVisibleText":""}'; exit 0 ;;
+  EMPTY) echo '{"meta":{"finalAssistantVisibleText":""}}'; exit 0 ;;
+  PAYLOADS) echo '{"payloads":[{"text":"pl回复"}]}'; exit 0 ;;
   *)
     # 写一份 session jsonl（含 user + assistant 消息）
     sdir="\${OPENCLAW_STATE_DIR}/agents/chat-agent/sessions"
@@ -58,7 +59,7 @@ case "$msg" in
     f="$sdir/$sid.jsonl"
     printf '%s\\n' "{\\"type\\":\\"message\\",\\"timestamp\\":\\"2026-06-21T00:00:00Z\\",\\"message\\":{\\"role\\":\\"user\\",\\"content\\":[{\\"type\\":\\"text\\",\\"text\\":\\"$msg\\"}]}}" > "$f"
     printf '%s\\n' "{\\"type\\":\\"message\\",\\"timestamp\\":\\"2026-06-21T00:00:01Z\\",\\"message\\":{\\"role\\":\\"assistant\\",\\"content\\":[{\\"type\\":\\"text\\",\\"text\\":\\"回复:$msg\\"}]}}" >> "$f"
-    echo "{\\"finalAssistantVisibleText\\":\\"回复:$msg\\",\\"executionTrace\\":{\\"runner\\":\\"embedded\\"}}"
+    echo "{\\"meta\\":{\\"finalAssistantVisibleText\\":\\"回复:$msg\\",\\"executionTrace\\":{\\"runner\\":\\"embedded\\"}}}"
     exit 0 ;;
 esac
 `,
@@ -157,6 +158,11 @@ test("chatWithAgent：空回复 → EMPTY_REPLY 502", async () => {
     () => chatWithAgent({ agentId: "chat-agent", message: "EMPTY", sessionId: "empty-sid" }),
     (err: any) => err.code === "EMPTY_REPLY",
   );
+});
+
+test("chatWithAgent：payloads[0].text 回退解析（meta 缺失时）", async () => {
+  const r = await chatWithAgent({ agentId: "chat-agent", message: "PAYLOADS", sessionId: "payloads-sid" });
+  assert.equal(r.reply, "pl回复");
 });
 
 test("listSessions：返回元信息 + 摘要，按 updatedAt 倒序", async () => {
