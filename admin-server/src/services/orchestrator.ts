@@ -15,6 +15,7 @@ import { unbindAgentFromKnowledge, readKnowledgeStore } from "./knowledge.js";
 import { ENV_PATH, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type AgentEntry } from "./store.js";
 import { renderWorkspace, workspaceDir } from "./workspace.js";
+import { getSkill, listSkillMetas, type SkillMeta } from "./skills.js";
 
 // —— 进程级单飞锁：整段「装配→落盘→apply」串行，避免并发交错 ——
 let lock: Promise<unknown> = Promise.resolve();
@@ -948,6 +949,101 @@ export async function updateAgentProfile(
 
       rmSync(snap, { recursive: true, force: true });
       return { agent: next, apply };
+    } catch (err) {
+      let rollbackMessage = "已恢复原配置";
+      try {
+        cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
+        rmSync(wsDir, { recursive: true, force: true });
+        cpSync(join(snap, "workspace"), wsDir, { recursive: true });
+        const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+      } catch (rollbackErr) {
+        rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
+      } finally {
+        rmSync(snap, { recursive: true, force: true });
+      }
+      throw new Error(`${(err as Error).message}；${rollbackMessage}`);
+    }
+  });
+}
+
+/** 员工↔技能分配视图（ADR-015 §3）：当前技能 + 可分配技能元信息 + 依赖未满足提示（不阻断）。 */
+export interface AgentSkillsView {
+  skills: string[];
+  available: SkillMeta[];
+  unmet: Array<{ skill: string; reason: string }>;
+}
+
+/** 计算技能依赖未满足项（requiresKnowledge 但员工未绑 FastGPT 库）。仅提示，不阻断分配。 */
+function computeSkillUnmet(agentId: string, skills: string[]): Array<{ skill: string; reason: string }> {
+  const hasKb = agentHasKbBinding(agentId);
+  const unmet: Array<{ skill: string; reason: string }> = [];
+  for (const name of skills) {
+    const meta = getSkill(name);
+    if (meta?.requiresKnowledge && !hasKb) {
+      unmet.push({ skill: name, reason: "依赖知识库绑定未满足，前往「知识库」页绑定后该技能才可实际使用" });
+    }
+  }
+  return unmet;
+}
+
+/** 取员工技能分配视图（GET /config/agents/:id/skills）。 */
+export function getAgentSkillsView(agentId: string): AgentSkillsView {
+  const { agents } = readStore();
+  const agent = agents.find((a) => a.id === agentId);
+  if (!agent) throw new Error(`agent 不存在：${agentId}`);
+  const skills = agent.skills ?? [];
+  return { skills, available: listSkillMetas(), unmet: computeSkillUnmet(agentId, skills) };
+}
+
+export interface AgentSkillsUpdateResult {
+  before: string[];
+  after: string[];
+  unmet: Array<{ skill: string; reason: string }>;
+  apply: ApplyResult;
+}
+
+/**
+ * 更新员工技能集（ADR-015 §3，PUT /config/agents/:id/skills）。
+ * 校验：存在性（validateSkills）+ 角色兼容（requiredRole=admin 只能分给 admin，阻断）；
+ * 依赖未满足（requiresKnowledge 未绑库）仅记 unmet、不阻断。
+ * 经 store→generate→validate→apply 落地 + 重渲染 workspace；失败回滚 store+workspace。
+ */
+export async function updateAgentSkills(id: string, nextSkills: string[]): Promise<AgentSkillsUpdateResult> {
+  return withConfigLock(async () => {
+    validateSkills(nextSkills, { allowEmpty: true });
+    const store = readStore();
+    const index = store.agents.findIndex((a) => a.id === id);
+    if (index < 0) throw new Error(`agent 不存在：${id}`);
+    const agent = store.agents[index]!;
+    for (const name of nextSkills) {
+      const meta = getSkill(name);
+      if (meta?.requiredRole === "admin" && agent.role !== "admin") {
+        throw new Error(`技能 ${name} 要求 admin 角色，该数字员工为 ${agent.role}`);
+      }
+    }
+    // 去重保序
+    const dedup = Array.from(new Set(nextSkills));
+    const before = agent.skills ?? [];
+    const wsDir = workspaceDir(id);
+    if (!existsSync(wsDir)) throw new Error(`agent workspace 不存在：${wsDir}`);
+
+    const snap = mkdtempSync(join(tmpdir(), "orch-skills-"));
+    cpSync(STORE_DIR, join(snap, "config-store"), { recursive: true });
+    cpSync(wsDir, join(snap, "workspace"), { recursive: true });
+    try {
+      const current = store.agents[index]!;
+      const next: AgentEntry = { ...current, skills: dedup };
+      store.agents[index] = next;
+      writeStore(store);
+      // 重渲染 workspace（按新 skills 刷 AGENTS.md 的技能列表 + 待配置状态）。
+      rerenderAgentWorkspace(id);
+
+      const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR })) as ApplyResult;
+      if (apply.status !== "success") throw new Error(`技能更新失败：${apply.message || apply.status}`);
+
+      rmSync(snap, { recursive: true, force: true });
+      return { before, after: dedup, unmet: computeSkillUnmet(id, dedup), apply };
     } catch (err) {
       let rollbackMessage = "已恢复原配置";
       try {

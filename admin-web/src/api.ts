@@ -112,9 +112,21 @@ export interface AgentRow {
   channels: Array<{ domain: string; accountId: string }>;
   derived: { pendingSkills: boolean; pendingChannels: boolean };
 }
-export interface Skill {
+export type SkillRole = "employee" | "admin";
+export interface SkillMeta {
   name: string;
   description: string;
+  requiredRole?: SkillRole;
+  requiresKnowledge?: boolean;
+}
+export interface Skill extends SkillMeta {
+  body: string;
+}
+/** 技能分配视图（GET /config/agents/:id/skills）。 */
+export interface SkillAssignment {
+  skills: string[];
+  available: SkillMeta[];
+  unmet: Array<{ skill: string; reason: string }>;
 }
 export interface ChannelsInfo {
   supported: string[];
@@ -236,8 +248,41 @@ export async function fetchChannelOnboarding(id: string): Promise<OnboardingSess
 export async function cancelChannelAssetOnboarding(id: string): Promise<void> {
   await api.delete(`/config/channel-assets/onboarding/${id}`);
 }
-export async function fetchSkills(): Promise<Skill[]> {
+export async function fetchSkills(): Promise<SkillMeta[]> {
   return (await api.get("/config/skills")).data.skills;
+}
+// —— 技能可编辑化（ADR-015 §1）：平台内 CRUD ——
+export async function fetchSkill(name: string): Promise<Skill> {
+  return (await api.get(`/config/skills/${encodeURIComponent(name)}`)).data.skill;
+}
+export interface CreateSkillInput {
+  name: string;
+  description: string;
+  requiredRole?: SkillRole;
+  requiresKnowledge?: boolean;
+  body?: string;
+}
+export async function createSkill(input: CreateSkillInput): Promise<Skill> {
+  return (await api.post("/config/skills", input)).data.skill;
+}
+export interface UpdateSkillInput {
+  description?: string;
+  requiredRole?: SkillRole | null;
+  requiresKnowledge?: boolean;
+  body?: string;
+}
+export async function updateSkill(name: string, input: UpdateSkillInput): Promise<Skill> {
+  return (await api.put(`/config/skills/${encodeURIComponent(name)}`, input)).data.skill;
+}
+export async function deleteSkill(name: string): Promise<void> {
+  await api.delete(`/config/skills/${encodeURIComponent(name)}`);
+}
+// —— 员工↔技能分配（ADR-015 §3）——
+export async function fetchAgentSkills(id: string): Promise<SkillAssignment> {
+  return (await api.get(`/config/agents/${encodeURIComponent(id)}/skills`)).data;
+}
+export async function saveAgentSkills(id: string, skills: string[]): Promise<SkillAssignment & { jobId?: string }> {
+  return (await api.put(`/config/agents/${encodeURIComponent(id)}/skills`, { skills })).data;
 }
 export async function fetchChannels(): Promise<ChannelsInfo> {
   return (await api.get("/config/channels")).data;

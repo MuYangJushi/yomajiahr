@@ -10,14 +10,15 @@ import {
   bindAgentToChannel,
   createAgentProfile,
   deleteAgent,
+  getAgentSkillsView,
   listAgents,
   unbindAgentFromChannel,
   updateAgentProfile,
+  updateAgentSkills,
 } from "../services/orchestrator.js";
 import { listAgentTemplates } from "../services/agent-templates.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { cancelOnboarding, getOnboarding, startChannelOnboarding, startOnboarding } from "../services/onboarding.js";
-import { listSkills } from "../services/workspace.js";
 import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
 import { requireRole } from "../auth/rbac.js";
@@ -240,11 +241,55 @@ agentsRouter.delete("/config/agent-onboarding/:id", requireRole("ops"), (req: Re
   }
 });
 
-agentsRouter.get("/config/skills", requireRole("ops"), (_req: Request, res: Response) => {
+// 员工↔技能分配（ADR-015 §3）。技能目录 CRUD（GET/POST/PUT/DELETE /config/skills）见 routes/skills.ts。
+// GET：取员工当前技能 + 可分配技能（带角色/依赖元信息）+ 依赖未满足提示（不阻断）。
+agentsRouter.get("/config/agents/:id/skills", requireRole("ops"), (req: Request, res: Response) => {
+  const id = String(req.params.id);
   try {
-    res.json({ skills: listSkills() });
+    res.json(getAgentSkillsView(id));
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
+  }
+});
+
+// PUT：增删员工技能集 → store→generate→validate→apply + 重渲染 workspace + 审计。异步 apply。
+agentsRouter.put("/config/agents/:id/skills", requireRole("ops"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const skills = req.body?.skills;
+  if (!Array.isArray(skills) || skills.some((s: unknown) => typeof s !== "string")) {
+    return res.status(400).json({ error: "skills 必须为字符串数组" });
+  }
+  const operator = req.user?.platformUserId || "";
+  try {
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        const result = await updateAgentSkills(id, skills as string[]);
+        appendAuditLog("agent.skill.update", id, {
+          agent_id: id,
+          before: result.before,
+          after: result.after,
+          unmet: result.unmet,
+          operator,
+        });
+        return result;
+      },
+      "agent.skill.update",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.json({ ...raced.value, jobId });
+    if (raced.kind === "error") {
+      const message = raced.err.message;
+      const status = message.startsWith("agent 不存在") ? 404 : 400;
+      return res.status(status).json({ error: message, jobId });
+    }
+    res.status(202).json({ jobId, status: "running" });
+  } catch (err) {
+    const message = (err as Error).message;
+    res.status(message.startsWith("agent 不存在") ? 404 : 400).json({ error: message });
   }
 });
 

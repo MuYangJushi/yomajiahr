@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -44,24 +43,4 @@ export function renderWorkspace(
   const claude = join(dir, "CLAUDE.md");
   rmSync(claude, { force: true });
   return { dir, written };
-}
-
-/** 列出可分配技能（扫描 $STATE_DIR/skills/<name>/SKILL.md frontmatter）。 */
-export function listSkills(): Array<{ name: string; description: string }> {
-  const skillsRoot = join(STATE_DIR, "skills");
-  if (!existsSync(skillsRoot)) return [];
-  const out: Array<{ name: string; description: string }> = [];
-  for (const name of readdirSync(skillsRoot)) {
-    const skillMd = join(skillsRoot, name, "SKILL.md");
-    if (!existsSync(skillMd)) continue;
-    let description = "";
-    const text = readFileSync(skillMd, "utf-8");
-    const fm = text.match(/^---\n([\s\S]*?)\n---/);
-    if (fm) {
-      const m = fm[1].match(/^description:\s*(.+)$/m);
-      if (m) description = m[1].trim();
-    }
-    out.push({ name, description });
-  }
-  return out;
 }

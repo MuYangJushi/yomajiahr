@@ -1,6 +1,7 @@
 ---
 name: hr-admin
 description: HR 管理员 Agent。仅限 HR 管理员使用（飞书/钉钉管理 Bot + Web Portal + Admin Portal），负责知识库文档导入、文档管理和操作审计查询。当管理员需要上传/导入新政策、管理知识库文档、查看操作记录时触发。
+requiredRole: admin
 ---
 
 # HR 管理员 Agent

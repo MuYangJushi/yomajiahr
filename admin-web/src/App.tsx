@@ -8,6 +8,7 @@ import Templates from "./Templates";
 import Knowledge from "./Knowledge";
 import Audit from "./Audit";
 import Channels from "./Channels";
+import Skills from "./Skills";
 import Login from "./Login";
 import { fetchMe, logout, type Me } from "./api";
 
@@ -16,6 +17,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { path: "/agents", name: "数字员工", icon: <RobotOutlined /> },
       { path: "/templates", name: "员工模板", icon: <IdcardOutlined /> },
+      { path: "/skills", name: "技能配置", icon: <ToolOutlined /> },
       { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
       { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
       { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
@@ -24,13 +26,12 @@ const SECTIONS: NavSection[] = [
   {
     label: "规划中",
     items: [
-      { path: "/skills", name: "技能配置", icon: <ToolOutlined />, disabled: true },
       { path: "/workflows", name: "流程编排", icon: <PartitionOutlined />, disabled: true },
     ],
   },
 ];
 
-const SHELL_PAGES = new Set(["/agents", "/templates", "/channels", "/knowledge", "/audit-log"]);
+const SHELL_PAGES = new Set(["/agents", "/templates", "/skills", "/channels", "/knowledge", "/audit-log"]);
 
 function currentShellPath(): string {
   const path = window.location.pathname.replace(/^\/console\/?/, "/");
@@ -79,6 +80,7 @@ export default function App() {
     >
       {path === "/agents" && <Agents />}
       {path === "/templates" && <Templates />}
+      {path === "/skills" && <Skills />}
       {path === "/channels" && <Channels />}
       {path === "/knowledge" && <Knowledge />}
       {path === "/audit-log" && <Audit />}
