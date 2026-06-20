@@ -1,8 +1,8 @@
-// 数字员工列表（ProTable）+ 新建入口。
-import { useEffect, useRef, useState } from "react";
-import { Button, Modal, Space, Tag, message } from "antd";
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-components";
+// 数字员工列表（antd Table + PageTopbar + TableCard，脱离 ProTable）+ 新建入口。
+import { useCallback, useEffect, useState } from "react";
+import { Button, Modal, Space, Table, Tag, Typography, message } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   fetchAgents,
   fetchChannels,
@@ -12,6 +12,7 @@ import {
 } from "./api";
 import CreateAgentWizard from "./CreateAgentWizard";
 import EditAgentModal from "./EditAgentModal";
+import { PageTopbar, TableCard } from "./shell";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
   employee: { color: "blue", label: "员工" },
@@ -36,19 +37,32 @@ function AgentEmpty() {
 }
 
 export default function Agents() {
-  const actionRef = useRef<ActionType>();
+  const [rows, setRows] = useState<AgentRow[]>([]);
+  const [loading, setLoading] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRow | null>(null);
   const [channels, setChannels] = useState<ChannelsInfo | null>(null);
 
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      setRows(await fetchAgents());
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || "加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    void reload();
     const refreshChannels = () => fetchChannels().then(setChannels).catch(() => {});
     refreshChannels();
     const timer = window.setInterval(refreshChannels, 5000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [reload]);
 
-  const columns: ProColumns<AgentRow>[] = [
+  const columns: ColumnsType<AgentRow> = [
     {
       title: "名称",
       dataIndex: "name",
@@ -59,7 +73,11 @@ export default function Agents() {
         </Space>
       ),
     },
-    { title: "ID", dataIndex: "id", copyable: true },
+    {
+      title: "ID",
+      dataIndex: "id",
+      render: (v: string) => <Typography.Text copyable style={{ color: "#48484a" }}>{v}</Typography.Text>,
+    },
     {
       title: "岗位",
       dataIndex: "role",
@@ -93,89 +111,91 @@ export default function Agents() {
     },
     {
       title: "操作",
-      valueType: "option",
+      width: 140,
       render: (_, r) => {
         // 空白起步后无永久内置员工；仅默认员工受保护（当前无默认员工，等于全部可删）。
         const protectedAgent = r.default;
-        return [
-          <Button
-            key="edit"
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => setEditingAgent(r)}
-          >
-            修改
-          </Button>,
-          <Button
-            key="delete"
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            disabled={protectedAgent}
-            title={protectedAgent ? "默认数字员工不能删除" : undefined}
-            onClick={() => {
-              Modal.confirm({
-                title: `删除数字员工“${r.name}”？`,
-                content: "将删除其 workspace 和知识库绑定，并释放渠道账号供其他数字员工复用。此操作上线后立即生效。",
-                okText: "确认删除",
-                okButtonProps: { danger: true },
-                cancelText: "取消",
-                async onOk() {
-                  try {
-                    await deleteAgent(r.id);
-                    message.success("数字员工已删除");
-                    actionRef.current?.reload();
-                    fetchChannels().then(setChannels).catch(() => {});
-                  } catch (err: any) {
-                    message.error(err?.response?.data?.error || err.message || "删除失败");
-                    throw err;
-                  }
-                },
-              });
-            }}
-          >
-            删除
-          </Button>,
-        ];
+        return (
+          <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => setEditingAgent(r)}
+            >
+              修改
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={protectedAgent}
+              title={protectedAgent ? "默认数字员工不能删除" : undefined}
+              onClick={() => {
+                Modal.confirm({
+                  title: `删除数字员工“${r.name}”？`,
+                  content: "将删除其 workspace 和知识库绑定，并释放渠道账号供其他数字员工复用。此操作上线后立即生效。",
+                  okText: "确认删除",
+                  okButtonProps: { danger: true },
+                  cancelText: "取消",
+                  async onOk() {
+                    try {
+                      await deleteAgent(r.id);
+                      message.success("数字员工已删除");
+                      void reload();
+                      fetchChannels().then(setChannels).catch(() => {});
+                    } catch (err: any) {
+                      message.error(err?.response?.data?.error || err.message || "删除失败");
+                      throw err;
+                    }
+                  },
+                });
+              }}
+            >
+              删除
+            </Button>
+          </Space>
+        );
       },
     },
   ];
 
   return (
     <>
-      <ProTable<AgentRow>
-        actionRef={actionRef}
-        rowKey="id"
-        headerTitle="数字员工"
-        search={false}
-        pagination={false}
-        locale={{ emptyText: <AgentEmpty /> }}
-        columns={columns}
-        request={async () => {
-          const data = await fetchAgents();
-          return { data, success: true };
-        }}
-        toolBarRender={() => [
-          <Button
-            key="new"
-            type="primary"
-            shape="round"
-            icon={<PlusOutlined />}
-            disabled={!channels}
-            onClick={() => setWizardOpen(true)}
-          >
-            招募数字员工
-          </Button>,
-        ]}
+      <PageTopbar
+        title="数字员工"
+        right={
+          <>
+            <Button shape="round" icon={<ReloadOutlined />} onClick={() => void reload()} />
+            <Button
+              type="primary"
+              shape="round"
+              icon={<PlusOutlined />}
+              disabled={!channels}
+              onClick={() => setWizardOpen(true)}
+            >
+              招募数字员工
+            </Button>
+          </>
+        }
       />
+      <TableCard>
+        <Table<AgentRow>
+          rowKey="id"
+          loading={loading}
+          dataSource={rows}
+          columns={columns}
+          pagination={false}
+          locale={{ emptyText: <AgentEmpty /> }}
+        />
+      </TableCard>
       <CreateAgentWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onCreated={() => {
           setWizardOpen(false);
-          actionRef.current?.reload();
+          void reload();
         }}
       />
       <EditAgentModal
@@ -183,7 +203,7 @@ export default function Agents() {
         onClose={() => setEditingAgent(null)}
         onUpdated={() => {
           setEditingAgent(null);
-          actionRef.current?.reload();
+          void reload();
           fetchChannels().then(setChannels).catch(() => {});
         }}
       />
