@@ -120,7 +120,9 @@ git pull
 
 ## 文档
 
-- [架构说明](docs/architecture.md)
-- [部署指南](docs/deployment.md)
-- [品牌命名](docs/branding.md)
-- [重构计划](docs/restructure-plan.md)
+> 开发文档已迁入知识库仓 [yomajiahr-kb](https://github.com/MuYangJushi/yomajiahr-kb)（`00-overview/`），代码库不再维护本地副本。
+
+- [架构说明](https://github.com/MuYangJushi/yomajiahr-kb/blob/main/00-overview/architecture.md)
+- [部署指南](https://github.com/MuYangJushi/yomajiahr-kb/blob/main/00-overview/deployment.md)
+- [企业开放登录方案](https://github.com/MuYangJushi/yomajiahr-kb/blob/main/00-overview/enterprise-open-login.md)
+- [重构计划（已归档）](https://github.com/MuYangJushi/yomajiahr-kb/blob/main/99-archive/docs-migrated/restructure-plan.md)
