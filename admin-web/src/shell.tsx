@@ -19,12 +19,12 @@ export interface NavSection {
 
 const ROLE_LABEL: Record<PlatformRole, string> = { admin: "管理员", ops: "运营", audit: "审计只读" };
 
-const SHELL_STYLE: React.CSSProperties = { display: "flex", minHeight: "100vh", background: "#f5f5f7" };
+const SHELL_STYLE: React.CSSProperties = { display: "flex", height: "100vh", overflow: "hidden", background: "#f5f5f7" };
 const SIDEBAR_STYLE: React.CSSProperties = {
   width: 240, flex: "none", background: "#fff", borderRight: "1px solid #e3e3e6",
-  padding: "20px 12px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh",
+  padding: "20px 12px", display: "flex", flexDirection: "column", height: "100%", overflowY: "auto",
 };
-const MAIN_STYLE: React.CSSProperties = { flex: 1, minWidth: 0, padding: "32px 40px" };
+const MAIN_STYLE: React.CSSProperties = { flex: 1, minWidth: 0, height: "100%", overflowY: "auto", padding: "32px 40px" };
 
 function BrandTitle() {
   return <div style={{ fontSize: 16, fontWeight: 600, padding: "8px 12px 20px", color: "#1d1d1f" }}>Yoma+HR 数字员工平台</div>;

@@ -1,0 +1,12 @@
+/* 全局 reset：消除浏览器默认 body margin，避免 100vh 布局溢出视口产生多余滚动条。 */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: #f5f5f7;
+}
