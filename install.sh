@@ -430,6 +430,20 @@ for agent in hr-employee hr-admin; do
   echo "  $dst/ OK"
 done
 
+# 员工模板目录（ADR-016 §1）：workspaces/_templates/agents/<id>-template/template.json。
+# admin-server listAgentTemplates() 优先读 STATE_DIR 副本，必须随部署同步，否则
+# 平台「员工模板」页为空（#47 根因之一）。整目录覆盖式拷贝，保证删除模板也生效。
+templates_src="$REPO_DIR/workspaces/_templates/agents"
+templates_dst="$STATE_DIR/workspaces/_templates/agents"
+if [ -d "$templates_src" ]; then
+  rm -rf "$templates_dst"
+  mkdir -p "$templates_dst"
+  cp -r "$templates_src/." "$templates_dst/"
+  echo "  $templates_dst/ OK ($(find "$templates_dst" -name template.json | wc -l | tr -d ' ') templates)"
+else
+  echo "  [WARN] Templates source not found: $templates_src (skipping)"
+fi
+
 # ---------------------------------------------------------------------------
 # Step 5: Copy skills
 # ---------------------------------------------------------------------------

@@ -98,3 +98,24 @@ test("listAgentTemplates：目录缺失 → 回退仓库源（hr-employee / hr-a
   assert.ok(Array.isArray(emp.tags) && emp.tags.length > 0, "hr-employee 模板应有 tags");
   assert.ok(emp.workflowHints, "hr-employee 模板应有 workflowHints");
 });
+
+test("listAgentTemplates：仓库源含 ClawMax 移植模板（source.type=clawmax，#47）", () => {
+  // 回退仓库源：临时指向空 STATE_DIR，强制走 repoTemplatesDir()。
+  const emptyState = join(tmpdir(), `yomajiahr-templates-clawmax-${process.pid}`);
+  process.env.OPENCLAW_STATE_DIR = emptyState;
+  const list = listAgentTemplates();
+  // ClawMax 移植的 25 个 + 内置 2 个 = 27（允许后续新增，至少 27）
+  assert.ok(list.length >= 27, `仓库源应含 ClawMax 移植模板，实际 ${list.length}`);
+  const clawmax = list.filter((x) => x.source?.type === "clawmax");
+  assert.ok(clawmax.length >= 25, `应至少 25 个 clawmax 来源模板，实际 ${clawmax.length}`);
+  // 抽样：engineer 模板字段齐全且 role=employee（ClawMax 无 admin 概念）
+  const eng = list.find((x) => x.id === "engineer");
+  assert.ok(eng, "应含 engineer 模板");
+  assert.equal(eng!.role, "employee");
+  assert.ok(eng!.profile.jobTitle, "engineer 应有 jobTitle");
+  assert.ok(eng!.profile.responsibilities, "engineer 应有 responsibilities");
+  assert.ok(eng!.source?.attribution, "engineer 应带 attribution（MIT 协议保留）");
+  // 内置 hr-admin 仍为 admin 角色，未被 ClawMax 覆盖
+  const admin = list.find((x) => x.id === "hr-admin");
+  assert.equal(admin!.role, "admin");
+});
