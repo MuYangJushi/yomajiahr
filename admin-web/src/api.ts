@@ -17,6 +17,24 @@ api.interceptors.response.use(
   },
 );
 
+/**
+ * 只读列表请求的瞬时失败重试：生产经 nginx 反代，偶发连接抖动/短暂 5xx，
+ * 而页面 mount 只发一次 fetch、无重试，一次抖动就弹"加载失败"。
+ * 仅对「网络错误 / 5xx / 429」重试一次（400/401/403/404 这类业务态不重试，
+ * 重试也只会得到同样结果）。401 已在拦截器里跳登录，不会到这里。
+ */
+export async function withRetry<T>(fn: () => Promise<T>, retries = 1, delayMs = 400): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: any) {
+    const status = err?.response?.status;
+    const transient = !err.response || status === 429 || (status >= 500 && status < 600);
+    if (!transient || retries <= 0) throw err;
+    await new Promise((r) => setTimeout(r, delayMs));
+    return fn();
+  }
+}
+
 // —— 异步 apply 任务（fix/usage-bugs #1）——
 // 写操作（招募 / 渠道编辑 / 知识库绑定等）后端 800ms 内未完成会返回 202 + jobId；
 // 前端拿到 jobId 立刻关弹窗 / 刷列表 / 起进度提示，轮询直到终态。
@@ -137,7 +155,7 @@ export interface ChannelsInfo {
 }
 
 export async function fetchAgents(): Promise<AgentRow[]> {
-  return (await api.get("/config/agents")).data.agents;
+  return withRetry(async () => (await api.get("/config/agents")).data.agents);
 }
 export interface CreateAgentInput {
   id: string;
@@ -215,7 +233,7 @@ export interface ChannelAsset {
 // 账号资产视图走 /config/channel-assets（独立资源）；
 // /config/channels 是渠道占用视图（fetchChannels，给 Agents 页绑定下拉用），勿混。
 export async function fetchChannelAssets(): Promise<{ channels: ChannelAsset[]; health: ChannelHealth[] }> {
-  return (await api.get("/config/channel-assets")).data;
+  return withRetry(async () => (await api.get("/config/channel-assets")).data);
 }
 export async function probeChannels(): Promise<ChannelHealth[]> {
   return (await api.post("/config/channel-assets/probe")).data.health;
@@ -359,7 +377,7 @@ export interface KnowledgeStore {
 }
 
 export async function fetchKnowledgeHealth(): Promise<KnowledgeHealth> {
-  return (await api.get("/knowledge/health")).data;
+  return withRetry(async () => (await api.get("/knowledge/health")).data);
 }
 export async function fetchKnowledgeCollections(datasetId?: string): Promise<{
   collections: KbCollection[];
@@ -401,7 +419,7 @@ export async function searchTest(query: string, topK = 5, datasetId?: string): P
   return (await api.post("/knowledge/search-test", { query, topK, datasetId })).data.chunks;
 }
 export async function fetchKnowledgeBindings(): Promise<{ store: KnowledgeStore; agents: AgentRow[] }> {
-  return (await api.get("/knowledge/bindings")).data;
+  return withRetry(async () => (await api.get("/knowledge/bindings")).data);
 }
 export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<{ store?: KnowledgeStore; jobId?: string }> {
   const data = (await api.put("/knowledge/bindings", store)).data;
@@ -410,7 +428,7 @@ export async function saveKnowledgeBindings(store: KnowledgeStore): Promise<{ st
 
 // —— #41 多库 ——
 export async function fetchKnowledgeBases(): Promise<{ bases: KnowledgeBinding[]; agents: AgentRow[] }> {
-  return (await api.get("/knowledge/bases")).data;
+  return withRetry(async () => (await api.get("/knowledge/bases")).data);
 }
 export interface CreateKbInput {
   name: string;
