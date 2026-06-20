@@ -52,7 +52,7 @@ export default function Channels() {
   }
   /** 写操作的统一处理：拿到响应里可能的 jobId，立刻关弹窗 + reload；
    *  挂全局 message.loading 直到任务终态，最后 reload 一次让 store 真实状态浮上来。 */
-  async function trackApplyJob(data: unknown, label: string) {
+  async function trackApplyJob(data: unknown, label: string, opts?: { timeoutMs?: number }) {
     const jobId = jobIdOf(data);
     if (!jobId) {
       // 800ms 内同步完成（含失败已 throw），无需轮询。
@@ -60,7 +60,7 @@ export default function Channels() {
     }
     const key = `apply-${jobId}`;
     message.loading({ content: `${label}进行中…`, key, duration: 0 });
-    const job = await awaitApplyJob(jobId);
+    const job = await awaitApplyJob(jobId, opts);
     if (job.status === "success") {
       message.success({ content: `${label}已应用`, key });
       return { ok: true };
@@ -135,9 +135,10 @@ export default function Channels() {
         title: `删除空闲账号 ${r.displayName}？`,
         async onOk() {
           try {
-            await deleteChannelAsset(r.type, r.id);
-            message.success("渠道账号已删除");
+            const data = await deleteChannelAsset(r.type, r.id);
             await reload();
+            const result = await trackApplyJob(data, "删除渠道", { timeoutMs: 130_000 });
+            if (result.ok) await reload();
           } catch (err: any) {
             message.error(err?.response?.data?.error || err.message || "删除失败");
             throw err;

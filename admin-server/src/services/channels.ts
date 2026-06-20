@@ -221,7 +221,10 @@ function credentialsFor(input: { id: string; type: "feishu" | "dingtalk"; client
   };
 }
 
-async function mutateChannels<T>(operation: (store: ReturnType<typeof readStore>) => T): Promise<T> {
+async function mutateChannels<T>(
+  operation: (store: ReturnType<typeof readStore>) => T,
+  opts: { timeoutMs?: number } = {},
+): Promise<T> {
   return withConfigLock(async () => {
     // 快照只用于回滚；不 cpSync 整个目录（非原子，回滚窗口里并发 readStore 可能读到半截 JSON
     // → 列表 GET 间歇 500）。改用内存快照 + 原子 writeStore / 原子写 .env 还原，保证单文件原子。
@@ -231,7 +234,10 @@ async function mutateChannels<T>(operation: (store: ReturnType<typeof readStore>
       const store = readStore();
       const result = operation(store);
       writeStore(store);
-      const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR }) as ApplyResult;
+      // 删除渠道账号走 restart 模式（停掉对应 channel client），生产 apply 含 gateway 重启 +
+      // 探活（PROBE_WINDOW 30s + READY_SUSTAIN 11s），常超 triggerApply 默认 30s。超时返回 pending
+      // 会被下方判定为失败并回滚 → 删除被撤销。故允许调用方按操作抬高超时。
+      const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: opts.timeoutMs }) as ApplyResult;
       if (apply.status !== "success") throw new Error(`配置应用失败：${apply.message || apply.status}`);
       return result;
     } catch (err) {
@@ -300,7 +306,7 @@ export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string
     if (store.bindings.some((b) => b.match.channel === domain && b.match.accountId === id)) throw new Error("CHANNEL_IN_USE");
     store.channels = store.channels.filter((c) => !(c.type === type && c.id === id));
     removeEnv(asset.envKeys || []);
-  });
+  }, { timeoutMs: 120_000 });
 }
 
 /** 列出脱敏账号资产、实时占用状态与员工名称。 */
