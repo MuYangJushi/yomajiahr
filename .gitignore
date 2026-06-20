@@ -5,3 +5,4 @@ node_modules/
 admin-server/uploads/
 admin-server/node_modules/
 .claude/
+.vite/
