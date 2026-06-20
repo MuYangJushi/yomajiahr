@@ -38,7 +38,7 @@ export default function Templates() {
               key={t.id}
               size="small"
               title={<Space>{t.name}<Tag color={ROLE_TAG[t.role]?.color}>{ROLE_TAG[t.role]?.label || t.role}</Tag></Space>}
-              extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setRecruitFrom(t)}>用此模板招募</Button>}
+              extra={<Button type="primary" shape="round" size="small" icon={<PlusOutlined />} onClick={() => setRecruitFrom(t)}>用此模板招募</Button>}
             >
               <Descriptions column={1} size="small" items={[
                 { key: "desc", label: "说明", children: t.description },

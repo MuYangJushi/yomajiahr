@@ -192,7 +192,7 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
         columns={columns}
         dataSource={bases}
         toolBarRender={() => [
-          <Button key="new" type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          <Button key="new" type="primary" shape="round" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
             新建知识库
           </Button>,
         ]}
