@@ -7,7 +7,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
-  awaitApplyJob, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobIdOf, saveAgentSkills, updateSkill,
+  awaitApplyJob, applyModeLabel, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobIdOf, saveAgentSkills, updateSkill,
   type AgentRow, type Skill, type SkillAssignment, type SkillMeta, type SkillRole,
 } from "./api";
 
@@ -216,11 +216,13 @@ function SkillAssignment() {
     try {
       const data = await saveAgentSkills(agentId, picked);
       const jobId = jobIdOf(data);
+      let mode: string | undefined;
       if (jobId) {
         const job = await awaitApplyJob(jobId);
         if (job.status !== "success") { message.error(`保存失败：${job.message || job.status}`); setSaving(false); return; }
+        mode = (job.result as any)?.apply?.mode;
       }
-      message.success("技能分配已应用");
+      message.success(`技能分配已应用（${applyModeLabel(mode)}）`);
       await load(agentId);
     } catch (err: any) { message.error(err?.response?.data?.error || err.message || "保存失败"); }
     finally { setSaving(false); }
@@ -263,6 +265,14 @@ function SkillAssignment() {
                   description={view.unmet.map((u) => `${u.skill}：${u.reason}`).join("；")}
                 />
               )}
+              {view.warnings?.map((w) => (
+                <Alert
+                  key={w.code}
+                  type="warning" showIcon
+                  message="技能与知识库绑定不匹配"
+                  description={w.message}
+                />
+              ))}
               <Table
                 rowKey="name" size="small" pagination={false} loading={loading}
                 dataSource={view.available}

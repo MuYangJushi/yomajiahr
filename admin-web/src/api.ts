@@ -136,6 +136,10 @@ export interface SkillMeta {
   description: string;
   requiredRole?: SkillRole;
   requiresKnowledge?: boolean;
+  /** ADR-016 §1：emoji 图标（可选）。 */
+  emoji?: string;
+  /** ADR-016 §1：tags（可选）。 */
+  tags?: string[];
 }
 export interface Skill extends SkillMeta {
   body: string;
@@ -145,6 +149,8 @@ export interface SkillAssignment {
   skills: string[];
   available: SkillMeta[];
   unmet: Array<{ skill: string; reason: string }>;
+  /** ADR-016 §5.1：技能/知识库绑定不匹配提示（不自动修复）。 */
+  warnings?: Array<{ code: string; message: string }>;
 }
 export interface ChannelsInfo {
   supported: string[];
@@ -206,6 +212,13 @@ export interface AgentTemplate {
   role: "employee" | "admin";
   profile: Required<Pick<AgentProfile, "jobTitle" | "responsibilities" | "personality" | "tone" | "boundaries">>;
   suggestedSkills: string[];
+  /** ADR-016 §1 可选预留字段。 */
+  emoji?: string;
+  tags?: string[];
+  category?: string;
+  defaultSkills?: string[];
+  status?: string;
+  workflowHints?: { suggestedWorkflowIds?: string[]; targetTags?: string[]; defaultParticipation?: string };
 }
 export async function fetchAgentTemplates(): Promise<AgentTemplate[]> {
   return (await api.get("/config/agent-templates")).data.templates;
@@ -337,6 +350,34 @@ export async function fetchAgentOnboarding(id: string): Promise<OnboardingSessio
 }
 export async function cancelAgentOnboarding(id: string): Promise<void> {
   await api.delete(`/config/agent-onboarding/${id}`);
+}
+
+// —— Web 内置对话（ADR-016 §2）——
+export interface ChatMessage { role: "user" | "assistant"; text: string; ts?: string }
+export interface ChatSessionMeta {
+  sessionId: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastUserMessage?: string;
+  lastAssistantMessage?: string;
+}
+export interface ChatResult { reply: string; sessionId: string; durationMs: number }
+export async function chatWithAgent(agentId: string, message: string, sessionId?: string): Promise<ChatResult> {
+  return (await api.post(`/config/agents/${encodeURIComponent(agentId)}/chat`, { message, sessionId })).data;
+}
+export async function listChatSessions(agentId: string): Promise<ChatSessionMeta[]> {
+  return withRetry(async () => (await api.get(`/config/agents/${encodeURIComponent(agentId)}/chat/sessions`)).data.sessions);
+}
+export async function getChatSession(agentId: string, sid: string): Promise<{ sessionId: string; messages: ChatMessage[] }> {
+  return (await api.get(`/config/agents/${encodeURIComponent(agentId)}/chat/sessions/${encodeURIComponent(sid)}`)).data;
+}
+export async function deleteChatSession(agentId: string, sid: string): Promise<void> {
+  await api.delete(`/config/agents/${encodeURIComponent(agentId)}/chat/sessions/${encodeURIComponent(sid)}`);
+}
+
+/** ADR-016 §3/§4：apply 结果按 mode 给前端文案（区分平台内已生效 vs 已重启渠道网关）。 */
+export function applyModeLabel(mode: string | undefined): string {
+  return mode === "runtime-only" ? "平台内已生效（无需重启网关）" : "已重启渠道网关";
 }
 
 // —— 知识库平台（ADR-006 / FastGPT 集成）——

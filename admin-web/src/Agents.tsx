@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, MessageOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   fetchAgents,
   fetchChannels,
@@ -12,6 +12,7 @@ import {
 } from "./api";
 import CreateAgentWizard from "./CreateAgentWizard";
 import EditAgentModal from "./EditAgentModal";
+import AgentChatDrawer from "./AgentChatDrawer";
 import { PageTopbar, TableCard } from "./shell";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
@@ -41,6 +42,7 @@ export default function Agents() {
   const [loading, setLoading] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRow | null>(null);
+  const [chatAgent, setChatAgent] = useState<AgentRow | null>(null);
   const [channels, setChannels] = useState<ChannelsInfo | null>(null);
 
   const reload = useCallback(async () => {
@@ -111,7 +113,7 @@ export default function Agents() {
     },
     {
       title: "操作",
-      width: 140,
+      width: 220,
       render: (_, r) => {
         // 空白起步后无永久内置员工；仅默认员工受保护（当前无默认员工，等于全部可删）。
         const protectedAgent = r.default;
@@ -124,6 +126,14 @@ export default function Agents() {
               onClick={() => setEditingAgent(r)}
             >
               修改
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<MessageOutlined />}
+              onClick={() => setChatAgent(r)}
+            >
+              对话
             </Button>
             <Button
               type="link"
@@ -206,6 +216,11 @@ export default function Agents() {
           void reload();
           fetchChannels().then(setChannels).catch(() => {});
         }}
+      />
+      <AgentChatDrawer
+        agent={chatAgent}
+        open={Boolean(chatAgent)}
+        onClose={() => setChatAgent(null)}
       />
     </>
   );

@@ -27,6 +27,10 @@ export interface SkillMeta {
   description: string;
   requiredRole?: SkillRole;
   requiresKnowledge?: boolean;
+  /** ADR-016 §1：对标 ClawMax 的 emoji 图标（可选，向后兼容，旧技能缺字段不报错）。 */
+  emoji?: string;
+  /** ADR-016 §1：对标 ClawMax 的 tags（可选，向后兼容）。 */
+  tags?: string[];
 }
 
 /** 技能全文（编辑器取/存用，含 body）。 */
@@ -53,14 +57,28 @@ function parseSkillFile(text: string): { fm: Record<string, string>; body: strin
   return { fm, body: m[2] ?? "" };
 }
 
-/** 序列化 SKILL.md：稳定字段顺序 name → description → requiredRole → requiresKnowledge → body。 */
+/** 序列化 SKILL.md：稳定字段顺序 name → description → requiredRole → requiresKnowledge → emoji → tags → body。 */
 function serializeSkill(meta: SkillMeta, body: string): string {
   const lines = ["---", `name: ${meta.name}`, `description: ${meta.description}`];
   if (meta.requiredRole) lines.push(`requiredRole: ${meta.requiredRole}`);
   if (meta.requiresKnowledge) lines.push(`requiresKnowledge: true`);
+  if (meta.emoji) lines.push(`emoji: ${meta.emoji}`);
+  if (meta.tags && meta.tags.length > 0) lines.push(`tags: [${meta.tags.join(", ")}]`);
   lines.push("---", "");
   const cleaned = body.replace(CONTROL_RE, "");
   return lines.join("\n") + (cleaned.endsWith("\n") ? cleaned : cleaned + "\n");
+}
+
+/** 解析 frontmatter 中的 tags 值（宽容：`[a, b]` / `a,b` / `a` 都接受；空 → undefined）。 */
+function parseTags(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const stripped = raw.replace(/^\[/, "").replace(/\]$/, "").trim();
+  if (!stripped) return undefined;
+  const tags = stripped
+    .split(",")
+    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+  return tags.length > 0 ? tags : undefined;
 }
 
 function metaFromFm(name: string, fm: Record<string, string>): SkillMeta {
@@ -69,6 +87,9 @@ function metaFromFm(name: string, fm: Record<string, string>): SkillMeta {
     meta.requiredRole = fm.requiredRole as SkillRole;
   }
   if (fm.requiresKnowledge === "true") meta.requiresKnowledge = true;
+  if (typeof fm.emoji === "string" && fm.emoji) meta.emoji = fm.emoji.replace(CONTROL_RE, "").trim();
+  const tags = parseTags(fm.tags);
+  if (tags) meta.tags = tags;
   return meta;
 }
 
@@ -112,24 +133,51 @@ export interface SkillInput {
   description: string;
   requiredRole?: SkillRole | null;
   requiresKnowledge?: boolean;
+  /** ADR-016 §1：emoji 图标（可选）。 */
+  emoji?: string | null;
+  /** ADR-016 §1：tags（可选）。 */
+  tags?: string[] | null;
   body?: string;
 }
 
 /** 校验技能入参的公共部分（name 仅在新建时校验）。 */
-function validateMeta(input: { description: string; requiredRole?: SkillRole | null; requiresKnowledge?: boolean }): {
+function validateMeta(input: {
+  description: string;
+  requiredRole?: SkillRole | null;
+  requiresKnowledge?: boolean;
+  emoji?: string | null;
+  tags?: string[] | null;
+}): {
   description: string;
   requiredRole?: SkillRole;
   requiresKnowledge?: boolean;
+  emoji?: string;
+  tags?: string[];
 } {
   const description = cleanDescription(input.description);
   if (!description) throw new Error("description 不能为空");
   if (description.length > 500) throw new Error("description 过长（≤500 字符）");
-  const out: { description: string; requiredRole?: SkillRole; requiresKnowledge?: boolean } = { description };
+  const out: { description: string; requiredRole?: SkillRole; requiresKnowledge?: boolean; emoji?: string; tags?: string[] } = {
+    description,
+  };
   if (input.requiredRole) {
     if (!ROLE_VALUES.has(input.requiredRole)) throw new Error("requiredRole 非法");
     out.requiredRole = input.requiredRole;
   }
   if (input.requiresKnowledge) out.requiresKnowledge = true;
+  if (input.emoji) {
+    const emoji = input.emoji.replace(CONTROL_RE, "").trim();
+    if (emoji.length > 16) throw new Error("emoji 过长（≤16 字符）");
+    if (emoji) out.emoji = emoji;
+  }
+  if (Array.isArray(input.tags)) {
+    const tags = input.tags
+      .filter((t): t is string => typeof t === "string")
+      .map((t) => t.replace(CONTROL_RE, "").trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (tags.length > 0) out.tags = tags;
+  }
   return out;
 }
 
@@ -146,7 +194,7 @@ export function createSkill(input: SkillInput): Skill {
   return getSkill(input.name)!;
 }
 
-/** 编辑技能（name 不可改）：改 description/requiredRole/requiresKnowledge/body。不触发 apply。 */
+/** 编辑技能（name 不可改）：改 description/requiredRole/requiresKnowledge/emoji/tags/body。不触发 apply。 */
 export function updateSkill(name: string, input: Partial<SkillInput>): Skill {
   if (!existsSync(skillPath(name))) throw new Error(`技能不存在：${name}`);
   const current = getSkill(name)!;
@@ -154,6 +202,8 @@ export function updateSkill(name: string, input: Partial<SkillInput>): Skill {
     description: input.description ?? current.description,
     requiredRole: input.requiredRole === null ? undefined : (input.requiredRole ?? current.requiredRole),
     requiresKnowledge: input.requiresKnowledge ?? current.requiresKnowledge,
+    emoji: input.emoji === null ? undefined : (input.emoji ?? current.emoji),
+    tags: input.tags === null ? undefined : (input.tags ?? current.tags),
   });
   const body = (input.body !== undefined ? input.body : current.body).replace(CONTROL_RE, "");
   writeFileSync(skillPath(name), serializeSkill({ name, ...meta }, body));

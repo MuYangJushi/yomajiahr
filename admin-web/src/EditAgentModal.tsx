@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ModalForm, ProFormRadio, ProFormText, ProFormTextArea, type ProFormInstance } from "@ant-design/pro-components";
 import { Alert, Button, Space, message } from "antd";
-import { awaitApplyJob, generateAgentProfile, jobIdOf, updateAgent, type AgentProfile, type AgentRow } from "./api";
+import { applyModeLabel, awaitApplyJob, generateAgentProfile, jobIdOf, updateAgent, type AgentProfile, type AgentRow } from "./api";
 
 interface Props { agent: AgentRow | null; onClose: () => void; onUpdated: () => void }
 const FIELDS: Array<{ key: keyof AgentProfile; label: string; area?: boolean }> = [
@@ -28,7 +28,8 @@ export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
             onUpdated();
             awaitApplyJob(jobId).then((job) => {
               if (job.status === "success") {
-                message.success({ content: "员工资料已应用", key });
+                const mode = (job.result as any)?.apply?.mode;
+                message.success({ content: `员工资料已应用（${applyModeLabel(mode)}）`, key });
                 onUpdated();
               } else {
                 message.error({ content: `保存失败：${job.message || job.status}`, key, duration: 6 });
