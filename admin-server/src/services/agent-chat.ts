@@ -167,7 +167,14 @@ function runAgentTurn(agentId: string, sessionId: string, message: string, timeo
       }
       try {
         const parsed = JSON.parse(stdout);
-        const reply = parsed?.finalAssistantVisibleText ?? parsed?.finalAssistantRawText ?? "";
+        // openclaw --json 的回复文本在 meta.finalAssistantVisibleText（实测 pin 版 2026.6.8）；
+        // 兜底 finalAssistantRawText / payloads[0].text / 顶层（兼容旧结构）。
+        const reply =
+          parsed?.meta?.finalAssistantVisibleText ??
+          parsed?.meta?.finalAssistantRawText ??
+          (Array.isArray(parsed?.payloads) ? parsed.payloads[0]?.text : "") ??
+          parsed?.finalAssistantVisibleText ??
+          "";
         if (!reply) {
           reject(new ChatError("EMPTY_REPLY", "对话未返回内容", 502));
           return;
