@@ -60,9 +60,28 @@ function stateTemplatesDir(): string {
   return join(process.env.OPENCLAW_STATE_DIR || "", "workspaces", "_templates", "agents");
 }
 
-/** 仓库内 fallback：admin-server/src/services → ../../workspaces/_templates/agents（开发态）。 */
+/**
+ * 仓库内 fallback。⚠️ 不能用固定的 `import.meta.dirname + ../../.`：
+ * tsup 把全仓打成单文件 `dist/server.js`，`import.meta.dirname` 从源码态的
+ * `admin-server/src/services`（退 3 层到 repo 根）变成打包态的 `admin-server/dist`
+ * （只退 2 层），固定层数会多退一层 → 指向 repo 之外 → 生产模板列表为空。
+ *
+ * 改为枚举候选目录，命中第一个存在的。兼容：源码 tsx 态、tsup 打包态、
+ * `npm run dev/start`（cwd=admin-server）、install.sh 部署态（cwd=repo 根）。
+ */
 function repoTemplatesDir(): string {
-  return join(import.meta.dirname, "..", "..", "..", "workspaces", "_templates", "agents");
+  const dir = import.meta.dirname || "";
+  const candidates = [
+    join(dir, "..", "..", "..", "workspaces", "_templates", "agents"), // 源码态: src/services → repo 根
+    join(dir, "..", "..", "workspaces", "_templates", "agents"),       // 打包态: dist → repo 根
+    join(process.cwd(), "workspaces", "_templates", "agents"),         // cwd=repo 根
+    join(process.cwd(), "..", "workspaces", "_templates", "agents"),   // cwd=admin-server
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  // 全部不命中时返回源码态候选，保持与原行为一致（读空目录返回 []）。
+  return candidates[0];
 }
 
 /** 安全读取一个 template.json（结构非法跳过，不抛、不崩整个列表）。 */
