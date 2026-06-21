@@ -345,7 +345,7 @@ export default function Login() {
     setDemoError("");
     try {
       await loginWithDemoAccessCode(demoCode);
-      window.location.href = "/console";
+      window.location.href = "/";
     } catch (err: any) {
       setDemoError(err?.response?.data?.error || "访问码登录失败");
     } finally {

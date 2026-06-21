@@ -34,12 +34,12 @@ const SECTIONS: NavSection[] = [
 const SHELL_PAGES = new Set(["/agents", "/templates", "/skills", "/channels", "/knowledge", "/audit-log"]);
 
 function currentShellPath(): string {
-  const path = window.location.pathname.replace(/^\/console\/?/, "/");
+  const path = window.location.pathname;
   return SHELL_PAGES.has(path) ? path : "/agents";
 }
 
 function navigate(path: string): void {
-  window.history.pushState({}, "", `/console${path}`);
+  window.history.pushState({}, "", path);
 }
 
 export default function App() {

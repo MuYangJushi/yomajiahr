@@ -112,7 +112,7 @@ authRouter.get("/auth/feishu/login", (req: Request, res: Response) => {
   res.redirect(feishuAuthorizeUrl(state, redirectUri));
 });
 
-/** 飞书回调：校验 state → 换 code → 角色映射 → 颁 session → 回 /console。 */
+/** 飞书回调：校验 state → 换 code → 角色映射 → 颁 session → 回根 /。 */
 authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
   try {
     if (!verifyOauthState(req, req.query.state as string | undefined)) {
@@ -127,7 +127,7 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
     const error = req.query.error as string | undefined;
     if (error) {
       log("WARN", `飞书授权被拒：${error}`);
-      return res.redirect("/console/login?error=access_denied");
+      return res.redirect("/login?error=access_denied");
     }
     if (!code) return res.status(400).send("缺少授权 code");
 
@@ -137,7 +137,7 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
     const user = resolveUser(identity);
     if (!user) {
       log("WARN", `飞书登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId}`);
-      return res.redirect("/console/login?error=unauthorized");
+      return res.redirect("/login?error=unauthorized");
     }
 
     issueSession(res, {
@@ -147,10 +147,10 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
       idp: "feishu",
     });
     log("INFO", `飞书登录成功：${user.name}（${user.platformRole}）`);
-    res.redirect("/console");
+    res.redirect("/");
   } catch (err) {
     log("ERROR", `飞书回调失败：${(err as Error).message}`);
-    res.redirect("/console/login?error=login_failed");
+    res.redirect("/login?error=login_failed");
   }
 });
 
@@ -164,7 +164,7 @@ authRouter.get("/auth/dingtalk/login", (req: Request, res: Response) => {
   res.redirect(dingtalkAuthorizeUrl(state, redirectUri));
 });
 
-/** 钉钉回调：校验 state → 换 authCode → 角色映射 → 颁 session → 回 /console。 */
+/** 钉钉回调：校验 state → 换 authCode → 角色映射 → 颁 session → 回根 /。 */
 authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) => {
   try {
     if (!verifyOauthState(req, req.query.state as string | undefined)) {
@@ -180,7 +180,7 @@ authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) =>
     const error = req.query.error as string | undefined;
     if (error) {
       log("WARN", `钉钉授权被拒：${error}`);
-      return res.redirect("/console/login?error=access_denied");
+      return res.redirect("/login?error=access_denied");
     }
     if (!code) return res.status(400).send("缺少授权 authCode");
 
@@ -188,7 +188,7 @@ authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) =>
     const user = resolveUser(identity);
     if (!user) {
       log("WARN", `钉钉登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId} corp_id=${identity.corpId || "-"}`);
-      return res.redirect("/console/login?error=unauthorized");
+      return res.redirect("/login?error=unauthorized");
     }
 
     issueSession(res, {
@@ -198,9 +198,9 @@ authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) =>
       idp: "dingtalk",
     });
     log("INFO", `钉钉登录成功：${user.name}（${user.platformRole}）`);
-    res.redirect("/console");
+    res.redirect("/");
   } catch (err) {
     log("ERROR", `钉钉回调失败：${(err as Error).message}`);
-    res.redirect("/console/login?error=login_failed");
+    res.redirect("/login?error=login_failed");
   }
 });
