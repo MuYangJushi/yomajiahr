@@ -1,6 +1,7 @@
 // 审计日志路由（迁自 server.mjs，逻辑不变）。
 import { Router, type Request, type Response } from "express";
 import { csvEscape, readAuditLog } from "../util.js";
+import { actionLabel, operatorName, detailExtra } from "../audit-labels.js";
 import { requireRole } from "../auth/rbac.js";
 
 export const auditRouter = Router();
@@ -43,16 +44,17 @@ auditRouter.get("/audit-log/export", requireRole("audit"), (req: Request, res: R
     const filtered = applyFilters(readAuditLog(), req.query);
     filtered.reverse();
 
-    const header = "timestamp,action,file,doc_id,version,category,reason";
+    const header = "时间,动作,对象,操作人,文档编号,版本,分类,详情";
     const rows = filtered.map((l) =>
       [
         l.timestamp,
-        l.action,
-        csvEscape(l.file),
+        csvEscape(actionLabel(l.action)),
+        csvEscape(l.file || ""),
+        csvEscape(operatorName(l)),
         csvEscape(l.details?.doc_id || ""),
         csvEscape(l.details?.version || ""),
         csvEscape(l.details?.category || ""),
-        csvEscape(l.details?.reason || ""),
+        csvEscape(detailExtra(l)),
       ].join(","),
     );
 
