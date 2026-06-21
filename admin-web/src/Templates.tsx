@@ -8,7 +8,7 @@ import { fetchAgentTemplates, type AgentTemplate } from "./api";
 import CreateAgentWizard from "./CreateAgentWizard";
 
 const ROLE_TAG: Record<string, { color: string; label: string }> = {
-  employee: { color: "default", label: "员工（只读）" },
+  employee: { color: "default", label: "员工" },
   admin: { color: "gold", label: "管理员" },
 };
 
@@ -42,7 +42,7 @@ export default function Templates() {
   return (
     <>
       <Typography.Paragraph type="secondary" style={{ maxWidth: 640, lineHeight: 1.6 }}>
-        系统自带数字员工模板（只读）。「用此模板招募」会带入档案预填，可在招募向导中继续修改岗位、权限与各段档案。
+        系统自带数字员工模板。「用此模板招募」会带入档案预填，可在招募向导中继续修改岗位、权限与各段档案。
       </Typography.Paragraph>
       {templates.length === 0 ? (
         <Empty description="暂无系统模板" />

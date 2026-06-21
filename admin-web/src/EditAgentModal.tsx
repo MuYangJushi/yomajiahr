@@ -46,7 +46,7 @@ export default function EditAgentModal({ agent, onClose, onUpdated }: Props) {
       <ProFormText name="name" label="名称" rules={[{ required: true }]} />
       <ProFormText name="jobTitle" label="真实岗位名称" rules={[{ required: true, max: 60 }]} />
       <ProFormRadio.Group name="role" label="系统权限级别" options={[
-        { label: "employee（只读）", value: "employee" }, { label: "admin（管理权限）", value: "admin" },
+        { label: "员工", value: "employee" }, { label: "管理员", value: "admin" },
       ]} />
       <Alert type="info" showIcon message="本页面只修改员工资料与权限，不处理技能和渠道。" />
       {FIELDS.map((field) => (
