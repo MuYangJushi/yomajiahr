@@ -24,7 +24,11 @@ const SIDEBAR_STYLE: React.CSSProperties = {
   width: 240, flex: "none", background: "#fff", borderRight: "1px solid #e3e3e6",
   padding: "20px 12px", display: "flex", flexDirection: "column", height: "100%", overflowY: "auto",
 };
-const MAIN_STYLE: React.CSSProperties = { flex: 1, minWidth: 0, height: "100%", overflowY: "auto", padding: "32px 40px" };
+// 内边距放到内层 div，不放在滚动容器 MAIN 本身：Chrome 下「flex 子项 + 自身 overflow 滚动」
+// 时容器自己的 padding-bottom 不计入可滚动区域，会把最后一行/最后一个元素裁在视口底。
+// 子元素的 padding 则正常计入滚动高度，借此绕开该 bug（全页面底部留白生效）。
+const MAIN_STYLE: React.CSSProperties = { flex: 1, minWidth: 0, height: "100%", overflowY: "auto" };
+const MAIN_INNER_STYLE: React.CSSProperties = { padding: "32px 40px" };
 
 function BrandTitle() {
   return <div style={{ fontSize: 16, fontWeight: 600, padding: "8px 12px 20px", color: "#1d1d1f" }}>Yoma+HR 数字员工平台</div>;
@@ -105,7 +109,7 @@ export function AppShell({
         ))}
         <UserBlock name={user.name} role={user.platformRole} onLogout={onLogout} />
       </aside>
-      <main style={MAIN_STYLE}>{children}</main>
+      <main style={MAIN_STYLE}><div style={MAIN_INNER_STYLE}>{children}</div></main>
     </div>
   );
 }
