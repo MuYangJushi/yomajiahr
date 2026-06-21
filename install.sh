@@ -143,74 +143,6 @@ if (changed) {
 EOF
 }
 
-migrate_default_agents() {
-  if [ ! -d "$STATE_DIR/config-store" ]; then
-    return
-  fi
-  STATE_DIR="$STATE_DIR" node <<'EOF'
-const fs = require("fs");
-const path = require("path");
-const root = path.join(process.env.STATE_DIR, "config-store");
-const read = (name) => JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
-const write = (name, value) => fs.writeFileSync(path.join(root, name), JSON.stringify(value, null, 2) + "\n");
-let changed = false;
-
-const agents = read("agents.json");
-if (!agents.some((agent) => agent.id === "hr-employee")) {
-  const employee = agents.find((agent) => agent.id === "hr-assistant");
-  if (employee) {
-    employee.id = "hr-employee";
-    employee.name = "HR小助手";
-    employee.workspace = "~/.openclaw/workspaces/hr-employee";
-    changed = true;
-  }
-}
-const admin = agents.find((agent) => agent.id === "hr-admin");
-if (admin && admin.name !== "HR管理员") {
-  admin.name = "HR管理员";
-  changed = true;
-}
-write("agents.json", agents);
-
-const bindings = read("bindings.json");
-for (const binding of bindings) {
-  if (binding.agentId === "hr-assistant") {
-    binding.agentId = "hr-employee";
-    changed = true;
-  }
-  if (binding.match?.accountId === "hr-assistant") {
-    binding.match.accountId = "hr-employee";
-    changed = true;
-  }
-}
-write("bindings.json", bindings);
-
-const channels = read("channels.json");
-for (const domain of Object.keys(channels)) {
-  if (channels[domain]?.["hr-assistant"] && !channels[domain]?.["hr-employee"]) {
-    channels[domain]["hr-employee"] = channels[domain]["hr-assistant"];
-    delete channels[domain]["hr-assistant"];
-    changed = true;
-  }
-  if (channels[domain]?.["hr-admin"]?.name === "HR管理后台") {
-    channels[domain]["hr-admin"].name = "HR管理员";
-    changed = true;
-  }
-}
-write("channels.json", channels);
-
-const knowledgePath = path.join(root, "knowledge.json");
-if (fs.existsSync(knowledgePath)) {
-  const knowledge = read("knowledge.json");
-  for (const kb of knowledge.knowledgeBases || []) {
-    kb.boundAgents = (kb.boundAgents || []).map((id) => id === "hr-assistant" ? "hr-employee" : id);
-  }
-  write("knowledge.json", knowledge);
-}
-if (changed) console.log("  migrated default agent hr-assistant -> hr-employee and renamed HR管理员");
-EOF
-}
-
 # ---------------------------------------------------------------------------
 # Step 0: Prerequisites (curl, git) + remote execution detection
 # ---------------------------------------------------------------------------
@@ -394,14 +326,6 @@ fi
 
 echo "[3/10] Creating directory structure..."
 mkdir -p "$STATE_DIR"
-if [ -d "$STATE_DIR/workspaces/hr-assistant" ] && [ ! -e "$STATE_DIR/workspaces/hr-employee" ]; then
-  mv "$STATE_DIR/workspaces/hr-assistant" "$STATE_DIR/workspaces/hr-employee"
-fi
-if [ -d "$STATE_DIR/agents/hr-assistant" ] && [ ! -e "$STATE_DIR/agents/hr-employee" ]; then
-  mv "$STATE_DIR/agents/hr-assistant" "$STATE_DIR/agents/hr-employee"
-fi
-mkdir -p "$STATE_DIR/workspaces/hr-employee"
-mkdir -p "$STATE_DIR/workspaces/hr-admin"
 mkdir -p "$STATE_DIR/memory"
 mkdir -p "$STATE_DIR/skills"
 mkdir -p "$STATE_DIR/data/hr-admin"
@@ -413,23 +337,7 @@ echo "  Done"
 # Step 4: Copy workspace files
 # ---------------------------------------------------------------------------
 
-echo "[4/10] Copying workspace files..."
-for agent in hr-employee hr-admin; do
-  src="$REPO_DIR/workspaces/$agent"
-  dst="$STATE_DIR/workspaces/$agent"
-  if [ ! -d "$src" ]; then
-    echo "  [WARN] Source workspace not found: $src (skipping)"
-    continue
-  fi
-  for f in AGENTS.md SOUL.md IDENTITY.md MEMORY.md TOOLS.md; do
-    if [ -f "$src/$f" ]; then
-      cp "$src/$f" "$dst/$f"
-    fi
-  done
-  rm -f "$dst/CLAUDE.md"
-  echo "  $dst/ OK"
-done
-
+echo "[4/10] Copying workspace templates..."
 # 员工模板目录（ADR-016 §1）：workspaces/_templates/agents/<id>-template/template.json。
 # admin-server listAgentTemplates() 优先读 STATE_DIR 副本，必须随部署同步，否则
 # 平台「员工模板」页为空（#47 根因之一）。整目录覆盖式拷贝，保证删除模板也生效。
@@ -475,7 +383,6 @@ if [ -f "$REPO_DIR/config/openclaw.base.jsonc" ]; then
   else
     echo "  $STATE_DIR/config-store exists (kept; not overwritten)"
   fi
-  migrate_default_agents
   # 生成 + 校验（base + 运行时 store → 运行时 JSON）。开 --check-fs 校验 workspace/skill 存在性。
   # 已有部署优先对照运行时 .env，以支持平台动态创建的 channel 凭据；
   # 首次安装尚无运行时 .env 时，仍对照 .env.example 契约模板。
@@ -728,8 +635,7 @@ echo "  Deployment complete!"
 echo "============================================="
 echo
 echo "State directory: $STATE_DIR/"
-echo "  workspaces/hr-employee/     (employee agent workspace)"
-echo "  workspaces/hr-admin/        (admin agent workspace)"
+echo "  workspaces/_templates/      (workspace 与系统模板)"
 echo "  skills/                     (HR skills)"
 echo "  data/hr-admin/              (audit logs)"
 echo "  openclaw.json               (gateway config)"

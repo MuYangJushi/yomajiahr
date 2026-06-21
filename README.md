@@ -100,8 +100,7 @@ yomajiahr/
     .env.example           # 环境变量模板
     openclaw-*.service     # systemd 服务文件
   workspaces/
-    hr-assistant/          # 员工 Agent workspace 模板
-    hr-admin/              # 管理 Agent workspace 模板
+    _templates/            # workspace 与系统模板(IDENTITY/SOUL/AGENTS/TOOLS/MEMORY + agents/)
   skills/
     hr-policy-qa/          # 政策问答 Skill
     hr-admin/              # 知识库管理 Skill
