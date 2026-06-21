@@ -74,9 +74,10 @@ export function createApp() {
     res.sendFile(join(PUBLIC_DIR, "console", "index.html"));
   });
 
-  // 旧 vanilla SPA fallback（步骤4 迁入 /console 后移除）
+  // 旧 vanilla SPA 已移除（重构前老页面 public/{index.html,css,js} 已删）。
+  // 根路径与历史老路径统一重定向到新平台 /console。
   app.get(/^\/(upload|documents|audit-log)?$/, (_req: Request, res: Response) => {
-    res.sendFile(join(PUBLIC_DIR, "index.html"));
+    res.redirect("/console/");
   });
 
   return app;

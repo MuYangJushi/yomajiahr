@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
-import { ProForm, ProFormDependency, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
+import { ProForm, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
 import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate } from "./api";
 
 // 招募向导（ADR-013 #N）。
@@ -31,6 +31,9 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
   const [jobTitle, setJobTitle] = useState(() => initialTemplate?.profile.jobTitle ?? "");
   // 从系统模板预填的整份 profile，跨步带到「档案创建」（沿用 jobTitle 的状态提升模式）。
   const [seedProfile, setSeedProfile] = useState<AgentProfile | null>(() => initialTemplate?.profile ?? null);
+  // StepsForm 每步是独立 form 实例，preview 步读不到前面步的字段（原 ProFormDependency 只能订阅本步字段，
+  // 故全 undefined）。在每步 onFinish 时把值收集到此 state，供「预览确认」展示；最终提交仍走 StepsForm 合并。
+  const [collected, setCollected] = useState<Partial<Values>>({});
   return (
     <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={760} destroyOnClose>
       <StepsForm<Values>
@@ -73,7 +76,11 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
         {/* ① 身份定位：名称 / 不可变 ID / 岗位 / 权限级别 */}
         <StepsForm.StepForm name="identity" title="身份定位"
           initialValues={initialTemplate ? { name: initialTemplate.name, id: initialTemplate.suggestedId, role: initialTemplate.role, profile: { jobTitle: initialTemplate.profile.jobTitle } } : undefined}
-          onFinish={async (values) => { setJobTitle(values.profile?.jobTitle || ""); return true; }}>
+          onFinish={async (values) => {
+            setJobTitle(values.profile?.jobTitle || "");
+            setCollected((c) => ({ ...c, ...values, profile: { ...c.profile, ...values.profile } }));
+            return true;
+          }}>
           <TemplatePicker onPick={(t) => { setJobTitle(t.profile.jobTitle); setSeedProfile(t.profile); }} />
           <ProFormText name="name" label="名称" rules={[{ required: true }]} placeholder="如 入离职助手" />
           <ProFormText name="id" label="不可变 ID" rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母、数字和连字符" }]} placeholder="如 hr-onboard" />
@@ -85,7 +92,11 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
         </StepsForm.StepForm>
 
         {/* ② 档案创建：一句话描述 → AI 填全表 */}
-        <StepsForm.StepForm name="profile" title="档案创建">
+        <StepsForm.StepForm name="profile" title="档案创建"
+          onFinish={async (values) => {
+            setCollected((c) => ({ ...c, ...values, profile: { ...c.profile, ...values.profile } }));
+            return true;
+          }}>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#e8f1fd", borderRadius: 10, padding: "12px 14px", marginBottom: 20, fontSize: 13, color: "#48484a" }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #0a84ff, #0071e3)", flex: "none" }} />
             <div>用 AI 帮你把岗位职责、性格语气、边界规则写成结构化档案——填几句话描述，剩下交给它，每一项都能再改。AI 不可用时可全程手工填写，生成内容只写入结构化档案，不会覆盖系统规则。</div>
@@ -113,9 +124,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
 
         {/* ⑤ 预览确认（对标 ClawMax「Preview」） */}
         <StepsForm.StepForm name="preview" title="预览确认">
-          <ProFormDependency name={["name", "id", "role", "profile"]}>
-            {(values) => <ProfilePreview values={values as Values} />}
-          </ProFormDependency>
+          <ProfilePreview values={collected as Values} />
           <Alert type="warning" showIcon message="确认后立即生成 workspace 并应用配置。新员工将显示“待配置技能”和“待接入渠道”。" />
         </StepsForm.StepForm>
       </StepsForm>
