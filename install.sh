@@ -522,11 +522,11 @@ if [ -f "$REPO_DIR/admin-server/package.json" ]; then
   ( cd "$REPO_DIR/admin-server" && npm install --no-audit --no-fund && npm run build ) \
     || { echo "  [FAIL] admin-server backend install/build failed"; exit 1; }
   echo "  admin-server backend built (dist/server.js)"
-  # 前端：React+antd Vite 工程（admin-web/ 与 admin-server/ 同级）→ 产物输出到 admin-server/public/console/
+  # 前端：React+antd Vite 工程（admin-web/ 与 admin-server/ 同级）→ 产物输出到 admin-server/public/（根路径托管）
   if [ -f "$REPO_DIR/admin-web/package.json" ]; then
     ( cd "$REPO_DIR/admin-web" && npm install --no-audit --no-fund && npm run build ) \
       || { echo "  [FAIL] admin-web install/build failed"; exit 1; }
-    echo "  admin-web built (admin-server/public/console/)"
+    echo "  admin-web built (admin-server/public/)"
   fi
 else
   echo "  [WARN] admin-server/package.json not found (skipping)"

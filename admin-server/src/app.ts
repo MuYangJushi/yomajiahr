@@ -68,16 +68,15 @@ export function createApp() {
   // 上传/文件错误处理（multer 错误经 next(err) 到此）
   app.use(uploadErrorHandler);
 
-  // 新平台 SPA（React+antd）挂在 /console；静态资源由上方 express.static 提供，
-  // 这里仅对非文件路径回退 index.html 以支持前端路由。
-  app.get(/^\/console(\/.*)?$/, (_req: Request, res: Response) => {
-    res.sendFile(join(PUBLIC_DIR, "console", "index.html"));
+  // 历史 /console 书签兼容：去掉 console 层，302 到根对应路径（/console/agents → /agents）。
+  app.get(/^\/console(\/.*)?$/, (req: Request, res: Response) => {
+    res.redirect(302, req.path.replace(/^\/console/, "") || "/");
   });
 
-  // 旧 vanilla SPA 已移除（重构前老页面 public/{index.html,css,js} 已删）。
-  // 根路径与历史老路径统一重定向到新平台 /console。
-  app.get(/^\/(upload|documents|audit-log)?$/, (_req: Request, res: Response) => {
-    res.redirect("/console/");
+  // 新平台 SPA（React+antd）挂在根路径 /；静态资源由上方 express.static 提供，
+  // 这里对非 /api、非静态文件的路径回退 index.html 以支持前端路由。
+  app.get(/^(?!\/api\/).*/, (_req: Request, res: Response) => {
+    res.sendFile(join(PUBLIC_DIR, "index.html"));
   });
 
   return app;
