@@ -3,9 +3,9 @@ import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typ
 import { ProForm, ProFormDependency, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
 import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate } from "./api";
 
-// 招募向导（ADR-013 #N）。5 步切分对标 ClawMax 招募向导
+// 招募向导（ADR-013 #N）。
 // （Team Type → Composition → Communication → Workflows → Preview），本土化为：
-//   1) 身份定位（Team Type）   2) 档案共创（Composition，描述→AI 填全表）
+//   1) 身份定位（Team Type）   2) 档案创建（Composition，描述→AI 填全表）
 //   3) 渠道接入（Communication，本 Sprint 仅占位，渠道是独立生命周期）
 //   4) 技能配置（Workflows，留空占位，等技能 ADR）   5) 预览确认（Preview）
 // 招募只创建员工 + 结构化档案，绝不在此绑技能/接渠道（ADR-013 三生命周期解耦）。
@@ -29,7 +29,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
   const [submitting, setSubmitting] = useState(false);
   // initialTemplate（从「员工模板」页进入时）预填首屏；instance 按 template 加 key 重挂，故 initializer 取一次即可。
   const [jobTitle, setJobTitle] = useState(() => initialTemplate?.profile.jobTitle ?? "");
-  // 从系统模板预填的整份 profile，跨步带到「档案共创」（沿用 jobTitle 的状态提升模式）。
+  // 从系统模板预填的整份 profile，跨步带到「档案创建」（沿用 jobTitle 的状态提升模式）。
   const [seedProfile, setSeedProfile] = useState<AgentProfile | null>(() => initialTemplate?.profile ?? null);
   return (
     <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={760} destroyOnClose>
@@ -70,7 +70,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
         }}
         submitter={{ submitButtonProps: { loading: submitting } }}
       >
-        {/* ① 身份定位（对标 ClawMax「Team Type」）：名称 / 不可变 ID / 岗位 / 权限级别 */}
+        {/* ① 身份定位：名称 / 不可变 ID / 岗位 / 权限级别 */}
         <StepsForm.StepForm name="identity" title="身份定位"
           initialValues={initialTemplate ? { name: initialTemplate.name, id: initialTemplate.suggestedId, role: initialTemplate.role, profile: { jobTitle: initialTemplate.profile.jobTitle } } : undefined}
           onFinish={async (values) => { setJobTitle(values.profile?.jobTitle || ""); return true; }}>
@@ -79,13 +79,13 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
           <ProFormText name="id" label="不可变 ID" rules={[{ required: true, pattern: /^[a-z0-9-]+$/, message: "仅小写字母、数字和连字符" }]} placeholder="如 hr-onboard" />
           <ProFormText name={["profile", "jobTitle"]} label="真实岗位名称" rules={[{ required: true, max: 60 }]} placeholder="如 入离职专员" />
           <ProFormRadio.Group name="role" label="系统权限级别" initialValue="employee" options={[
-            { label: "employee（只读）", value: "employee" },
-            { label: "admin（管理权限）", value: "admin" },
+            { label: "员工", value: "employee" },
+            { label: "管理员", value: "admin" },
           ]} />
         </StepsForm.StepForm>
 
-        {/* ② 档案共创（对标 ClawMax「Composition」）：一句话描述 → AI 填全表 */}
-        <StepsForm.StepForm name="profile" title="档案共创">
+        {/* ② 档案创建：一句话描述 → AI 填全表 */}
+        <StepsForm.StepForm name="profile" title="档案创建">
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#e8f1fd", borderRadius: 10, padding: "12px 14px", marginBottom: 20, fontSize: 13, color: "#48484a" }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #0a84ff, #0071e3)", flex: "none" }} />
             <div>用 AI 帮你把岗位职责、性格语气、边界规则写成结构化档案——填几句话描述，剩下交给它，每一项都能再改。AI 不可用时可全程手工填写，生成内容只写入结构化档案，不会覆盖系统规则。</div>
@@ -93,21 +93,21 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
           <ProfileEditor jobTitle={jobTitle} seedProfile={seedProfile} />
         </StepsForm.StepForm>
 
-        {/* ③ 渠道接入（对标 ClawMax「Communication」）：本 Sprint 占位，渠道是独立生命周期 */}
+        {/* ③ 渠道接入：本 Sprint 占位，渠道是独立生命周期 */}
         <StepsForm.StepForm name="channels" title="渠道接入">
           <PlaceholderStep
             tag="待接入渠道"
             title="渠道在招募后独立接入"
-            desc="按 ADR-013，渠道（飞书 / 钉钉账号）是独立资产与独立生命周期，不在招募时绑定。招募完成后，前往「渠道」页把账号绑定到这名员工即可。"
+            desc="渠道（飞书 / 钉钉账号）是独立资产与独立生命周期，不在招募时绑定。招募完成后，前往「渠道」页把账号绑定到这名员工即可。"
           />
         </StepsForm.StepForm>
 
-        {/* ④ 技能配置（对标 ClawMax「Workflows」）：留空占位，等技能 ADR */}
+        {/* ④ 技能配置：留空占位，等技能 ADR */}
         <StepsForm.StepForm name="skills" title="技能配置">
           <PlaceholderStep
             tag="待配置技能"
             title="技能配置留待下一阶段"
-            desc="技能（如政策问答 / 文档管理）的配置流程由后续技能 ADR 定义，本向导暂不绑定。新员工招募后默认显示「待配置技能」，可在技能就绪后单独配置。"
+            desc="技能（如政策问答 / 文档管理）的配置流程由后续技能配置定义，本向导暂不绑定。新员工招募后默认显示「待配置技能」，可在技能就绪后单独配置。"
           />
         </StepsForm.StepForm>
 
@@ -176,7 +176,7 @@ function ProfileEditor({ jobTitle, seedProfile }: { jobTitle: string; seedProfil
   return (
     <>
       <ProFormText name={["profile", "jobTitle"]} hidden initialValue={jobTitle} />
-      {/* hero：一句话描述 → AI 生成完整档案（对标 ClawMax「描述→填全表」，而非单字段补全） */}
+      {/* hero：一句话描述 → AI 生成完整档案 */}
       <ProFormTextArea name="hints" label="一句话描述这名员工（可选）" fieldProps={{ rows: 2 }} placeholder="如：负责新员工入离职手续答疑与跟进，语气亲切耐心" />
       <Button type="primary" shape="round" loading={busy === "all"} onClick={() => generate()}>AI 生成完整档案</Button>
       <Typography.Text type="secondary" style={{ marginLeft: 12 }}>下方各段可逐条微调或单独重生成</Typography.Text>
