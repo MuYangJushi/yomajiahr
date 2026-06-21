@@ -19,7 +19,8 @@ const FASTGPT_DATASET = 'ds_hr_policy_001';
 function writeTempEnv(values: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'gen-config-'));
   const path = join(dir, '.env');
-  // 把模板里出现的所有 key 也带上，避免 validate-config 的占位符校验失败。
+  // 声明本文件 fixture 引用的所有占位符变量名，避免 validate-config 占位符校验失败。
+  // 注：*_BOT_* 变量名 ADR-014 修订后已不在 .env.example 预声明，此处仅作 fixture 的占位符名池。
   const exampleKeys = [
     'MINIMAX_API_KEY', 'DASHSCOPE_API_KEY', 'OPENCLAW_GATEWAY_TOKEN',
     'FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET',
@@ -216,9 +217,14 @@ test('凭证留 .env.example 模板值 → 渠道账号不派生进 runtime', ()
     },
   ];
   store.bindings = [{ agentId: 'hr-admin', match: { channel: 'dingtalk-connector', accountId: 'hr-admin' } }];
-  // 直接走 .env.example：模板里 DINGTALK_ADMIN_BOT_CLIENT_ID 是 "dingxxxxxxxxxxxxxxxx"，
-  // isPlaceholderValue 命中 /x{8,}/ → 跳过派生。
-  const result = generateConfig({ basePath: BASE_PATH, store, envPath: ENV_PATH, envExamplePath: ENV_PATH });
+  // writeTempEnv 声明全部占位符变量（过 base 的 MINIMAX/KNOWLEDGE_MCP_TOKEN 等校验）；
+  // BOT 凭据给占位值 dingxxxx/xxxx，envExamplePath 同指该文件 → .env 值 == 模板值，
+  // isPlaceholderValue 命中 → 跳过派生。不再耦合仓库 .env.example（已不预声明 BOT 变量）。
+  const envPath = writeTempEnv({
+    DINGTALK_ADMIN_BOT_CLIENT_ID: 'dingxxxxxxxxxxxxxxxx',
+    DINGTALK_ADMIN_BOT_CLIENT_SECRET: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  });
+  const result = generateConfig({ basePath: BASE_PATH, store, envPath, envExamplePath: envPath });
   const config = result.config as any;
   assert.deepEqual(Object.keys(config.channels['dingtalk-connector']?.accounts ?? {}), []);
   assert.ok(result.skippedChannelAssets?.some((s) => s.type === 'dingtalk' && s.id === 'hr-admin'));
