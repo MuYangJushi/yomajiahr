@@ -52,7 +52,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 function UserBlock({ name, role, onLogout }: { name: string; role: PlatformRole; onLogout: () => void }) {
   return (
-    <div style={{ marginTop: "auto", padding: "12px 8px 4px", borderTop: "1px solid #f0f0f2" }}>
+    <div style={{ marginTop: "auto", flexShrink: 0, padding: "12px 8px", borderTop: "1px solid #f0f0f2" }}>
       <Dropdown
         menu={{
           items: [
@@ -61,7 +61,7 @@ function UserBlock({ name, role, onLogout }: { name: string; role: PlatformRole;
           ],
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", borderRadius: 8, cursor: "pointer" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", borderRadius: 8, cursor: "pointer", minWidth: 0 }}>
           <div style={{
             width: 32, height: 32, borderRadius: "50%", flex: "none",
             background: "linear-gradient(135deg, #0a84ff, #0071e3)", color: "#fff",
@@ -69,7 +69,7 @@ function UserBlock({ name, role, onLogout }: { name: string; role: PlatformRole;
           }}>
             {name.slice(0, 1)}
           </div>
-          <span style={{ fontSize: 14, color: "#1d1d1f" }}>{name}</span>
+          <span style={{ fontSize: 14, lineHeight: 1.4, color: "#1d1d1f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
         </div>
       </Dropdown>
     </div>
