@@ -40,7 +40,7 @@ test("generateAgentProfile 正常返回 → 5 字段齐 + 长度截断", async (
   setFetchMock((_url, init) => {
     const body = JSON.parse(init.body);
     assert.equal(body.model, "MiniMax-Text-01");
-    assert.equal(body.system.includes("HR 数字员工档案共创助手"), true);
+    assert.equal(body.system.includes("Yoma 数字员工档案共创助手"), true);
     return jsonResponse({
       content: [
         {

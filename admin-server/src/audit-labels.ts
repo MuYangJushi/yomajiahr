@@ -32,6 +32,11 @@ export const ACTION_LABEL: Record<string, string> = {
   "skill.update": "编辑技能",
   "skill.delete": "删除技能",
   "skill.body.generate": "生成技能内容",
+  // 员工模板（ADR-018）
+  "agent-template.create": "新建员工模板",
+  "agent-template.update": "编辑员工模板",
+  "agent-template.delete": "删除员工模板",
+  "agent-template.restore": "恢复员工模板",
   // 历史遗留（当前代码已不写，仅为兼容旧台账记录）
   UPLOAD: "上传",
   UPDATE: "更新",

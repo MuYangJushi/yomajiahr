@@ -12,6 +12,7 @@ import { uploadRouter } from "./routes/upload.js";
 import { auditRouter } from "./routes/audit.js";
 import { configRouter } from "./routes/config.js";
 import { agentsRouter } from "./routes/agents.js";
+import { agentTemplatesRouter } from "./routes/agent-templates.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
 import { agentProfileRouter } from "./routes/agent-profile.js";
 import { channelsRouter } from "./routes/channels.js";
@@ -47,6 +48,7 @@ export function createApp() {
   app.use("/api", auditRouter);
   app.use("/api", configRouter);
   app.use("/api", agentsRouter);
+  app.use("/api", agentTemplatesRouter);
   app.use("/api", knowledgeRouter);
   app.use("/api", agentProfileRouter);
   app.use("/api", channelsRouter);

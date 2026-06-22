@@ -9,6 +9,7 @@
     "logistics"
   ],
   "category": "event",
+  "department": "operations",
   "role": "employee",
   "suggestedId": "operations-manager",
   "profile": {

@@ -1,0 +1,14 @@
+[
+  { "id": "leadership", "label": "管理层 / 总经办", "emoji": "🧠", "order": 10 },
+  { "id": "hr", "label": "人力资源", "emoji": "🧑‍💼", "order": 20 },
+  { "id": "product", "label": "产品", "emoji": "📦", "order": 30 },
+  { "id": "engineering", "label": "研发工程", "emoji": "🛠️", "order": 40 },
+  { "id": "data", "label": "数据分析", "emoji": "📊", "order": 50 },
+  { "id": "research", "label": "研究", "emoji": "🔬", "order": 60 },
+  { "id": "marketing", "label": "市场营销", "emoji": "📣", "order": 70 },
+  { "id": "operations", "label": "运营", "emoji": "⚙️", "order": 80 },
+  { "id": "finance", "label": "财务", "emoji": "💰", "order": 90 },
+  { "id": "admin-affairs", "label": "行政", "emoji": "🗂️", "order": 100 },
+  { "id": "customer", "label": "客户成功 / 客服", "emoji": "🤝", "order": 110 },
+  { "id": "other", "label": "其他 / 未分组", "emoji": "📁", "order": 999 }
+]

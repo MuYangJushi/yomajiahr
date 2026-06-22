@@ -13,6 +13,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentProfile } from "./orchestrator.js";
+import { departmentIndex, resolveTemplateDepartment } from "./departments.js";
+import {
+  readAgentTemplateOverlay,
+  type AgentTemplateOverlay,
+  type AgentTemplateOverlayEntry,
+} from "./store.js";
 
 /** 模板来源与版本追溯（ADR-016 §1.1，支持未来 ClawMax 上游同步）。 */
 export interface AgentTemplateSource {
@@ -49,6 +55,8 @@ export interface AgentTemplate {
   /** ADR-016 §1.1 预留字段（全部可选，向后兼容）。 */
   tags?: string[];
   category?: string;
+  /** ADR-018 §1.2：部门维度（curated 注册表 id）。文件可能未声明，listAgentTemplates 解析时按 category→department 映射，再无则归 "other"。 */
+  department?: string;
   defaultSkills?: string[];
   source?: AgentTemplateSource;
   status?: string;
@@ -128,6 +136,7 @@ function readTemplateFile(file: string): AgentTemplate | undefined {
   if (typeof raw.emoji === "string") t.emoji = raw.emoji;
   if (Array.isArray(raw.tags)) t.tags = skillsFromArray(raw.tags);
   if (typeof raw.category === "string") t.category = raw.category;
+  if (typeof raw.department === "string") t.department = raw.department;
   if (Array.isArray(raw.defaultSkills)) t.defaultSkills = skillsFromArray(raw.defaultSkills);
   if (raw.source && typeof raw.source === "object") t.source = raw.source as AgentTemplateSource;
   if (typeof raw.status === "string") t.status = raw.status;
@@ -152,15 +161,124 @@ function readTemplatesFrom(dir: string): AgentTemplate[] {
     const t = readTemplateFile(file);
     if (t) out.push(t);
   }
-  return out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
 }
 
-/** 列出全部系统模板（ADR-016 §1：读目录派生）。优先 STATE_DIR 部署副本，回退仓库源。 */
-export function listAgentTemplates(): AgentTemplate[] {
+/** 应用部门兜底：`department` 字段优先，再按 category→department 映射，再回退 "other"。 */
+function withResolvedDepartment(list: AgentTemplate[]): AgentTemplate[] {
+  const idx = departmentIndex();
+  const known = new Set(idx.keys());
+  return list.map((t) => ({ ...t, department: resolveTemplateDepartment(t.department, t.category, known) }));
+}
+
+/** 排序：按 (department.order, template id)，部门未知则归到尾部。 */
+function sortByDepartment(list: AgentTemplate[]): AgentTemplate[] {
+  const idx = departmentIndex();
+  return [...list].sort((a, b) => {
+    const da = idx.get(a.department || "other")?.order ?? 999;
+    const db = idx.get(b.department || "other")?.order ?? 999;
+    if (da !== db) return da - db;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** 读内置模板（不含 overlay）：优先 STATE_DIR 部署副本，回退仓库源。 */
+function readBuiltinTemplates(): AgentTemplate[] {
   const stateDir = process.env.OPENCLAW_STATE_DIR || "";
-  if (stateDir) {
-    const fromState = readTemplatesFrom(stateTemplatesDir());
-    if (fromState.length > 0) return fromState;
+  let list: AgentTemplate[] = [];
+  if (stateDir) list = readTemplatesFrom(stateTemplatesDir());
+  if (list.length === 0) list = readTemplatesFrom(repoTemplatesDir());
+  return list;
+}
+
+/** 将 overlay.custom 条目规范化为 AgentTemplate（补必填默认值，不做严格类型断言，CRUD 层负责校验）。 */
+function normalizeCustom(entry: AgentTemplateOverlayEntry): AgentTemplate | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  if (typeof entry.id !== "string" || typeof entry.name !== "string") return undefined;
+  if (entry.role !== "employee" && entry.role !== "admin") return undefined;
+  if (!entry.profile || typeof entry.profile !== "object") return undefined;
+  const p = entry.profile;
+  const t: AgentTemplate = {
+    id: entry.id,
+    name: entry.name,
+    description: typeof entry.description === "string" ? entry.description : "",
+    suggestedId: typeof entry.suggestedId === "string" && entry.suggestedId ? entry.suggestedId : entry.id,
+    role: entry.role,
+    profile: {
+      jobTitle: typeof p.jobTitle === "string" ? p.jobTitle : "",
+      responsibilities: typeof p.responsibilities === "string" ? p.responsibilities : "",
+      personality: typeof p.personality === "string" ? p.personality : "",
+      tone: typeof p.tone === "string" ? p.tone : "",
+      boundaries: typeof p.boundaries === "string" ? p.boundaries : "",
+    },
+    suggestedSkills: Array.isArray(entry.suggestedSkills) ? entry.suggestedSkills.filter((s): s is string => typeof s === "string") : [],
+  };
+  if (typeof entry.emoji === "string") t.emoji = entry.emoji;
+  if (Array.isArray(entry.tags)) t.tags = entry.tags.filter((s): s is string => typeof s === "string");
+  if (typeof entry.category === "string") t.category = entry.category;
+  if (typeof entry.department === "string") t.department = entry.department;
+  if (Array.isArray(entry.defaultSkills)) t.defaultSkills = entry.defaultSkills.filter((s): s is string => typeof s === "string");
+  return t;
+}
+
+/** 把 overrides[id] 的字段级覆盖应用到内置模板。
+ *  仅覆盖白名单字段（name/description/emoji/tags/category/department/profile/suggestedSkills/defaultSkills/role），
+ *  不允许通过 overrides 改 id（id 是内置的稳定标识，改了等于「换了一个模板」，请走自建 custom）。 */
+function applyOverride(base: AgentTemplate, override: Record<string, unknown>): AgentTemplate {
+  const out: AgentTemplate = { ...base };
+  if (typeof override.name === "string") out.name = override.name;
+  if (typeof override.description === "string") out.description = override.description;
+  if (typeof override.emoji === "string") out.emoji = override.emoji;
+  if (Array.isArray(override.tags)) out.tags = override.tags.filter((s): s is string => typeof s === "string");
+  if (typeof override.category === "string") out.category = override.category;
+  if (typeof override.department === "string") out.department = override.department;
+  if (override.role === "employee" || override.role === "admin") out.role = override.role;
+  if (override.profile && typeof override.profile === "object") {
+    const op = override.profile as Record<string, unknown>;
+    out.profile = {
+      jobTitle: typeof op.jobTitle === "string" ? op.jobTitle : base.profile.jobTitle,
+      responsibilities: typeof op.responsibilities === "string" ? op.responsibilities : base.profile.responsibilities,
+      personality: typeof op.personality === "string" ? op.personality : base.profile.personality,
+      tone: typeof op.tone === "string" ? op.tone : base.profile.tone,
+      boundaries: typeof op.boundaries === "string" ? op.boundaries : base.profile.boundaries,
+    };
   }
-  return readTemplatesFrom(repoTemplatesDir());
+  if (Array.isArray(override.suggestedSkills)) out.suggestedSkills = (override.suggestedSkills as unknown[]).filter((s): s is string => typeof s === "string");
+  if (Array.isArray(override.defaultSkills)) out.defaultSkills = (override.defaultSkills as unknown[]).filter((s): s is string => typeof s === "string");
+  return out;
+}
+
+/**
+ * 列出全部系统模板（ADR-016 §1 + ADR-018 §决策 2.2）。合并语义：
+ *
+ *   builtins = 内置（state 优先 → repo fallback）
+ *   overlay  = config-store/agent-templates.json
+ *   结果 = (builtins 中 id ∉ hidden，逐个 apply overrides[id]) ++ overlay.custom
+ *          → 部门兜底解析 → 按 (department.order, id) 排序
+ *
+ * 行为：
+ * - 旧部署 overlay 文件缺失：等价空 overlay，列表与「无 overlay」时一致（向后兼容）。
+ * - overlay.custom 与内置 id 冲突时：custom 进列表，内置仍在（CRUD 端点会在 POST 时阻断同名）。
+ *   兜底原则：列表层不强删，避免坏 overlay 让 UI 整段挂掉；冲突由 CRUD 校验环节守。
+ */
+export function listAgentTemplates(): AgentTemplate[] {
+  const builtins = readBuiltinTemplates();
+  const overlay: AgentTemplateOverlay = readAgentTemplateOverlay();
+  const hidden = new Set(overlay.hidden);
+  const merged: AgentTemplate[] = [];
+  for (const b of builtins) {
+    if (hidden.has(b.id)) continue;
+    const ov = overlay.overrides[b.id];
+    merged.push(ov ? applyOverride(b, ov) : b);
+  }
+  for (const c of overlay.custom) {
+    const normalized = normalizeCustom(c);
+    if (normalized) merged.push(normalized);
+  }
+  return sortByDepartment(withResolvedDepartment(merged));
+}
+
+/** 列出仅内置模板（CRUD 用：内置 id 集合用于判定「软隐藏 vs 真删」 + 同名冲突）。 */
+export function listBuiltinAgentTemplates(): AgentTemplate[] {
+  return sortByDepartment(withResolvedDepartment(readBuiltinTemplates()));
 }

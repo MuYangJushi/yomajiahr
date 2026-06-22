@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { ProForm, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
-import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate } from "./api";
+import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, fetchDepartments, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate, type Department } from "./api";
 
 // 招募向导（ADR-013 #N）。
 // （Team Type → Composition → Communication → Workflows → Preview），本土化为：
@@ -133,27 +133,62 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
 }
 
 // 从系统模板下拉预填（空白起步 + 从模板创建）。本身不是表单字段，避免污染提交体。
+// ADR-018：两级选择——先选部门，再列该部门下的员工模板；保留「跳过 / 空白创建」（不选部门即可）。
 function TemplatePicker({ onPick }: { onPick: (t: AgentTemplate) => void }) {
   const form = ProForm.useFormInstance();
   const [templates, setTemplates] = useState<AgentTemplate[]>([]);
-  const [picked, setPicked] = useState<string>();
-  useEffect(() => { fetchAgentTemplates().then(setTemplates).catch(() => {}); }, []);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [pickedDept, setPickedDept] = useState<string>();
+  const [pickedTpl, setPickedTpl] = useState<string>();
+  useEffect(() => {
+    fetchAgentTemplates().then(setTemplates).catch(() => {});
+    fetchDepartments().then(setDepartments).catch(() => {});
+  }, []);
+  // 按部门聚合并过滤空部门（无模板的部门不出现在下拉里，避免「死部门」）。
+  const deptOptions = useMemo(() => {
+    const byDept = new Map<string, number>();
+    for (const t of templates) {
+      const d = t.department || "other";
+      byDept.set(d, (byDept.get(d) || 0) + 1);
+    }
+    return departments
+      .filter((d) => byDept.get(d.id))
+      .map((d) => ({ value: d.id, label: `${d.emoji ? d.emoji + " " : ""}${d.label}（${byDept.get(d.id)}）` }));
+  }, [templates, departments]);
+  const tplOptions = useMemo(() => {
+    if (!pickedDept) return [];
+    return templates
+      .filter((t) => (t.department || "other") === pickedDept)
+      .map((t) => ({ value: t.id, label: `${t.emoji ? t.emoji + " " : ""}${t.name} — ${t.description}` }));
+  }, [templates, pickedDept]);
   if (templates.length === 0) return null;
   return (
-    <Form.Item label="从系统模板创建（可选）" extra="选择后预填名称 / ID / 权限 / 档案，可继续逐项修改。">
-      <Select
-        allowClear
-        placeholder="空白创建，或选择一个系统模板预填"
-        value={picked}
-        options={templates.map((t) => ({ value: t.id, label: `${t.name} — ${t.description}` }))}
-        onChange={(value) => {
-          setPicked(value);
-          const t = templates.find((x) => x.id === value);
-          if (!t) return;
-          form.setFieldsValue({ name: t.name, id: t.suggestedId, role: t.role, profile: { jobTitle: t.profile.jobTitle } });
-          onPick(t);
-        }}
-      />
+    <Form.Item label="从系统模板创建（可选）" extra="先选部门、再选员工模板。选择后预填名称 / ID / 权限 / 档案，可继续逐项修改；不选则空白创建。">
+      <Space.Compact style={{ width: "100%" }}>
+        <Select
+          allowClear
+          placeholder="选择部门"
+          value={pickedDept}
+          onChange={(value) => { setPickedDept(value); setPickedTpl(undefined); }}
+          options={deptOptions}
+          style={{ width: 200 }}
+        />
+        <Select
+          allowClear
+          placeholder={pickedDept ? "选择该部门下的员工模板" : "先选部门"}
+          value={pickedTpl}
+          disabled={!pickedDept}
+          options={tplOptions}
+          onChange={(value) => {
+            setPickedTpl(value);
+            const t = templates.find((x) => x.id === value);
+            if (!t) return;
+            form.setFieldsValue({ name: t.name, id: t.suggestedId, role: t.role, profile: { jobTitle: t.profile.jobTitle } });
+            onPick(t);
+          }}
+          style={{ flex: 1 }}
+        />
+      </Space.Compact>
     </Form.Item>
   );
 }

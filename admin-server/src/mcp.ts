@@ -48,12 +48,12 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
   server.registerTool(
     "knowledge_search",
     {
-      title: "HR 知识库检索",
+      title: "知识库检索",
       description:
-        "检索 HR 制度知识库，返回最相关的政策片段及来源（文档编号/版本）。仅做检索、不生成答案——" +
-        "答案与口径由调用方（hr-policy-qa）基于返回片段组织，并按片段附带的来源拼引用。",
+        "检索绑定的知识库，返回最相关的内容片段及来源（文档编号/版本）。仅做检索、不生成答案——" +
+        "答案与口径由调用方基于返回片段组织，并按片段附带的来源拼引用。",
       inputSchema: {
-        query: z.string().describe("员工的政策问题或关键词"),
+        query: z.string().describe("用户的问题或关键词"),
         topK: z.number().int().min(1).max(20).optional().describe("返回片段数，默认 5"),
       },
     },
@@ -70,14 +70,14 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
       } catch (err) {
         if (err instanceof KnowledgeUnavailableError) {
           // ADR-010：已弃本地回退（FastGPT 为唯一知识源）。不可达时诚实告知不可用、不要编造，
-          // 引导用户稍后重试或联系 HR。
+          // 引导用户稍后重试或联系管理员。
           return {
             content: [
               {
                 type: "text",
                 text:
                   `知识库平台暂时不可用（${err.message}）。请如实告知用户：` +
-                  `「知识库平台暂时不可用，请稍后重试，或直接联系 HR」；不要编造政策内容。`,
+                  `「知识库平台暂时不可用，请稍后重试，或联系管理员」；不要编造内容。`,
               },
             ],
           };
@@ -92,9 +92,9 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
   server.registerTool(
     "knowledge_import",
     {
-      title: "HR 知识库导入（管理员）",
+      title: "知识库导入（管理员）",
       description:
-        "把服务器上的文档文件导入 HR 知识库（交 FastGPT 原生解析/切片/向量化）。仅管理员可用。" +
+        "把服务器上的文档文件导入绑定的知识库（交 FastGPT 原生解析/切片/向量化）。仅管理员可用。" +
         "filePath 为服务器可读的文件绝对路径（管理员提供，或渠道附件注入的 [media attached: /path]）。",
       inputSchema: {
         filePath: z.string().describe("服务器上待导入文档的绝对路径"),

@@ -9,6 +9,7 @@
     "program"
   ],
   "category": "event",
+  "department": "operations",
   "role": "employee",
   "suggestedId": "program-manager",
   "profile": {

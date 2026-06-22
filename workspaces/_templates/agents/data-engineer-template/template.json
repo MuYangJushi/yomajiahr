@@ -10,6 +10,7 @@
     "infrastructure"
   ],
   "category": "data",
+  "department": "data",
   "role": "employee",
   "suggestedId": "data-engineer",
   "profile": {
