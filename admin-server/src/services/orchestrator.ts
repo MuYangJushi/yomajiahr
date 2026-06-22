@@ -200,24 +200,25 @@ function pendingStatusBlock(pendingSkills: boolean, pendingChannels: boolean): s
  * fix/usage-bugs：KB 解绑后 AI 仍以为有 knowledge_search → 用 exec curl 绕路。
  *   → 与运行时 tools.allow 一致地"事实陈述"工具是否在场。
  *   不绑库 / 解绑后：明确告诉 AI 该能力当前关闭、不要绕路。
+ * ADR-018：去 HR 专属措辞 —— 不写「HR 政策」「HR 知识库」，改通用「事实/依据」。
  */
 export function knowledgeToolsBlock(role: "employee" | "admin", hasKbBinding: boolean): string {
   if (!hasKbBinding) {
     return [
       "### 知识库工具：当前未绑定",
       "",
-      "你的工具清单中**没有任何**知识库检索/导入工具。HR 政策类问题暂时无法检索。",
+      "你的工具清单中**没有任何**知识库检索/导入工具。需要文档依据的问题暂时无法检索。",
       "",
-      "- 收到政策/制度/流程类问题：如实告知「我目前未绑定知识库，无法基于政策文档回答，建议您联系 HR」。",
+      "- 收到需要文档依据的问题：如实告知「我目前未绑定知识库，无法基于授权资料回答，建议您联系管理员」。",
       "- **绝不**用 `exec` / `curl` / 任何网络请求自行探测 FastGPT 或其他知识库 API。",
     ].join("\n");
   }
   const lines = [
     "### 知识库工具",
     "",
-    "HR 知识库经 FastGPT MCP 工具访问（ADR-010）。下列工具在你的运行时 allowlist 中：",
+    "知识库经 FastGPT MCP 工具访问（ADR-010）。下列工具在你的运行时 allowlist 中：",
     "",
-    "- `knowledge_search`：检索 HR 知识库（FastGPT），返回命中切片",
+    "- `knowledge_search`：检索你绑定的知识库（FastGPT），返回命中切片",
   ];
   if (role === "admin") {
     lines.push("- `knowledge_import`：导入文档到知识库（仅管理员岗位）");

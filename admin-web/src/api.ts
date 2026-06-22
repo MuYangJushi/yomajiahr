@@ -216,12 +216,61 @@ export interface AgentTemplate {
   emoji?: string;
   tags?: string[];
   category?: string;
+  /** ADR-018 §1.2：部门 id（不在则按 category→department 映射，最终回退 "other"）。 */
+  department?: string;
   defaultSkills?: string[];
   status?: string;
   workflowHints?: { suggestedWorkflowIds?: string[]; targetTags?: string[]; defaultParticipation?: string };
 }
 export async function fetchAgentTemplates(): Promise<AgentTemplate[]> {
   return (await api.get("/config/agent-templates")).data.templates;
+}
+
+// —— 部门注册表（ADR-018 §1.1）——
+export interface Department {
+  id: string;
+  label: string;
+  emoji?: string;
+  order: number;
+}
+export async function fetchDepartments(): Promise<Department[]> {
+  return (await api.get("/config/departments")).data.departments;
+}
+
+// —— 员工模板 CRUD（ADR-018 §2.3）——
+export interface CreateAgentTemplateInput {
+  id: string;
+  name: string;
+  role: "employee" | "admin";
+  description?: string;
+  suggestedId?: string;
+  emoji?: string;
+  tags?: string[];
+  category?: string;
+  department?: string;
+  profile: {
+    jobTitle: string;
+    responsibilities: string;
+    personality: string;
+    tone: string;
+    boundaries: string;
+  };
+  suggestedSkills?: string[];
+  defaultSkills?: string[];
+}
+export type UpdateAgentTemplateInput = Partial<Omit<CreateAgentTemplateInput, "id">>;
+export async function createAgentTemplate(input: CreateAgentTemplateInput): Promise<AgentTemplate> {
+  return (await api.post("/config/agent-templates", input)).data.template;
+}
+export async function updateAgentTemplate(id: string, input: UpdateAgentTemplateInput): Promise<AgentTemplate> {
+  return (await api.put(`/config/agent-templates/${encodeURIComponent(id)}`, input)).data.template;
+}
+/** 删除：内置 → 软隐藏（kind:hidden，可恢复）；自建 → 真删（kind:removed）。 */
+export async function deleteAgentTemplate(id: string): Promise<{ kind: "hidden" | "removed"; id: string }> {
+  return (await api.delete(`/config/agent-templates/${encodeURIComponent(id)}`)).data;
+}
+export async function restoreAgentTemplate(id: string): Promise<AgentTemplate> {
+  return (await api.post(`/config/agent-templates/${encodeURIComponent(id)}/restore`)).data.template;
 }
 
 // —— 渠道管理（ADR-013 §渠道独立）——

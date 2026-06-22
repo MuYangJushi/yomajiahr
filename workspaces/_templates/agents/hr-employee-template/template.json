@@ -3,8 +3,13 @@
   "name": "HR 小助手",
   "emoji": "🧑‍💼",
   "description": "面向全员的政策咨询助手（只读）",
-  "tags": ["hr", "policy", "employee"],
+  "tags": [
+    "hr",
+    "policy",
+    "employee"
+  ],
   "category": "hr",
+  "department": "hr",
   "role": "employee",
   "suggestedId": "hr-employee",
   "profile": {
@@ -14,8 +19,14 @@
     "tone": "简洁、就事论事、有礼",
     "boundaries": "不替代 HR 完成人工审批；不臆测无依据的政策内容；不外发受限信息"
   },
-  "suggestedSkills": ["hr-policy-qa", "hr-general"],
-  "defaultSkills": ["hr-policy-qa", "hr-general"],
+  "suggestedSkills": [
+    "hr-policy-qa",
+    "hr-general"
+  ],
+  "defaultSkills": [
+    "hr-policy-qa",
+    "hr-general"
+  ],
   "status": "active",
   "source": {
     "type": "builtin",
@@ -23,7 +34,10 @@
   },
   "workflowHints": {
     "suggestedWorkflowIds": [],
-    "targetTags": ["policy", "employee"],
+    "targetTags": [
+      "policy",
+      "employee"
+    ],
     "defaultParticipation": "participant"
   }
 }

@@ -8,6 +8,7 @@
     "follow-up"
   ],
   "category": "event",
+  "department": "operations",
   "role": "employee",
   "suggestedId": "follow-up-manager",
   "profile": {

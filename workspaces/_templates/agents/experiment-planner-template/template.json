@@ -10,6 +10,7 @@
     "testing"
   ],
   "category": "engineering",
+  "department": "engineering",
   "role": "employee",
   "suggestedId": "experiment-planner",
   "profile": {
