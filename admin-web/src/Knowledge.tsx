@@ -33,6 +33,7 @@ import {
   type SkillMeta,
 } from "./api";
 import { PageTopbar, TableCard } from "./shell";
+import { respWidth } from "./responsive";
 
 function HealthBanner({ health, onRefresh }: { health: KnowledgeHealth | null; onRefresh: () => void }) {
   if (!health) return <Spin />;
@@ -209,6 +210,7 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
           dataSource={bases}
           columns={columns}
           pagination={false}
+          scroll={{ x: 720 }}
         />
       </TableCard>
       <NewKbModal open={modalOpen} agents={agents} onClose={() => setModalOpen(false)} onCreated={load} />
@@ -406,7 +408,7 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
         />
       )}
       <TableCard>
-        <Table<AgentRow> rowKey="id" dataSource={agents} columns={columns} pagination={false} />
+        <Table<AgentRow> rowKey="id" dataSource={agents} columns={columns} pagination={false} scroll={{ x: 600 }} />
       </TableCard>
       <div style={{ marginTop: 16 }}>
         <Button type="primary" shape="round" loading={saving} onClick={save}>保存绑定</Button>
@@ -562,9 +564,10 @@ function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
           dataSource={[...pending, ...collections]}
           columns={columns}
           pagination={false}
+          scroll={{ x: 900 }}
         />
       </TableCard>
-      <Drawer title={`切片预览 · ${chunkTitle}`} width={720} open={chunkOpen} onClose={() => setChunkOpen(false)}>
+      <Drawer title={`切片预览 · ${chunkTitle}`} width={respWidth(720)} open={chunkOpen} onClose={() => setChunkOpen(false)}>
         {chunkLoading ? <Spin /> : (
           <List
             locale={{ emptyText: "暂无切片" }}

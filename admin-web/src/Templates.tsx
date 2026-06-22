@@ -20,6 +20,7 @@ import {
   message,
 } from "antd";
 import { DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
+import { respWidth } from "./responsive";
 import {
   createAgentTemplate,
   deleteAgentTemplate,
@@ -301,7 +302,7 @@ function TemplateEditor(props: {
       onCancel={onClose}
       onOk={handleSubmit}
       confirmLoading={saving}
-      width={720}
+      width={respWidth(720)}
       okText="保存"
       cancelText="取消"
       destroyOnClose

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { ProForm, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
 import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, fetchDepartments, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate, type Department } from "./api";
+import { respWidth } from "./responsive";
 
 // 招募向导（ADR-013 #N）。
 // （Team Type → Composition → Communication → Workflows → Preview），本土化为：
@@ -35,7 +36,7 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
   // 故全 undefined）。在每步 onFinish 时把值收集到此 state，供「预览确认」展示；最终提交仍走 StepsForm 合并。
   const [collected, setCollected] = useState<Partial<Values>>({});
   return (
-    <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={760} destroyOnClose>
+    <Modal title="招募数字员工" open={open} footer={null} onCancel={onClose} width={respWidth(760)} destroyOnClose>
       <StepsForm<Values>
         onFinish={async (values) => {
           setSubmitting(true);

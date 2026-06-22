@@ -198,6 +198,7 @@ export default function Agents() {
           columns={columns}
           pagination={false}
           locale={{ emptyText: <AgentEmpty /> }}
+          scroll={{ x: 900 }}
         />
       </TableCard>
       <CreateAgentWizard
