@@ -6,7 +6,7 @@
 
 `workspaces/_templates/agents/` 目录下 25 个数字员工模板移植自 ClawMax 项目，按 MIT 许可证授权使用：
 
-- 来源：https://github.com/anthropics/clawmax （v1.8.7）
+- 来源：https://github.com/Maximilien-ai/clawmax （v1.8.7）
 - 许可证：MIT License
 - 移植涉及模板（template id）：
   astro-guide / briefing-writer / ceo / competitor-analyst / customer-researcher /
@@ -23,7 +23,7 @@
 ```
 MIT License
 
-Copyright (c) Anthropic
+Copyright (c) 2026 maximilien-ai
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
