@@ -34,14 +34,21 @@ uploadRouter.post(
 
       // ADR-010：原始文件直传 FastGPT 解析/切片/向量化。审计 IMPORT（无本地副本，FastGPT 唯一存储）。
       try {
-        const { collectionId } = await importDocument(req.file.buffer, originalName, datasetId);
+        const { collectionId, deduped } = await importDocument(req.file.buffer, originalName, datasetId);
         appendAuditLog("IMPORT", originalName, operator, {
-          status: "success",
+          status: deduped ? "deduped" : "success",
           platform: "fastgpt",
           collectionId,
           kbId: datasetId,
         });
-        res.json({ success: true, file: originalName, kbId: datasetId, collectionId });
+        res.json({
+          success: true,
+          file: originalName,
+          kbId: datasetId,
+          collectionId,
+          deduped,
+          message: deduped ? `已存在同名文档「${originalName}」，复用已有集合，未重复导入` : undefined,
+        });
       } catch (err) {
         appendAuditLog("IMPORT", originalName, operator, {
           status: "failed",

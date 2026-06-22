@@ -44,7 +44,7 @@ export const ACTION_LABEL: Record<string, string> = {
   KB_IMPORT: "知识库导入",
 };
 
-const STATUS_LABEL: Record<string, string> = { success: "成功", ok: "成功", failed: "失败", error: "失败" };
+const STATUS_LABEL: Record<string, string> = { success: "成功", ok: "成功", failed: "失败", error: "失败", deduped: "去重复用" };
 const ROLE_LABEL: Record<string, string> = { employee: "员工", admin: "管理员" };
 
 export function actionLabel(action: string): string {

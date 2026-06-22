@@ -121,9 +121,12 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
       // 机器行为人：经数字员工在对话里触发导入，operator 记为 agent:<id> 以区别于人类登录。
       const operator = `agent:${agentId ?? "unknown"}`;
       try {
-        const { collectionId } = await importDocument(readFileSync(filePath), filename, dsId);
-        appendAuditLog("IMPORT", filename, operator, { status: "success", platform: "fastgpt", collectionId, kbId: dsId, via: "chat" });
-        return { content: [{ type: "text", text: `已导入「${filename}」到知识库（collectionId=${collectionId}）。FastGPT 正在切片/向量化，稍后可在知识库页查看。` }] };
+        const { collectionId, deduped } = await importDocument(readFileSync(filePath), filename, dsId);
+        appendAuditLog("IMPORT", filename, operator, { status: deduped ? "deduped" : "success", platform: "fastgpt", collectionId, kbId: dsId, via: "chat" });
+        const text = deduped
+          ? `知识库里已有同名文档「${filename}」，已复用现有内容，未重复导入。如需更新，请先在知识库页删除旧文档再上传。`
+          : `已导入「${filename}」到知识库（collectionId=${collectionId}）。FastGPT 正在切片/向量化，稍后可在知识库页查看。`;
+        return { content: [{ type: "text", text }] };
       } catch (err) {
         appendAuditLog("IMPORT", filename, operator, { status: "failed", platform: "fastgpt", reason: (err as Error).message, kbId: dsId, via: "chat" });
         return { content: [{ type: "text", text: `导入失败：${(err as Error).message}` }], isError: true };
