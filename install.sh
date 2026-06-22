@@ -577,6 +577,28 @@ if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
       /etc/systemd/system/openclaw-apply.path
     sudo chmod +x "$REPO_DIR/config/scripts/apply-config.sh"
 
+    # 让 /run/user/<uid> 开机常驻。admin/gateway 两个 unit 都用 TMPDIR=/run/user/<uid>，
+    # 而该目录由 logind 随登录会话创建/销毁；Linger=no 时无活动会话期间会被拆除，导致：
+    #   (a) admin-server 招募员工 mkdtemp '/run/user/1000/orch-profile-XXXXXX' ENOENT；
+    #   (b) gateway 在无会话时重启，撞 openclaw 2026.6.6+ 的 temp-dir 安全校验起不来。
+    # enable-linger 让 logind 开机即创建并保持该目录，无需交互会话（ADR-002：不能改 openclaw 源码，
+    # 只能在 TMPDIR/unit 层修；不在服务里 mkdir，避免与 logind 后挂的 tmpfs 竞态）。
+    _RUNTIME_UID="$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000)"
+    if ! loginctl show-user "$CURRENT_USER" -p Linger 2>/dev/null | grep -q 'Linger=yes'; then
+      echo "[systemd] Enabling linger for $CURRENT_USER (keeps /run/user/$_RUNTIME_UID alive without a session)..."
+      sudo loginctl enable-linger "$CURRENT_USER"
+    fi
+    # enable-linger 通常立即创建 /run/user/<uid>，个别 systemd 版本要等一拍，主动兜底等待。
+    for _i in 1 2 3 4 5; do
+      [ -d "/run/user/$_RUNTIME_UID" ] && break
+      sleep 1
+    done
+    if [ ! -d "/run/user/$_RUNTIME_UID" ]; then
+      echo "  [WARN] /run/user/$_RUNTIME_UID still missing after enable-linger;" >&2
+      echo "         services using TMPDIR=/run/user/$_RUNTIME_UID may fail to start." >&2
+    fi
+    unset _RUNTIME_UID _i
+
     sudo systemctl daemon-reload
     sudo systemctl enable --now openclaw-apply.path
     echo "  Service files installed (incl. config apply channel)."

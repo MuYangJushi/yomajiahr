@@ -125,8 +125,8 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="平台内对话（ADR-016）"
-        description="每轮独立执行，不经过常驻网关；继承该员工的工具权限与受限标记。新建员工即可在此试聊，无需重启。"
+        message="在线试聊"
+        description="在这里直接和该员工对话，体验它配置后的实际效果。"
       />
       <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
         <Select

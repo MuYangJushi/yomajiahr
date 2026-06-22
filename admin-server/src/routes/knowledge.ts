@@ -257,7 +257,11 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
 //
 // 异步化（fix/usage-bugs #1）：HTTP 立即 202 + jobId；后台跑校验 + writeStore + apply + 失败回滚链路。
 // 校验失败（结构错 / 引用未知 agent）走 800ms race，仍能立即 400。
-knowledgeRouter.put("/knowledge/bindings", requireRole("admin"), async (req: Request, res: Response) => {
+//
+// 权限 ops（fix/bug-0622）：绑定仅授予员工只读检索工具 knowledge_search，敏感度低于
+// 知识库文档导入/删除（已是 ops），与「配技能/绑渠道」对齐；建库 /knowledge/bases 与
+// 改连接 /knowledge/config 仍保留 admin。
+knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Request, res: Response) => {
   const operator = req.user?.platformUserId || "";
   const { jobId, promise } = enqueueApplyJob(
     async () => {
