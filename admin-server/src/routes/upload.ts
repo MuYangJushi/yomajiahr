@@ -30,26 +30,24 @@ uploadRouter.post(
         return res.status(400).json({ error: (err as Error).message });
       }
       const originalName = normalizeUploadedFilename(req.file.originalname);
-      const operator = { id: req.user?.platformUserId ?? "unknown", name: req.user?.name ?? "unknown" };
+      const operator = req.user?.platformUserId || "";
 
       // ADR-010：原始文件直传 FastGPT 解析/切片/向量化。审计 IMPORT（无本地副本，FastGPT 唯一存储）。
       try {
         const { collectionId } = await importDocument(req.file.buffer, originalName, datasetId);
-        appendAuditLog("IMPORT", originalName, {
+        appendAuditLog("IMPORT", originalName, operator, {
           status: "success",
           platform: "fastgpt",
           collectionId,
           kbId: datasetId,
-          operator,
         });
         res.json({ success: true, file: originalName, kbId: datasetId, collectionId });
       } catch (err) {
-        appendAuditLog("IMPORT", originalName, {
+        appendAuditLog("IMPORT", originalName, operator, {
           status: "failed",
           platform: "fastgpt",
           reason: (err as Error).message,
           kbId: datasetId,
-          operator,
         });
         // 无本地兜底（ADR-010）：导入失败即上传失败。
         const status = err instanceof KnowledgeUnavailableError ? 503 : 500;

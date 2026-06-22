@@ -80,12 +80,11 @@ agentTemplatesRouter.post("/config/agent-templates", requireRole("ops"), (req: R
       return res.status(403).json({ error: "仅平台管理员可创建 admin 角色模板" });
     }
     const tpl = createAgentTemplate(parsed.data);
-    appendAuditLog("agent-template.create", tpl.id, {
+    appendAuditLog("agent-template.create", tpl.id, operator, {
       id: tpl.id,
       name: tpl.name,
       role: tpl.role,
       department: tpl.department,
-      operator,
     });
     res.status(201).json({ template: tpl });
   } catch (err) {
@@ -105,12 +104,11 @@ agentTemplatesRouter.put("/config/agent-templates/:id", requireRole("ops"), (req
       return res.status(403).json({ error: "仅平台管理员可将模板角色提升为 admin" });
     }
     const tpl = updateAgentTemplate(id, parsed.data);
-    appendAuditLog("agent-template.update", id, {
+    appendAuditLog("agent-template.update", id, operator, {
       id,
       name: tpl.name,
       role: tpl.role,
       department: tpl.department,
-      operator,
     });
     res.json({ template: tpl });
   } catch (err) {
@@ -125,10 +123,9 @@ agentTemplatesRouter.delete("/config/agent-templates/:id", requireRole("ops"), (
   const operator = req.user?.platformUserId || "";
   try {
     const result = deleteAgentTemplate(id);
-    appendAuditLog("agent-template.delete", id, {
+    appendAuditLog("agent-template.delete", id, operator, {
       id,
       kind: result.kind, // hidden | removed
-      operator,
     });
     res.json(result);
   } catch (err) {
@@ -144,7 +141,7 @@ agentTemplatesRouter.post("/config/agent-templates/:id/restore", requireRole("op
   const operator = req.user?.platformUserId || "";
   try {
     const tpl = restoreAgentTemplate(id);
-    appendAuditLog("agent-template.restore", id, { id, operator });
+    appendAuditLog("agent-template.restore", id, operator, { id });
     res.json({ template: tpl });
   } catch (err) {
     const message = (err as Error).message;
