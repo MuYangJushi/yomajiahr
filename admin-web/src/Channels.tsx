@@ -8,6 +8,19 @@ import {
 } from "./api";
 
 const TYPE_LABEL = { feishu: "飞书", dingtalk: "钉钉" };
+// 扫码创建会话状态的中文文案（后端在 preparing/awaiting_scan/applying 阶段不下发 message，
+// 否则前端会直接把英文 status 显示出来）。
+const ONBOARDING_STATUS_LABEL: Record<string, string> = {
+  preparing: "正在准备二维码…",
+  awaiting_scan: "请使用对应 App 扫码并确认创建应用",
+  authorized: "授权成功，正在创建…",
+  applying: "正在写入配置…",
+  verifying: "正在验证渠道连接…",
+  success: "已完成",
+  failed: "创建失败",
+  expired: "二维码已过期",
+  cancelled: "已取消",
+};
 type Action = "create" | "edit" | "bind" | null;
 
 export default function Channels() {
@@ -71,13 +84,18 @@ export default function Channels() {
   async function submit(values: any) {
     try {
       if (action === "create") {
-        const session = await createChannelAsset({
-        id: values.id, type: values.type, displayName: values.displayName, mode,
-        ...(mode === "manual" ? { clientId: values.clientId, secret: values.secret } : {}),
-        policy: { dmPolicy: values.dmPolicy, groupPolicy: values.groupPolicy, requireMention: values.requireMention },
+        const res = await createChannelAsset({
+          id: values.id, type: values.type, displayName: values.displayName, mode,
+          ...(mode === "manual" ? { clientId: values.clientId, secret: values.secret } : {}),
+          policy: { dmPolicy: values.dmPolicy, groupPolicy: values.groupPolicy, requireMention: values.requireMention },
         } as any);
-        if (session) { setOnboarding(session); setAction(null); return; }
-        await trackApplyJob(session, "创建账号");
+        // qrcode 模式返回顶层 OnboardingSession（含 id/qr_url）→ 弹扫码窗轮询；
+        // manual 模式（填已有应用凭据）后端同步落库返回 { asset }，不该弹扫码窗，提示已完成即可。
+        if (mode === "qrcode") { setOnboarding(res); setAction(null); return; }
+        setAction(null); await reload();
+        await trackApplyJob(res, "创建账号");
+        message.success("账号已创建");
+        return;
       }
       if (action === "edit" && selected) {
         const data = await updateChannelAsset(selected.type, selected.id, {
@@ -106,6 +124,13 @@ export default function Channels() {
     }, 1500);
     return () => window.clearInterval(timer);
   }, [onboarding?.id, onboarding?.status]);
+  // 扫码创建成功后：提示并短暂停留展示「已完成」，随后自动关闭弹窗。
+  useEffect(() => {
+    if (onboarding?.status !== "success") return;
+    message.success("渠道账号已创建");
+    const timer = window.setTimeout(() => setOnboarding(undefined), 1500);
+    return () => window.clearTimeout(timer);
+  }, [onboarding?.status]);
   const columns: ColumnsType<ChannelAsset> = [
     { title: "账号", render: (_, r) => <><b>{r.displayName}</b><br/><Typography.Text type="secondary">{r.id}（创建后不可改）</Typography.Text></> },
     { title: "渠道", dataIndex: "type", render: (v) => <Tag color="blue">{TYPE_LABEL[v as keyof typeof TYPE_LABEL]}</Tag> },
@@ -183,8 +208,12 @@ export default function Channels() {
       setOnboarding(undefined);
     }}>
       <Space direction="vertical" align="center" style={{ width: "100%" }}>
-        {onboarding?.qr_url ? <QRCode value={onboarding.qr_url} size={240}/> : <Typography.Text>正在准备二维码...</Typography.Text>}
-        <Tag color={onboarding?.status === "success" ? "success" : onboarding?.status === "failed" ? "error" : "processing"}>{onboarding?.message || onboarding?.status}</Tag>
+        {onboarding?.status === "awaiting_scan" && onboarding?.qr_url
+          ? <QRCode value={onboarding.qr_url} size={240}/>
+          : <Typography.Text>{ONBOARDING_STATUS_LABEL[onboarding?.status] || "处理中…"}</Typography.Text>}
+        <Tag color={onboarding?.status === "success" ? "success" : ["failed", "expired"].includes(onboarding?.status) ? "error" : "processing"}>
+          {onboarding?.message || ONBOARDING_STATUS_LABEL[onboarding?.status] || onboarding?.status}
+        </Tag>
       </Space>
     </Modal>
   </>;
