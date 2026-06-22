@@ -500,7 +500,7 @@ export async function fetchCollectionChunks(
 export async function uploadKnowledgeDocument(
   file: File,
   datasetId: string,
-): Promise<{ file: string; kbId: string; collectionId: string }> {
+): Promise<{ file: string; kbId: string; collectionId: string; deduped?: boolean; message?: string }> {
   const body = new FormData();
   body.append("file", file);
   body.append("datasetId", datasetId);

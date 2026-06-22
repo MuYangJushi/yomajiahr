@@ -306,9 +306,14 @@ export async function importDocument(
   file: Buffer,
   filename: string,
   datasetId?: string,
-): Promise<{ externalDocId: string; collectionId: string }> {
+): Promise<{ externalDocId: string; collectionId: string; deduped: boolean }> {
   if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置，无法导入");
   const dsId = datasetId || FASTGPT_KB_ID;
+  // #54 导入去重：同名文件已在该库存在 → 命中复用已有集合，不新建重复集合（管理页 / 对话导入
+  // 同走本函数，故两条路径复用同一查重逻辑）。FastGPT 集合名 = 上传文件名（ADR-010），故按
+  // 文件名查重；未来需要内容级去重可在此扩展 hash 比对。查重失败（列表不可达）不阻断导入。
+  const dup = await findCollectionIdByFilename(dsId, filename);
+  if (dup) return { externalDocId: dup, collectionId: dup, deduped: true };
   const fd = new FormData();
   fd.append("file", new Blob([new Uint8Array(file)]), filename);
   fd.append("data", JSON.stringify({ datasetId: dsId, parentId: null, trainingType: "chunk", chunkSize: 512 }));
@@ -329,7 +334,22 @@ export async function importDocument(
   const collectionId =
     (typeof json.data === "string" ? json.data : json.data?.collectionId || json.data?.insertId) || "";
   if (!collectionId) throw new KnowledgeUnavailableError("FastGPT 导入未返回 collectionId");
-  return { externalDocId: collectionId, collectionId };
+  return { externalDocId: collectionId, collectionId, deduped: false };
+}
+
+/**
+ * #54 查重：在 dsId 库内查找与 filename 同名的已有集合，命中返回其 collectionId，否则 undefined。
+ * FastGPT 集合名 = 文件名（ADR-010），按规范化文件名比对（与 listCollections 的 title 同口径）。
+ * 列表不可达时不抛错（返回 undefined），让导入照常进行——去重是优化，不应因查重失败阻断导入。
+ */
+async function findCollectionIdByFilename(dsId: string, filename: string): Promise<string | undefined> {
+  const target = normalizeUploadedFilename(filename);
+  try {
+    const existing = await listCollections(dsId);
+    return existing.find((c) => c.title === target || c.title === filename)?.externalDocId || undefined;
+  } catch {
+    return undefined;
+  }
 }
 // listV2 每项的训练计数 → 索引状态（ADR-009 §2，2026-06-12 yomakit 实测：trainingAmount=训练队列剩余）。
 function deriveIndexStatus(dataAmount: number, trainingAmount: number): KbCollection["indexStatus"] {

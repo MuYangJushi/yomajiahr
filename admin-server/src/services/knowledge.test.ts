@@ -166,6 +166,57 @@ test("importDocument forwards the raw file to create/localFile and returns colle
   assert.equal(bodyIsFormData, true);
 });
 
+test("importDocument 同名文件命中已有集合 → 复用不新建（#54 去重）", async () => {
+  let createCalled = false;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("collection/listV2")) {
+      // 库里已有同名集合「年假规则.pdf」
+      return new Response(
+        JSON.stringify({ data: { list: [{ _id: "col_existing", name: "年假规则.pdf", dataAmount: 3, trainingAmount: 0 }], total: 1 } }),
+        { status: 200 },
+      );
+    }
+    if (url.includes("collection/create/localFile")) {
+      createCalled = true;
+      return new Response(JSON.stringify({ data: { collectionId: "col_new" } }), { status: 200 });
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  const result = await importDocument(Buffer.from("年假最小单位 0.5 小时。"), "年假规则.pdf", "test-kb-id");
+
+  assert.equal(result.deduped, true);
+  assert.equal(result.collectionId, "col_existing");
+  assert.equal(createCalled, false, "命中去重时不应再调创建端点");
+});
+
+test("importDocument 无同名集合 → 正常新建（deduped=false，#54）", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("collection/listV2")) {
+      return new Response(JSON.stringify({ data: { list: [{ _id: "col_other", name: "别的文档.pdf", dataAmount: 1, trainingAmount: 0 }], total: 1 } }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: { collectionId: "col_new" } }), { status: 200 });
+  };
+
+  const result = await importDocument(Buffer.from("内容"), "年假规则.pdf", "test-kb-id");
+  assert.equal(result.deduped, false);
+  assert.equal(result.collectionId, "col_new");
+});
+
+test("importDocument 查重列表不可达时不阻断导入（去重是优化，#54）", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("collection/listV2")) return new Response("boom", { status: 500 });
+    return new Response(JSON.stringify({ data: { collectionId: "col_new" } }), { status: 200 });
+  };
+
+  const result = await importDocument(Buffer.from("内容"), "年假规则.pdf", "test-kb-id");
+  assert.equal(result.deduped, false);
+  assert.equal(result.collectionId, "col_new");
+});
+
 test("search merges multiple datasets by score and tolerates one failing (allSettled)", async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input);

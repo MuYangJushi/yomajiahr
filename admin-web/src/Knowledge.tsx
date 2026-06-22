@@ -527,10 +527,16 @@ function PlatformViewTab({ kb }: { kb: KnowledgeBinding }) {
           ]);
           try {
             const result = await uploadKnowledgeDocument(uploadFile, datasetId);
-            setPending((items) => items.map((item) => item.externalDocId === temporaryId
-              ? { ...item, externalDocId: result.collectionId, title: result.file, pendingStatus: "processing" }
-              : item));
-            message.success(`已上传「${result.file}」，FastGPT 正在解析和向量化`);
+            if (result.deduped) {
+              // #54 命中去重：库里已有同名文档，复用已有集合，不新建。移除临时项、提示用户。
+              setPending((items) => items.filter((item) => item.externalDocId !== temporaryId));
+              message.info(result.message || `已存在同名文档「${result.file}」，复用已有集合，未重复导入`);
+            } else {
+              setPending((items) => items.map((item) => item.externalDocId === temporaryId
+                ? { ...item, externalDocId: result.collectionId, title: result.file, pendingStatus: "processing" }
+                : item));
+              message.success(`已上传「${result.file}」，FastGPT 正在解析和向量化`);
+            }
             onSuccess?.({});
             await load(true);
           } catch (e: any) {
