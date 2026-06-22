@@ -479,8 +479,14 @@ const STORE_PATH = join(STORE_DIR, "knowledge.json");
 
 /**
  * 缺省知识库（无 knowledge.json 时）。fastgpt 已配 → 默认库即真实 FastGPT 默认库
- * （带 externalKbId、绑 hr-employee），使多库列表能显示它，且首次写入会把它持久化，
- * 与 resolveDatasetIdsForAgent 一致；否则退本地归档库。
+ * （带 externalKbId），使多库列表能显示它、供用户绑定；否则退本地归档库。
+ *
+ * boundAgents 必须为空（fix/bug-0622）：ADR-014 空白起步后无任何预置数字员工，
+ * 绑定即真相（ADR-011）。此前硬编码 ["hr-employee"] 是 ADR-014 之前的遗留，会造成：
+ *   - 列表「绑定数字员工」列凭空显示 hr-employee（生成器实际未授工具 → 聊天无知识库，显示与现实打架）；
+ *   - 绑定页预勾选 hr-employee，用户一保存即把幽灵绑定持久化进 knowledge.json。
+ * 生成器侧（generate-config.ts agentHasFastgptBinding）兜底是按 default 标志绑定，
+ * 空白起步无 default agent → 谁都不绑，此处置空与之保持一致。
  */
 function defaultStore(): KnowledgeStore {
   if (isFastgpt() && FASTGPT_KB_ID) {
@@ -492,7 +498,7 @@ function defaultStore(): KnowledgeStore {
           name: "HR 制度知识库（默认）",
           provider: "fastgpt",
           externalKbId: FASTGPT_KB_ID,
-          boundAgents: ["hr-employee"],
+          boundAgents: [],
         },
       ],
     };
@@ -500,7 +506,7 @@ function defaultStore(): KnowledgeStore {
   return {
     platform: "local",
     knowledgeBases: [
-      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: ["hr-employee"] },
+      { id: "kb_hr_policy", name: "HR 制度知识库", provider: "local", boundAgents: [] },
     ],
   };
 }
