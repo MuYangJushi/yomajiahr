@@ -11,6 +11,7 @@ import {
   type ChatMessage,
   type ChatSessionMeta,
 } from "./api";
+import { respWidth } from "./responsive";
 
 interface Props {
   agent: AgentRow | null;
@@ -117,7 +118,7 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
       }
       open={open}
       onClose={onClose}
-      width={560}
+      width={respWidth(560)}
       destroyOnClose
       footer={null}
     >

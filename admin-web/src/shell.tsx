@@ -1,9 +1,10 @@
 // 脱离 ProComponents 的纯净外壳，对齐 design tokens v0.2 mockup。
 // ProLayout → AppShell（自研侧边栏 + main 容器）；
 // ProTable 工具栏 → PageTopbar（标题/副标题/右侧操作）+ TableCard（白卡包裹原生 Table）。
-import React, { type ReactNode } from "react";
-import { Dropdown, Tag } from "antd";
-import { LogoutOutlined } from "@ant-design/icons";
+// 移动端适配（≤ 768px）：侧边栏收起为 Drawer，main 顶部出现 hamburger；padding 减小。
+import React, { useEffect, useState, type ReactNode } from "react";
+import { Drawer, Dropdown, Tag } from "antd";
+import { LogoutOutlined, MenuOutlined } from "@ant-design/icons";
 import type { PlatformRole } from "./api";
 
 export interface NavItem {
@@ -19,16 +20,20 @@ export interface NavSection {
 
 const ROLE_LABEL: Record<PlatformRole, string> = { admin: "管理员", ops: "运营", audit: "审计只读" };
 
-const SHELL_STYLE: React.CSSProperties = { display: "flex", height: "100vh", overflow: "hidden", background: "#f5f5f7" };
-const SIDEBAR_STYLE: React.CSSProperties = {
-  width: 240, flex: "none", background: "#fff", borderRight: "1px solid #e3e3e6",
-  padding: "20px 12px", display: "flex", flexDirection: "column", height: "100%", overflowY: "auto",
-};
-// 内边距放到内层 div，不放在滚动容器 MAIN 本身：Chrome 下「flex 子项 + 自身 overflow 滚动」
-// 时容器自己的 padding-bottom 不计入可滚动区域，会把最后一行/最后一个元素裁在视口底。
-// 子元素的 padding 则正常计入滚动高度，借此绕开该 bug（全页面底部留白生效）。
-const MAIN_STYLE: React.CSSProperties = { flex: 1, minWidth: 0, height: "100%", overflowY: "auto" };
-const MAIN_INNER_STYLE: React.CSSProperties = { padding: "32px 40px" };
+const MOBILE_BREAKPOINT = "(max-width: 768px)";
+/** 监听媒体查询，SSR 安全；用于决定是否切到移动版布局。 */
+function useMediaQuery(query: string): boolean {
+  const [match, setMatch] = useState<boolean>(() =>
+    typeof window === "undefined" ? false : window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatch(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [query]);
+  return match;
+}
 
 function BrandTitle() {
   return <div style={{ fontSize: 16, fontWeight: 600, padding: "8px 12px 20px", color: "#1d1d1f" }}>Yoma+HR 数字员工平台</div>;
@@ -80,6 +85,32 @@ function UserBlock({ name, role, onLogout }: { name: string; role: PlatformRole;
   );
 }
 
+/** 侧边栏内容（导航 + 用户区），宽屏直接 render、窄屏放进 Drawer 复用。 */
+function SidebarContent({ sections, current, onNavigate, user, onLogout }: {
+  sections: NavSection[]; current: string; onNavigate: (path: string) => void;
+  user: { name: string; platformRole: PlatformRole }; onLogout: () => void;
+}) {
+  return (
+    <>
+      <BrandTitle />
+      {sections.map((sec, i) => (
+        <div key={i}>
+          {sec.label && <SectionLabel>{sec.label}</SectionLabel>}
+          {sec.items.map((item) => (
+            <NavRow
+              key={item.path}
+              item={item}
+              active={current === item.path}
+              onClick={() => onNavigate(item.path)}
+            />
+          ))}
+        </div>
+      ))}
+      <UserBlock name={user.name} role={user.platformRole} onLogout={onLogout} />
+    </>
+  );
+}
+
 export function AppShell({
   current, sections, onNavigate, user, onLogout, children,
 }: {
@@ -90,39 +121,77 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const isMobile = useMediaQuery(MOBILE_BREAKPOINT);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // 切回宽屏时关掉抽屉，避免遗留打开状态。
+  useEffect(() => { if (!isMobile) setDrawerOpen(false); }, [isMobile]);
+  const handleNavigate = (p: string) => { onNavigate(p); setDrawerOpen(false); };
+
+  const shellStyle: React.CSSProperties = { display: "flex", height: "100vh", overflow: "hidden", background: "#f5f5f7" };
+  const sidebarStyle: React.CSSProperties = {
+    width: 240, flex: "none", background: "#fff", borderRight: "1px solid #e3e3e6",
+    padding: "20px 12px", display: "flex", flexDirection: "column", height: "100%", overflowY: "auto",
+  };
+  // 内边距放到内层 div，不放在滚动容器 MAIN 本身：Chrome 下「flex 子项 + 自身 overflow 滚动」
+  // 时容器自己的 padding-bottom 不计入可滚动区域，会把最后一行/最后一个元素裁在视口底。
+  const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, height: "100%", overflowY: "auto" };
+  const mainInnerStyle: React.CSSProperties = { padding: isMobile ? "16px" : "32px 40px" };
+
   return (
-    <div style={SHELL_STYLE}>
-      <aside style={SIDEBAR_STYLE}>
-        <BrandTitle />
-        {sections.map((sec, i) => (
-          <div key={i}>
-            {sec.label && <SectionLabel>{sec.label}</SectionLabel>}
-            {sec.items.map((item) => (
-              <NavRow
-                key={item.path}
-                item={item}
-                active={current === item.path}
-                onClick={() => onNavigate(item.path)}
-              />
-            ))}
+    <div style={shellStyle}>
+      {!isMobile && (
+        <aside style={sidebarStyle}>
+          <SidebarContent sections={sections} current={current} onNavigate={handleNavigate} user={user} onLogout={onLogout} />
+        </aside>
+      )}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          width={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 60 : 280)}
+          styles={{ body: { padding: "20px 12px", display: "flex", flexDirection: "column", height: "100%" } }}
+          closable={false}
+        >
+          <SidebarContent sections={sections} current={current} onNavigate={handleNavigate} user={user} onLogout={onLogout} />
+        </Drawer>
+      )}
+      <main style={mainStyle}>
+        {isMobile && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e3e3e6",
+            position: "sticky", top: 0, zIndex: 10,
+          }}>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              aria-label="打开导航"
+              style={{
+                background: "transparent", border: "none", padding: 4, cursor: "pointer",
+                fontSize: 20, color: "#1d1d1f", display: "flex",
+              }}
+            >
+              <MenuOutlined />
+            </button>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>Yoma+HR</span>
           </div>
-        ))}
-        <UserBlock name={user.name} role={user.platformRole} onLogout={onLogout} />
-      </aside>
-      <main style={MAIN_STYLE}><div style={MAIN_INNER_STYLE}>{children}</div></main>
+        )}
+        <div style={mainInnerStyle}>{children}</div>
+      </main>
     </div>
   );
 }
 
 // 页面顶栏：左侧标题（+可选副标题），右侧操作区。对齐 mockup .topbar。
+// 窄屏自动换行：避免标题与右侧按钮挤成一坨。
 export function PageTopbar({ title, sub, right }: { title: ReactNode; sub?: ReactNode; right?: ReactNode }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, gap: 12 }}>
-      <div style={{ minWidth: 0 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+      <div style={{ minWidth: 0, flex: "1 1 240px" }}>
         <div style={{ fontSize: 20, fontWeight: 600, color: "#1d1d1f" }}>{title}</div>
         {sub && <div style={{ fontSize: 13, color: "#86868b", marginTop: 4, maxWidth: 640, lineHeight: 1.6 }}>{sub}</div>}
       </div>
-      {right && <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}>{right}</div>}
+      {right && <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>{right}</div>}
     </div>
   );
 }

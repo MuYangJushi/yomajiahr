@@ -40,7 +40,7 @@ const STYLES = `
 
   .login-card {
     position: relative;
-    width: 420px;
+    width: min(420px, calc(100% - 32px));
     background: #ffffff;
     border-radius: 20px;
     padding: 48px 44px 40px;
@@ -49,6 +49,12 @@ const STYLES = `
       0 4px 12px rgba(0,0,0,0.06),
       0 24px 56px rgba(0,0,0,0.1);
     animation: cardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    box-sizing: border-box;
+  }
+  /* 窄屏（≤ 480px）：卡片内边距收紧，避免在 360 视口被挤压 */
+  @media (max-width: 480px) {
+    .login-card { padding: 36px 24px 32px; }
+    .card-top-bar { left: 24px; right: 24px; }
   }
 
   .card-top-bar {

@@ -174,18 +174,23 @@ export default function Channels() {
   ];
   return <>
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div><Typography.Title level={3} style={{ margin: 0 }}>渠道管理</Typography.Title><Typography.Text type="secondary">独立管理飞书与钉钉账号资产、绑定和连接状态</Typography.Text></div>
-        <Space><Button onClick={async () => {
+        <Space wrap><Button onClick={async () => {
           message.loading({ content: "正在探活…", key: "probe-all", duration: 0 });
           try { await probeChannels(); message.success({ content: "探活完成", key: "probe-all" }); await reload(true); }
           catch (err: any) { message.error({ content: err?.response?.data?.error || "探活失败", key: "probe-all" }); }
         }} shape="round">全部探活</Button><Button type="primary" shape="round" onClick={() => { setMode("manual"); open("create"); }}>新增账号</Button></Space>
       </div>
-      <Row gutter={12}><Col span={6}><Card><Statistic title="账号总数" value={summary.total}/></Card></Col><Col span={6}><Card><Statistic title="连接正常" value={summary.healthy} valueStyle={{ color: "#34c759" }}/></Card></Col><Col span={6}><Card><Statistic title="已占用" value={summary.occupied}/></Card></Col><Col span={6}><Card><Statistic title="异常" value={summary.errors} valueStyle={{ color: "#ff3b30" }}/></Card></Col></Row>
-      <Table rowKey={(r) => `${r.type}/${r.id}`} loading={loading} columns={columns} dataSource={rows} pagination={false} />
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={6}><Card><Statistic title="账号总数" value={summary.total}/></Card></Col>
+        <Col xs={12} md={6}><Card><Statistic title="连接正常" value={summary.healthy} valueStyle={{ color: "#34c759" }}/></Card></Col>
+        <Col xs={12} md={6}><Card><Statistic title="已占用" value={summary.occupied}/></Card></Col>
+        <Col xs={12} md={6}><Card><Statistic title="异常" value={summary.errors} valueStyle={{ color: "#ff3b30" }}/></Card></Col>
+      </Row>
+      <Table rowKey={(r) => `${r.type}/${r.id}`} loading={loading} columns={columns} dataSource={rows} pagination={false} scroll={{ x: 1100 }} />
     </Space>
-    <Drawer title={action === "create" ? "手工新增渠道账号" : action === "edit" ? "编辑渠道账号" : "绑定数字员工"} open={Boolean(action)} onClose={() => setAction(null)} width={480}
+    <Drawer title={action === "create" ? "手工新增渠道账号" : action === "edit" ? "编辑渠道账号" : "绑定数字员工"} open={Boolean(action)} onClose={() => setAction(null)} width={Math.min(480, typeof window !== "undefined" ? window.innerWidth : 480)}
       extra={<Button type="primary" shape="round" onClick={() => form.submit()}>保存并应用</Button>}>
       <Form form={form} layout="vertical" onFinish={submit}>
         {action === "bind" ? <Form.Item name="agentId" label="数字员工" rules={[{ required: true }]}><Select options={agents.map((a) => ({ label: `${a.name}（${a.profile?.jobTitle || a.id}）`, value: a.id }))}/></Form.Item> : <>

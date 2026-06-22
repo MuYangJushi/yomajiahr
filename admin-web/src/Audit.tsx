@@ -187,6 +187,7 @@ export default function Audit() {
             showTotal: (t) => `总共 ${t} 条`,
           }}
           onChange={(pag) => setPage(pag.current ?? 1)}
+          scroll={{ x: 900 }}
         />
       </TableCard>
     </>

@@ -6,6 +6,7 @@ import {
   Alert, Button, Card, Checkbox, Col, Drawer, Form, Input, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography, message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { respWidth } from "./responsive";
 import {
   awaitApplyJob, applyModeLabel, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobIdOf, saveAgentSkills, updateSkill,
   type AgentRow, type Skill, type SkillAssignment, type SkillMeta, type SkillRole,
@@ -144,7 +145,7 @@ function SkillCatalog() {
       <Table rowKey="name" loading={loading} columns={columns} dataSource={rows} pagination={false}
         tableLayout="fixed" scroll={{ x: 880 }} />
     </Space>
-    <Drawer title={action === "create" ? "新建技能" : "编辑技能"} open={Boolean(action)} onClose={() => setAction(null)} width={560}
+    <Drawer title={action === "create" ? "新建技能" : "编辑技能"} open={Boolean(action)} onClose={() => setAction(null)} width={respWidth(560)}
       extra={<Button type="primary" shape="round" onClick={() => form.submit()}>保存</Button>}>
       <Form form={form} layout="vertical" onFinish={submit}>
         <Form.Item name="name" label="技能 ID" rules={[{ required: true, pattern: /^[a-z0-9][a-z0-9_-]*$/, message: "小写字母/数字/连字符/下划线，首字符须字母或数字" }]}>
@@ -294,6 +295,7 @@ function SkillAssignment() {
                   { title: "角色要求", width: 110, render: (_, r) => r.requiredRole ? <Tag color="purple">{ROLE_LABEL[r.requiredRole]}</Tag> : <Tag>不限</Tag> },
                   { title: "依赖知识库", width: 110, render: (_, r) => r.requiresKnowledge ? <Tag color="orange">是</Tag> : <Tag>否</Tag> },
                 ]}
+                scroll={{ x: 700 }}
               />
               <div>
                 <Space>
