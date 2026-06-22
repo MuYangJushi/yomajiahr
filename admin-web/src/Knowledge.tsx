@@ -335,8 +335,8 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
         return;
       }
       message.success("绑定已保存");
-    } catch {
-      message.error("保存失败（需 admin 权限）");
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || "保存失败");
     } finally {
       setSaving(false);
     }
