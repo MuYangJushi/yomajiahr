@@ -1,7 +1,7 @@
 // 审计日志路由（迁自 server.mjs，逻辑不变）。
 import { Router, type Request, type Response } from "express";
 import { csvEscape, readAuditLog } from "../util.js";
-import { actionLabel, operatorName, detailExtra } from "../audit-labels.js";
+import { actionLabel, operatorName, detailExtra, subjectText } from "../audit-labels.js";
 import { requireRole } from "../auth/rbac.js";
 
 export const auditRouter = Router();
@@ -49,7 +49,7 @@ auditRouter.get("/audit-log/export", requireRole("audit"), (req: Request, res: R
       [
         l.timestamp,
         csvEscape(actionLabel(l.action)),
-        csvEscape(l.file || ""),
+        csvEscape(subjectText(l)),
         csvEscape(operatorName(l)),
         csvEscape(l.details?.doc_id || ""),
         csvEscape(l.details?.version || ""),
