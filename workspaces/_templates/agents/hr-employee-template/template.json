@@ -28,10 +28,6 @@
     "hr-general"
   ],
   "status": "active",
-  "source": {
-    "type": "builtin",
-    "version": "1.0.0"
-  },
   "workflowHints": {
     "suggestedWorkflowIds": [],
     "targetTags": [
