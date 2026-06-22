@@ -76,7 +76,7 @@ export function startChannelOnboarding(owner: string, input: {
         : await onboarding.registerDingTalkApplication(callbacks);
       session.status = "applying";
       await createChannelAsset({ ...input, clientId: credentials.clientId, secret: credentials.clientSecret });
-      appendAuditLog("channel.create", input.id, { type: input.type, id: input.id, mode: "qrcode", operator: owner });
+      appendAuditLog("channel.create", input.id, owner, { type: input.type, id: input.id, mode: "qrcode" });
       session.status = "success"; session.message = "渠道账号已创建";
     } catch (err) {
       session.status = session.abort.signal.aborted ? "cancelled" : "failed";

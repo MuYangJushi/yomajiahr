@@ -32,25 +32,23 @@ agentChatRouter.post("/config/agents/:id/chat", requireRole("ops"), async (req: 
   const startedAt = Date.now();
   try {
     const result = await chatWithAgent({ agentId, message, sessionId });
-    appendAuditLog("agent.chat.message", agentId, {
+    appendAuditLog("agent.chat.message", agentId, operator, {
       agent_id: agentId,
       session_id: result.sessionId,
       message_length: message.length,
       status: "success",
       duration_ms: result.durationMs,
-      operator,
     });
     res.json(result);
   } catch (err) {
     const e = err as Error & ChatError;
-    appendAuditLog("agent.chat.message", agentId, {
+    appendAuditLog("agent.chat.message", agentId, operator, {
       agent_id: agentId,
       session_id: sessionId,
       message_length: message.length,
       status: "failed",
       code: e.code,
       duration_ms: Date.now() - startedAt,
-      operator,
     });
     res.status(statusFor(err)).json({ error: e.message, code: e.code });
   }
@@ -81,10 +79,9 @@ agentChatRouter.delete("/config/agents/:id/chat/sessions/:sid", requireRole("ops
   const operator = req.user?.platformUserId || "";
   try {
     deleteSession(agentId, sid);
-    appendAuditLog("agent.chat.session.delete", agentId, {
+    appendAuditLog("agent.chat.session.delete", agentId, operator, {
       agent_id: agentId,
       session_id: sid,
-      operator,
     });
     res.json({ success: true });
   } catch (err) {

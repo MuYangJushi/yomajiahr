@@ -31,8 +31,21 @@ function scoreFilename(name: string): number {
 // 写队列，避免并发 appendFileSync 交错 JSONL 行
 let auditWriteQueue: Promise<void> = Promise.resolve();
 
-export function appendAuditLog(action: string, file: string, details: unknown): void {
-  const entry = { timestamp: new Date().toISOString(), action, file, details };
+// operator 是必填参数（#29）：编译器强制每个写操作落操作人（platformUserId），
+// 杜绝「忘了传 operator」的运行时漏审。内部合并进 details，存储形态不变
+// （audit-labels.operatorName 仍读 details.operator）。空串视为系统/匿名来源。
+export function appendAuditLog(
+  action: string,
+  file: string,
+  operator: string,
+  details?: Record<string, unknown>,
+): void {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    action,
+    file,
+    details: { ...(details ?? {}), operator: operator || "" },
+  };
   const line = JSON.stringify(entry) + "\n";
   auditWriteQueue = auditWriteQueue
     .then(() => appendFileSync(AUDIT_LOG_PATH, line, "utf-8"))

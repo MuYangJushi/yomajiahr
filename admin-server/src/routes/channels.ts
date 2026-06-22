@@ -70,10 +70,9 @@ channelsRouter.post("/config/channel-assets", requireRole("ops"), async (req: Re
       return res.status(202).json(startChannelOnboarding(req.user!.platformUserId, parsed.data));
     }
     const asset = await createChannelAsset(parsed.data);
-    appendAuditLog("channel.create", asset.id, {
+    appendAuditLog("channel.create", asset.id, req.user?.platformUserId || "", {
       type: asset.type,
       id: asset.id,
-      operator: req.user?.platformUserId || "",
     });
     res.status(201).json({ asset: listChannelAssets().find((item) => item.type === asset.type && item.id === asset.id) });
   } catch (err) {
@@ -103,7 +102,7 @@ channelsRouter.patch("/config/channel-assets/:type/:id", requireRole("ops"), asy
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         await updateChannelAsset(type, id, parsed.data);
-        appendAuditLog("channel.update", id, { type, id, operator });
+        appendAuditLog("channel.update", id, operator, { type, id });
         return { asset: listChannelAssets().find((item) => item.type === type && item.id === id) };
       },
       "channel.update",
@@ -135,7 +134,7 @@ channelsRouter.delete("/config/channel-assets/:type/:id", requireRole("ops"), as
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         await deleteChannelAsset(type, id);
-        appendAuditLog("channel.delete", id, { type, id, operator });
+        appendAuditLog("channel.delete", id, operator, { type, id });
         return { deleted: { type, id } };
       },
       "channel.delete",
@@ -166,7 +165,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/bind", requireRole("ops"),
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         await bindAgentToChannel({ agentId: parsed.data.agentId, domain: type === "dingtalk" ? "dingtalk-connector" : "feishu", accountId: id, existing: true });
-        appendAuditLog("channel.bind", id, { type, id, agent_id: parsed.data.agentId, operator });
+        appendAuditLog("channel.bind", id, operator, { type, id, agent_id: parsed.data.agentId });
         return { asset: listChannelAssets().find((item) => item.type === type && item.id === id) };
       },
       "channel.bind",
@@ -191,7 +190,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/unbind", requireRole("ops"
   if (!asset.occupiedBy) return res.status(409).json({ error: "账号未绑定" });
   try {
     await unbindAgentFromChannel(asset.occupiedBy.agentId, type === "dingtalk" ? "dingtalk-connector" : "feishu", id);
-    appendAuditLog("channel.unbind", id, { type, id, agent_id: asset.occupiedBy.agentId, operator: req.user?.platformUserId || "" });
+    appendAuditLog("channel.unbind", id, req.user?.platformUserId || "", { type, id, agent_id: asset.occupiedBy.agentId });
     res.json({ asset: listChannelAssets().find((item) => item.type === type && item.id === id) });
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
@@ -201,7 +200,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/unbind", requireRole("ops"
 channelsRouter.post("/config/channel-assets/probe", requireRole("ops"), async (req: Request, res: Response) => {
   try {
     const health = await probeChannels(true);
-    appendAuditLog("channel.probe", "all", { operator: req.user?.platformUserId || "" });
+    appendAuditLog("channel.probe", "all", req.user?.platformUserId || "");
     res.json({ health });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -213,7 +212,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/probe", requireRole("ops")
   const id = String(req.params.id);
   try {
     await probeChannels(true);
-    appendAuditLog("channel.probe", id, { type, id, operator: req.user?.platformUserId || "" });
+    appendAuditLog("channel.probe", id, req.user?.platformUserId || "", { type, id });
     const asset = listChannelAssets().find((item) => item.type === type && item.id === id);
     if (!asset) return res.status(404).json({ error: "账号不存在" });
     res.json({ health: asset.health });

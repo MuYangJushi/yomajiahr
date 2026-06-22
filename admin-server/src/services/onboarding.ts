@@ -161,7 +161,7 @@ async function finish(s: Session, credentials: ChannelCredentials): Promise<void
     throw new Error(message);
   }
   update(s, "success", attaching ? "数字员工及新渠道已更新" : "数字员工已上线");
-  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, {
+  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, s.owner, {
     agent_id: s.draft.id,
     name: s.draft.name,
     role: s.draft.role,
@@ -184,7 +184,7 @@ async function finishExisting(s: Session): Promise<void> {
     await createAgentFromExistingAccount(s.draft, () => update(s, "verifying", "正在验证目标渠道连接"));
   }
   update(s, "success", attaching ? "数字员工及已有渠道已更新" : "数字员工已上线");
-  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, {
+  appendAuditLog(attaching ? "agent.update" : "agent.create", s.draft.id, s.owner, {
     agent_id: s.draft.id,
     channel: s.draft.domain,
     account_id: s.draft.accountId,

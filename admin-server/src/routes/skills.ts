@@ -71,13 +71,13 @@ skillsRouter.post("/config/skills/generate-body", requireRole("ops"), async (req
   const operator = req.user?.platformUserId || "";
   try {
     const body = await generateSkillBody(parsed.data);
-    appendAuditLog("skill.body.generate", parsed.data.name, {
-      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: true, operator,
+    appendAuditLog("skill.body.generate", parsed.data.name, operator, {
+      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: true,
     });
     res.json({ body });
   } catch (err) {
-    appendAuditLog("skill.body.generate", parsed.data.name, {
-      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: false, operator,
+    appendAuditLog("skill.body.generate", parsed.data.name, operator, {
+      name: parsed.data.name, duration_ms: Date.now() - startedAt, success: false,
     });
     res.status(503).json({ error: "SKILL_BODY_GENERATE_UNAVAILABLE", message: (err as Error).message });
   }
@@ -104,14 +104,13 @@ skillsRouter.post("/config/skills", requireRole("ops"), (req: Request, res: Resp
       tags: parsed.data.tags,
       body: parsed.data.body ?? "",
     });
-    appendAuditLog("skill.create", skill.name, {
+    appendAuditLog("skill.create", skill.name, operator, {
       name: skill.name,
       description: skill.description,
       requiredRole: skill.requiredRole,
       requiresKnowledge: skill.requiresKnowledge,
       emoji: skill.emoji,
       tags: skill.tags,
-      operator,
     });
     res.status(201).json({ skill });
   } catch (err) {
@@ -134,14 +133,13 @@ skillsRouter.put("/config/skills/:name", requireRole("ops"), (req: Request, res:
       tags: parsed.data.tags,
       body: parsed.data.body,
     });
-    appendAuditLog("skill.update", skill.name, {
+    appendAuditLog("skill.update", skill.name, operator, {
       name: skill.name,
       description: skill.description,
       requiredRole: skill.requiredRole,
       requiresKnowledge: skill.requiresKnowledge,
       emoji: skill.emoji,
       tags: skill.tags,
-      operator,
     });
     res.json({ skill });
   } catch (err) {
@@ -155,7 +153,7 @@ skillsRouter.delete("/config/skills/:name", requireRole("ops"), (req: Request, r
   const operator = req.user?.platformUserId || "";
   try {
     const { referencedBy } = deleteSkill(name);
-    appendAuditLog("skill.delete", name, { name, referencedBy, operator });
+    appendAuditLog("skill.delete", name, operator, { name, referencedBy });
     res.json({ deleted: { name } });
   } catch (err) {
     const e = err as Error & { referencedBy?: string[] };

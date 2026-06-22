@@ -23,7 +23,7 @@ import {
   readSession,
   verifyOauthState,
 } from "../auth/session.js";
-import { resolveUser } from "../auth/users.js";
+import { recordLogin, resolveUser } from "../auth/users.js";
 import { log } from "../util.js";
 
 export const authRouter = Router();
@@ -134,11 +134,12 @@ authRouter.get("/auth/feishu/callback", async (req: Request, res: Response) => {
     // redirect_uri 必须与授权阶段完全一致
     const redirectUri = `${baseUrl(req)}/api/auth/feishu/callback`;
     const identity = await feishuExchangeCode(code, redirectUri);
-    const user = resolveUser(identity);
+    const user = await resolveUser(identity);
     if (!user) {
       log("WARN", `飞书登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId}`);
       return res.redirect("/login?error=unauthorized");
     }
+    void recordLogin(identity, user); // #71 身份注册表：首次登记 / 刷新 lastSeenAt（不阻塞登录）
 
     issueSession(res, {
       platformUserId: user.platformUserId,
@@ -185,11 +186,12 @@ authRouter.get("/auth/dingtalk/callback", async (req: Request, res: Response) =>
     if (!code) return res.status(400).send("缺少授权 authCode");
 
     const identity = await dingtalkExchangeCode(code);
-    const user = resolveUser(identity);
+    const user = await resolveUser(identity);
     if (!user) {
       log("WARN", `钉钉登录被拒（未获授权/未过企业成员闸门）：${identity.name} union_id=${identity.unionId} corp_id=${identity.corpId || "-"}`);
       return res.redirect("/login?error=unauthorized");
     }
+    void recordLogin(identity, user); // #71 身份注册表：首次登记 / 刷新 lastSeenAt（不阻塞登录）
 
     issueSession(res, {
       platformUserId: user.platformUserId,

@@ -43,8 +43,7 @@ knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Reques
 knowledgeRouter.put("/knowledge/config", requireRole("admin"), (req: Request, res: Response) => {
   try {
     const updatedKeys = updateKnowledgeConfig(req.body as KnowledgeConfigInput);
-    appendAuditLog("CONFIG_KNOWLEDGE", "knowledge-platform", {
-      operator: req.user?.platformUserId || "",
+    appendAuditLog("CONFIG_KNOWLEDGE", "knowledge-platform", req.user?.platformUserId || "", {
       updatedKeys,
     });
     res.json({ success: true, updatedKeys, restartRequired: true });
@@ -161,7 +160,7 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
       ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.delete", resetAgentIds: affectedAgents, revokedKnowledgeAgentIds: affectedAgents })
       : undefined;
     const resetSessions = apply?.resetSessions ?? [];
-    appendAuditLog("DELETE", collectionId, {
+    appendAuditLog("DELETE", collectionId, req.user?.platformUserId || "", {
       source: "fastgpt",
       resetSessions,
       applyStatus: apply?.status,
@@ -229,8 +228,7 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
         ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.base.create" })
         : undefined;
     const applyFailed = apply?.status === "failed";
-    appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, {
-      operator: req.user?.platformUserId || "",
+    appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, req.user?.platformUserId || "", {
       name: binding.name,
       externalKbId: binding.externalKbId,
       boundAgents: binding.boundAgents,
@@ -310,8 +308,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
           resetAgentIds: revokedAgentIds,
           revokedKnowledgeAgentIds: revokedAgentIds,
         });
-        appendAuditLog(apply.status === "failed" ? "BIND_KB_FAILED" : "BIND_KB", "knowledge.json", {
-          operator,
+        appendAuditLog(apply.status === "failed" ? "BIND_KB_FAILED" : "BIND_KB", "knowledge.json", operator, {
           bases: next.knowledgeBases.map((b) => ({ id: b.id, boundAgents: b.boundAgents })),
           revokedAgentIds,
           resetSessions: apply.resetSessions ?? [],

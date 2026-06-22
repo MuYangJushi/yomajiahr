@@ -63,12 +63,11 @@ agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await createAgentProfile({ ...profileInput, role });
-        appendAuditLog("agent.create", result.agent.id, {
+        appendAuditLog("agent.create", result.agent.id, operator, {
           agent_id: result.agent.id,
           name: result.agent.name,
           role: result.agent.role,
           skills: result.agent.skills,
-          operator,
         });
         return result;
       },
@@ -108,12 +107,11 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await updateAgentProfile(id, profileInput);
-        appendAuditLog("agent.update", id, {
+        appendAuditLog("agent.update", id, operator, {
           agent_id: id,
           name: result.agent.name,
           role: result.agent.role,
           skills: result.agent.skills,
-          operator,
         });
         return result;
       },
@@ -143,12 +141,11 @@ agentsRouter.post("/config/agents/:id/channels", requireRole("ops"), onboardingL
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await bindAgentToChannel({ agentId, ...req.body });
-        appendAuditLog("agent.channel.bind", agentId, {
+        appendAuditLog("agent.channel.bind", agentId, operator, {
           agent_id: agentId,
           domain: req.body?.domain,
           account_id: req.body?.accountId || agentId,
           existing: Boolean(req.body?.existing),
-          operator,
         });
         return result;
       },
@@ -179,11 +176,10 @@ agentsRouter.delete("/config/agents/:id/channels/:domain/:accountId", requireRol
   const accountId = String(req.params.accountId);
   try {
     const result = await unbindAgentFromChannel(agentId, domain as any, accountId);
-    appendAuditLog("agent.channel.unbind", agentId, {
+    appendAuditLog("agent.channel.unbind", agentId, req.user?.platformUserId || "", {
       agent_id: agentId,
       domain,
       account_id: accountId,
-      operator: req.user?.platformUserId || "",
     });
     res.json(result);
   } catch (err) {
@@ -197,9 +193,8 @@ agentsRouter.delete("/config/agents/:id", requireRole("ops"), async (req: Reques
   const id = String(req.params.id);
   try {
     const result = await deleteAgent(id);
-    appendAuditLog("agent.delete", id, {
+    appendAuditLog("agent.delete", id, req.user?.platformUserId || "", {
       agent_id: id,
-      operator: req.user?.platformUserId || "",
     });
     res.json(result);
   } catch (err) {
@@ -265,12 +260,11 @@ agentsRouter.put("/config/agents/:id/skills", requireRole("ops"), async (req: Re
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await updateAgentSkills(id, skills as string[]);
-        appendAuditLog("agent.skill.update", id, {
+        appendAuditLog("agent.skill.update", id, operator, {
           agent_id: id,
           before: result.before,
           after: result.after,
           unmet: result.unmet,
-          operator,
         });
         return result;
       },

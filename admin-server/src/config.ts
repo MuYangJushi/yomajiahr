@@ -86,6 +86,19 @@ export const OPEN_ENTERPRISE_LOGIN_ROLE: "ops" | "audit" | "" =
     ? OPEN_ENTERPRISE_LOGIN_ROLE_RAW
     : "";
 /**
+ * 组织架构自动判定（#72）：按飞书/钉钉部门把登录人映射为平台角色。
+ *  - PLATFORM_ORG_ROLE_MAPPING_ENABLED=1 开启（默认关——部门 API scope 未开通时不应启用）；
+ *  - PLATFORM_ORG_ADMIN_DEPT_IDS：逗号分隔的部门 ID，命中任一 → 提升为 admin（仅提升、不降级）。
+ * ⚠️ fail-closed：开启但 API 失败/超时/无规则/不在名单 → 不提升，回落到企业开放登录基线。
+ *    详见 auth/org-mapping.ts。
+ */
+export const ORG_ROLE_MAPPING_ENABLED = env.PLATFORM_ORG_ROLE_MAPPING_ENABLED === "1";
+export const ORG_ADMIN_DEPT_IDS = (env.PLATFORM_ORG_ADMIN_DEPT_IDS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/**
  * 比赛访问码登录：独立于企业 IdP，供外部评委/体验用户临时进入。
  * 访问码至少 16 字符，角色只允许 ops/audit；任一条件不满足即关闭。
  */

@@ -52,10 +52,12 @@ export function actionLabel(action: string): string {
 }
 
 // 操作人：后端有的写 { id, name }，有的直接写字符串 platformUserId，两种都兜住。
+// #29/#73：缺 operator 的历史日志（本次「operator 必填」改造前写入）标注「(历史·未落操作人)」，
+// 不回填伪造——新日志必带 operator，空值只可能是历史条目。
 export function operatorName(entry: any): string {
   const op = entry?.details?.operator;
-  if (!op) return "";
-  return (typeof op === "string" ? op : op?.name) || "";
+  const name = typeof op === "string" ? op : op?.name;
+  return name || "(历史·未落操作人)";
 }
 
 // 详情摘要（不含文档编号/版本/分类——CSV 中这三项已有独立列，避免重复）。

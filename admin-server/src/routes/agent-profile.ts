@@ -33,19 +33,17 @@ agentProfileRouter.post(
       const profile = parsed.data.fields
         ? Object.fromEntries(parsed.data.fields.map((field) => [field, generated[field]]))
         : generated;
-      appendAuditLog("agent.profile.generate", "agent-profile", {
+      appendAuditLog("agent.profile.generate", "agent-profile", req.user?.platformUserId || "", {
         fields: parsed.data.fields || PROFILE_FIELDS,
         duration_ms: Date.now() - startedAt,
         success: true,
-        operator: req.user?.platformUserId || "",
       });
       res.json({ profile });
     } catch (err) {
-      appendAuditLog("agent.profile.generate", "agent-profile", {
+      appendAuditLog("agent.profile.generate", "agent-profile", req.user?.platformUserId || "", {
         fields: parsed.data.fields || PROFILE_FIELDS,
         duration_ms: Date.now() - startedAt,
         success: false,
-        operator: req.user?.platformUserId || "",
       });
       res.status(503).json({ error: "PROFILE_GENERATE_UNAVAILABLE", message: (err as Error).message });
     }
