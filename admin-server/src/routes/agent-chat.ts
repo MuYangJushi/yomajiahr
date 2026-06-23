@@ -8,7 +8,7 @@
 // 写操作（对话 + 会话重置）落 audit-log.jsonl（agent.chat.*），不记录完整消息正文。
 import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 import {
   ChatError,
   chatWithAgent,
@@ -28,7 +28,7 @@ agentChatRouter.post("/config/agents/:id/chat", requireRole("ops"), async (req: 
   const agentId = String(req.params.id);
   const message = typeof req.body?.message === "string" ? req.body.message : "";
   const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : undefined;
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   const startedAt = Date.now();
   try {
     const result = await chatWithAgent({ agentId, message, sessionId });
@@ -76,7 +76,7 @@ agentChatRouter.get("/config/agents/:id/chat/sessions/:sid", requireRole("ops"),
 agentChatRouter.delete("/config/agents/:id/chat/sessions/:sid", requireRole("ops"), (req: Request, res: Response) => {
   const agentId = String(req.params.id);
   const sid = String(req.params.sid);
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     deleteSession(agentId, sid);
     appendAuditLog("agent.chat.session.delete", agentId, operator, {

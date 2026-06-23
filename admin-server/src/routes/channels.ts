@@ -11,7 +11,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 import { bindAgentToChannel, unbindAgentFromChannel } from "../services/orchestrator.js";
 import {
   cancelChannelOnboarding, createChannelAsset, deleteChannelAsset, getChannelOnboarding,
@@ -70,7 +70,7 @@ channelsRouter.post("/config/channel-assets", requireRole("ops"), async (req: Re
       return res.status(202).json(startChannelOnboarding(req.user!.platformUserId, parsed.data));
     }
     const asset = await createChannelAsset(parsed.data);
-    appendAuditLog("channel.create", asset.id, req.user?.platformUserId || "", {
+    appendAuditLog("channel.create", asset.id, auditOperator(req), {
       type: asset.type,
       id: asset.id,
     });
@@ -97,7 +97,7 @@ channelsRouter.patch("/config/channel-assets/:type/:id", requireRole("ops"), asy
   const id = String(req.params.id);
   const parsed = UpdateSchema.safeParse(req.body);
   if ((type !== "feishu" && type !== "dingtalk") || !parsed.success) return res.status(400).json({ error: parsed.success ? "type 非法" : parsed.error.issues[0]?.message });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const { jobId, promise } = enqueueApplyJob(
       async () => {
@@ -126,7 +126,7 @@ channelsRouter.delete("/config/channel-assets/:type/:id", requireRole("ops"), as
   const type = String(req.params.type) as "feishu" | "dingtalk";
   const id = String(req.params.id);
   if (type !== "feishu" && type !== "dingtalk") return res.status(400).json({ error: "type 非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   // 删除渠道账号走 restart apply（停 channel client + 探活），生产常 >30s，不能在 HTTP 请求里同步等
   // （否则 triggerApply 超时返回 pending → mutateChannels 回滚 → 删除被撤销）。与 PATCH/bind 一致走
   // enqueueApplyJob + 800ms race：快则同步返回，慢则 202 + jobId，前端 trackApplyJob 轮询终态。
@@ -160,7 +160,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/bind", requireRole("ops"),
   const id = String(req.params.id);
   const parsed = BindSchema.safeParse(req.body);
   if (!parsed.success || (type !== "feishu" && type !== "dingtalk")) return res.status(400).json({ error: "入参非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const { jobId, promise } = enqueueApplyJob(
       async () => {
@@ -190,7 +190,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/unbind", requireRole("ops"
   if (!asset.occupiedBy) return res.status(409).json({ error: "账号未绑定" });
   try {
     await unbindAgentFromChannel(asset.occupiedBy.agentId, type === "dingtalk" ? "dingtalk-connector" : "feishu", id);
-    appendAuditLog("channel.unbind", id, req.user?.platformUserId || "", { type, id, agent_id: asset.occupiedBy.agentId });
+    appendAuditLog("channel.unbind", id, auditOperator(req), { type, id, agent_id: asset.occupiedBy.agentId });
     res.json({ asset: listChannelAssets().find((item) => item.type === type && item.id === id) });
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
@@ -200,7 +200,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/unbind", requireRole("ops"
 channelsRouter.post("/config/channel-assets/probe", requireRole("ops"), async (req: Request, res: Response) => {
   try {
     const health = await probeChannels(true);
-    appendAuditLog("channel.probe", "all", req.user?.platformUserId || "");
+    appendAuditLog("channel.probe", "all", auditOperator(req));
     res.json({ health });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -212,7 +212,7 @@ channelsRouter.post("/config/channel-assets/:type/:id/probe", requireRole("ops")
   const id = String(req.params.id);
   try {
     await probeChannels(true);
-    appendAuditLog("channel.probe", id, req.user?.platformUserId || "", { type, id });
+    appendAuditLog("channel.probe", id, auditOperator(req), { type, id });
     const asset = listChannelAssets().find((item) => item.type === type && item.id === id);
     if (!asset) return res.status(404).json({ error: "账号不存在" });
     res.json({ health: asset.health });

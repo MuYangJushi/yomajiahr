@@ -3,7 +3,7 @@
 import { Router, type Request, type Response } from "express";
 import { rateLimit, upload } from "../middleware.js";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog, normalizeUploadedFilename } from "../util.js";
+import { appendAuditLog, auditOperator, normalizeUploadedFilename } from "../util.js";
 import { KnowledgeUnavailableError, importDocument, isConfigured, resolveImportDatasetId } from "../services/knowledge.js";
 
 const uploadLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "上传过于频繁，请稍后再试" });
@@ -30,7 +30,7 @@ uploadRouter.post(
         return res.status(400).json({ error: (err as Error).message });
       }
       const originalName = normalizeUploadedFilename(req.file.originalname);
-      const operator = req.user?.platformUserId || "";
+      const operator = auditOperator(req);
 
       // ADR-010：原始文件直传 FastGPT 解析/切片/向量化。审计 IMPORT（无本地副本，FastGPT 唯一存储）。
       try {

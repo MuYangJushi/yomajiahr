@@ -96,9 +96,10 @@ function toStr(v: unknown): string {
 // 操作人：后端有的写 { id, name }，有的直接写字符串 platformUserId，两种都兜住。
 // operator 必填改造前的历史日志会丢操作人，统一标「(历史·未落操作人)」，不伪造来源。
 function operatorName(r: AuditEntry): string {
-  const op = r.details?.operator as { name?: string } | string | undefined;
-  const name = typeof op === "string" ? op : op?.name;
-  return name || "(历史·未落操作人)";
+  const op = r.details?.operator as { id?: string; name?: string } | string | undefined;
+  if (typeof op === "string") return op || "(历史·未落操作人)";
+  // fix/0623：结构化 { id, name }——优先人类可读 name（飞书/钉钉真名、demo「比赛访客」），退化到短 id。
+  return op?.name || (op?.id ? shortId(op.id) : "") || "(历史·未落操作人)";
 }
 
 // 把每个动作的 file/details 翻译成「[类别 Tag] 主显示名 · 次要短 ID」。
