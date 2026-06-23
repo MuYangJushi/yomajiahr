@@ -388,6 +388,39 @@ test("removeCollection issues DELETE to collection/delete with the id, throws on
   await assert.rejects(removeCollection("col_abc123"), KnowledgeUnavailableError);
 });
 
+test("removeCollection is idempotent: 500 + collection already gone resolves without throwing", async () => {
+  // FastGPT 把「集合不存在」也包成 HTTP 500；回查 detail 确认已不在 → 当成功（fix/0623 修复幽灵集合重删 500）。
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/collection/delete")) {
+      return new Response(JSON.stringify({ code: 500, message: "Collection is not exist" }), { status: 500 });
+    }
+    if (url.includes("/collection/detail")) {
+      return new Response(JSON.stringify({ code: 500, message: "Collection is not exist" }), { status: 500 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  await removeCollection("col_ghost"); // 不抛即通过
+});
+
+test("removeCollection still throws (with FastGPT message) when delete 500s but collection still exists", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/collection/delete")) {
+      return new Response(JSON.stringify({ code: 500, message: "internal cleanup failed" }), { status: 500 });
+    }
+    if (url.includes("/collection/detail")) {
+      return new Response(JSON.stringify({ code: 200, data: { name: "still here" } }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  await assert.rejects(removeCollection("col_real"), (err: unknown) => {
+    assert.ok(err instanceof KnowledgeUnavailableError);
+    assert.match((err as Error).message, /internal cleanup failed/);
+    return true;
+  });
+});
+
 test("listChunks maps data/v2/list items (id/q/a/chunkIndex) + total", async () => {
   globalThis.fetch = async (input, init) => {
     assert.ok(String(input).includes("/api/core/dataset/data/v2/list"));
