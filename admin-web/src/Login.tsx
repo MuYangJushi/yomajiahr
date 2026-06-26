@@ -415,6 +415,26 @@ export default function Login() {
       .finally(() => setLoading(false));
   }, []);
 
+  // 自动从 URL ?code= 登录：供二维码/链接一扫即入。
+  // 等 providers 加载确认 demo 已启用再试；失败回落到下方手动输入框（已回显该 code）。
+  useEffect(() => {
+    if (!providers?.demo_access_code.enabled) return;
+    const urlCode = new URLSearchParams(window.location.search).get("code");
+    if (!urlCode) return;
+    let cancelled = false;
+    setDemoCode(urlCode);
+    setDemoSubmitting(true);
+    setDemoError("");
+    loginWithDemoAccessCode(urlCode)
+      .then(() => { if (!cancelled) window.location.href = "/"; })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setDemoError(err?.response?.data?.error || "访问码登录失败");
+        setDemoSubmitting(false);
+      });
+    return () => { cancelled = true; };
+  }, [providers]);
+
   const errCode = new URLSearchParams(window.location.search).get("error") || "";
   const errText = errCode ? ERROR_MSG[errCode] || "登录异常" : "";
   const sessionDisabled = providers != null && !providers.session_enabled;
