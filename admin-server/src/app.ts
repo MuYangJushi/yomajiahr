@@ -71,8 +71,11 @@ export function createApp() {
   app.use(uploadErrorHandler);
 
   // 历史 /console 书签兼容：去掉 console 层，302 到根对应路径（/console/agents → /agents）。
+  // 保留 query string（如 /console/login?code=... → /login?code=...，否则二维码访问码会丢）。
   app.get(/^\/console(\/.*)?$/, (req: Request, res: Response) => {
-    res.redirect(302, req.path.replace(/^\/console/, "") || "/");
+    const qIdx = req.originalUrl.indexOf("?");
+    const query = qIdx >= 0 ? req.originalUrl.slice(qIdx) : "";
+    res.redirect(302, (req.path.replace(/^\/console/, "") || "/") + query);
   });
 
   // 新平台 SPA（React+antd）挂在根路径 /；静态资源由上方 express.static 提供，
