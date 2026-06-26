@@ -7,7 +7,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { generateAgentProfile, PROFILE_FIELDS } from "../services/agent-profile.js";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 
 export const agentProfileRouter = Router();
 
@@ -33,14 +33,14 @@ agentProfileRouter.post(
       const profile = parsed.data.fields
         ? Object.fromEntries(parsed.data.fields.map((field) => [field, generated[field]]))
         : generated;
-      appendAuditLog("agent.profile.generate", "agent-profile", req.user?.platformUserId || "", {
+      appendAuditLog("agent.profile.generate", "agent-profile", auditOperator(req), {
         fields: parsed.data.fields || PROFILE_FIELDS,
         duration_ms: Date.now() - startedAt,
         success: true,
       });
       res.json({ profile });
     } catch (err) {
-      appendAuditLog("agent.profile.generate", "agent-profile", req.user?.platformUserId || "", {
+      appendAuditLog("agent.profile.generate", "agent-profile", auditOperator(req), {
         fields: parsed.data.fields || PROFILE_FIELDS,
         duration_ms: Date.now() - startedAt,
         success: false,

@@ -31,20 +31,35 @@ function scoreFilename(name: string): number {
 // 写队列，避免并发 appendFileSync 交错 JSONL 行
 let auditWriteQueue: Promise<void> = Promise.resolve();
 
-// operator 是必填参数（#29）：编译器强制每个写操作落操作人（platformUserId），
-// 杜绝「忘了传 operator」的运行时漏审。内部合并进 details，存储形态不变
-// （audit-labels.operatorName 仍读 details.operator）。空串视为系统/匿名来源。
+/**
+ * 操作人落审计的结构化形态（fix/0623）：`{ id, name }`——id 是稳定取证锚点（platformUserId），
+ * name 是人类可读显示名（飞书/钉钉真实姓名、demo「比赛访客」）。审计台账/CSV 的 operatorName 优先显示 name。
+ */
+export type AuditOperator = { id: string; name?: string };
+
+/** 从请求会话派生审计操作人 `{ id, name }`。无登录态时 id/name 皆空（→ 历史/系统来源语义）。 */
+export function auditOperator(req: { user?: { platformUserId?: string; name?: string } }): AuditOperator {
+  return { id: req.user?.platformUserId || "", name: req.user?.name || undefined };
+}
+
+// operator 是必填参数（#29）：编译器强制每个写操作落操作人。
+// 形态二选一（fix/0623 起推荐对象）：
+//   - AuditOperator `{ id, name }`：存结构化，台账显示 name、保留 id 取证；
+//   - string（历史/兼容）：直接当 platformUserId 存。
+// 内部合并进 details.operator；audit-labels.operatorName 两种都兜。空值视为系统/匿名/历史来源。
 export function appendAuditLog(
   action: string,
   file: string,
-  operator: string,
+  operator: string | AuditOperator,
   details?: Record<string, unknown>,
 ): void {
+  const normalizedOperator =
+    typeof operator === "string" ? operator || "" : { id: operator.id || "", name: operator.name || undefined };
   const entry = {
     timestamp: new Date().toISOString(),
     action,
     file,
-    details: { ...(details ?? {}), operator: operator || "" },
+    details: { ...(details ?? {}), operator: normalizedOperator },
   };
   const line = JSON.stringify(entry) + "\n";
   auditWriteQueue = auditWriteQueue

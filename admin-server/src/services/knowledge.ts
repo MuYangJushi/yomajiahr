@@ -399,7 +399,15 @@ export async function listCollections(datasetId?: string): Promise<KbCollection[
   return out;
 }
 
-/** 删除 FastGPT 集合（ADR-009 原生删除：`collection/delete?id=`，2026-06-12 实测写删闭环通）。审计在路由层落。 */
+/**
+ * 删除 FastGPT 集合（ADR-009 原生删除：`collection/delete?id=`，2026-06-12 实测写删闭环通）。审计在路由层落。
+ *
+ * 幂等语义（2026-06-23 fix/0623）：FastGPT 对所有应用层错误一律包成 HTTP 500 + `{message}`，
+ * 含「集合已不存在」（admin-web 列表陈旧、或集合已在 FastGPT 侧被删）以及「删了集合记录但 cleanup 报错」。
+ * 这两种情况下「目标已不在库」就是我们想要的终态，不该向用户报错。
+ * 因此删除遇 500 时**回查集合是否仍存在**：已不在 → 当成功返回；仍在 → 抛出，且带上 FastGPT 真实 message
+ * （旧实现只报「返回 500」无细节，正是本次诊断耗时的根因）。
+ */
 export async function removeCollection(collectionId: string): Promise<void> {
   if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
   if (!collectionId) throw new Error("collectionId 不能为空");
@@ -411,7 +419,39 @@ export async function removeCollection(collectionId: string): Promise<void> {
   } catch (err) {
     throw new KnowledgeUnavailableError(`FastGPT 删除不可达（${(err as Error).name}）`);
   }
-  if (!res.ok) throw new KnowledgeUnavailableError(`FastGPT 删除返回 ${res.status}`);
+  if (res.ok) return;
+  const fgMessage = await readFgErrorMessage(res);
+  // 回查：集合是否已不在库（幂等成功）；仍在才是真失败。
+  if (!(await collectionExists(collectionId))) return;
+  throw new KnowledgeUnavailableError(
+    `FastGPT 删除返回 ${res.status}${fgMessage ? `：${fgMessage}` : ""}`,
+  );
+}
+
+/** 读取 FastGPT 错误响应体里的 message（best-effort，解析失败返回空串）。 */
+async function readFgErrorMessage(res: Response): Promise<string> {
+  try {
+    const json = (await res.clone().json()) as { message?: unknown };
+    return typeof json?.message === "string" ? json.message : "";
+  } catch {
+    return "";
+  }
+}
+
+/** 集合是否仍存在于 FastGPT（detail 端点；404/「not exist」类视为不存在；网络等不确定按存在处理）。 */
+async function collectionExists(collectionId: string): Promise<boolean> {
+  try {
+    const res = await fgFetch(`/api/core/dataset/collection/detail?id=${encodeURIComponent(collectionId)}`, {
+      method: "GET",
+    });
+    if (res.ok) return true;
+    const msg = await readFgErrorMessage(res);
+    if (/not exist/i.test(msg)) return false;
+    // 其它非 ok（鉴权/服务异常等）无法确证已删，保守按「仍存在」，让删除报真失败。
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 /**

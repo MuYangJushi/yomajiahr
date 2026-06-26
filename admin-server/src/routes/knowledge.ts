@@ -2,7 +2,7 @@
 // RBAC：读=ops；改绑定（影响员工检索）=admin。审计：导入/删除/绑定变更进 audit-log.jsonl。
 import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 import { listAgents, rerenderAgentWorkspace } from "../services/orchestrator.js";
 import { triggerApply } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
@@ -43,7 +43,7 @@ knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Reques
 knowledgeRouter.put("/knowledge/config", requireRole("admin"), (req: Request, res: Response) => {
   try {
     const updatedKeys = updateKnowledgeConfig(req.body as KnowledgeConfigInput);
-    appendAuditLog("CONFIG_KNOWLEDGE", "knowledge-platform", req.user?.platformUserId || "", {
+    appendAuditLog("CONFIG_KNOWLEDGE", "knowledge-platform", auditOperator(req), {
       updatedKeys,
     });
     res.json({ success: true, updatedKeys, restartRequired: true });
@@ -156,11 +156,15 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
     }
     const affectedAgents = await resolveCollectionBoundAgents(collectionId, datasetId);
     await removeCollection(collectionId);
+    // 删单个集合**不解绑** agent：库（datasetId）级绑定不变，agent 仍合法持有知识工具，
+    // 即便删的是库里最后一个集合，绑定也照旧。只需 resetAgentIds 归档可能含被删文档内容的会话上下文。
+    // 绝不传 revokedKnowledgeAgentIds —— 否则会触发「解绑负向验证」(verify-knowledge-revocation.mjs)，
+    // 而 agent 实际仍 bound → 验证判 "still bound" 失败回滚 → 502（fix/0623：任何绑定库的删除都会中招）。
     const apply = affectedAgents.length > 0
-      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.delete", resetAgentIds: affectedAgents, revokedKnowledgeAgentIds: affectedAgents })
+      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.delete", resetAgentIds: affectedAgents })
       : undefined;
     const resetSessions = apply?.resetSessions ?? [];
-    appendAuditLog("DELETE", collectionId, req.user?.platformUserId || "", {
+    appendAuditLog("DELETE", collectionId, auditOperator(req), {
       source: "fastgpt",
       resetSessions,
       applyStatus: apply?.status,
@@ -228,7 +232,7 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
         ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.base.create" })
         : undefined;
     const applyFailed = apply?.status === "failed";
-    appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, req.user?.platformUserId || "", {
+    appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, auditOperator(req), {
       name: binding.name,
       externalKbId: binding.externalKbId,
       boundAgents: binding.boundAgents,
@@ -260,7 +264,7 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
 // 知识库文档导入/删除（已是 ops），与「配技能/绑渠道」对齐；建库 /knowledge/bases 与
 // 改连接 /knowledge/config 仍保留 admin。
 knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Request, res: Response) => {
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   const { jobId, promise } = enqueueApplyJob(
     async () => {
       // 回滚契约：只要拿到了 prev 快照（writeKnowledgeStore 之前），就负责复原。

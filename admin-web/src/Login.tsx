@@ -38,31 +38,88 @@ const STYLES = `
     animation: blobFloat2 11s ease-in-out infinite alternate;
   }
 
+  /* 桌面：左右分栏卡片（左品牌渐变面板 + 右登录表单）。窄屏塌成单列（见 @media）。 */
   .login-card {
     position: relative;
-    width: min(420px, calc(100% - 32px));
+    width: min(860px, calc(100% - 32px));
+    min-height: 540px;
     background: #ffffff;
-    border-radius: 20px;
-    padding: 48px 44px 40px;
+    border-radius: 22px;
     box-shadow:
       0 1px 2px rgba(0,0,0,0.04),
       0 4px 12px rgba(0,0,0,0.06),
       0 24px 56px rgba(0,0,0,0.1);
     animation: cardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
     box-sizing: border-box;
-  }
-  /* 窄屏（≤ 480px）：卡片内边距收紧，避免在 360 视口被挤压 */
-  @media (max-width: 480px) {
-    .login-card { padding: 36px 24px 32px; }
-    .card-top-bar { left: 24px; right: 24px; }
+    display: flex;
+    overflow: hidden;
   }
 
-  .card-top-bar {
+  /* 左侧品牌渐变面板 */
+  .login-hero {
+    flex: 0 0 44%;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(160deg, #00c6fb 0%, #0a84ff 46%, #0040dd 100%);
+    color: #ffffff;
+    padding: 56px 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  /* 面板内柔光装饰 */
+  .login-hero::before,
+  .login-hero::after {
+    content: "";
     position: absolute;
-    top: 0; left: 44px; right: 44px;
-    height: 2.5px;
-    background: linear-gradient(120deg, #00c6fb 0%, #0a84ff 45%, #0040dd 100%);
-    border-radius: 0 0 3px 3px;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .login-hero::before {
+    width: 260px; height: 260px;
+    top: -90px; right: -70px;
+    background: radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%);
+  }
+  .login-hero::after {
+    width: 220px; height: 220px;
+    bottom: -80px; left: -60px;
+    background: radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 70%);
+  }
+  .hero-tagline {
+    margin: 18px 0 0;
+    font-size: 14px;
+    line-height: 1.8;
+    color: rgba(255,255,255,0.92);
+    max-width: 280px;
+  }
+
+  /* 右侧表单区 */
+  .login-form {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 52px 48px 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* 窄屏（≤ 760px）：单列——hero 变顶部渐变小条、品牌居中，表单在下 */
+  @media (max-width: 760px) {
+    .login-card {
+      flex-direction: column;
+      width: min(420px, calc(100% - 32px));
+      min-height: 0;
+    }
+    .login-hero {
+      flex: none;
+      padding: 34px 28px 28px;
+      align-items: center;
+      text-align: center;
+    }
+    .login-hero::before { width: 180px; height: 180px; top: -70px; right: -50px; }
+    .login-hero::after { display: none; }
+    .hero-tagline { display: none; }
+    .login-form { padding: 30px 26px 30px; }
   }
 
   .brand-wrap {
@@ -101,6 +158,31 @@ const STYLES = `
     letter-spacing: 0.16em;
     text-transform: uppercase;
     font-weight: 500;
+  }
+
+  /* 品牌在渐变面板内：白字。桌面左对齐，窄屏（顶部条）居中由 @media 覆盖。 */
+  .login-hero .brand-wrap {
+    position: relative;
+    z-index: 1;
+    align-items: flex-start;
+    margin-bottom: 0;
+  }
+  .login-hero .brand-icon {
+    width: 56px; height: 56px;
+    background: rgba(255,255,255,0.18);
+    box-shadow: none;
+    margin-bottom: 22px;
+  }
+  .login-hero .brand-title {
+    color: #ffffff;
+    text-align: left;
+    font-size: 26px;
+  }
+  .login-hero .brand-sub { color: rgba(255,255,255,0.78); }
+  @media (max-width: 760px) {
+    .login-hero .brand-wrap { align-items: center; }
+    .login-hero .brand-icon { width: 52px; height: 52px; margin-bottom: 16px; }
+    .login-hero .brand-title { text-align: center; font-size: 22px; }
   }
 
   .alert {
@@ -365,14 +447,16 @@ export default function Login() {
       <div className="blob blob-2" />
 
       <main className="login-card" role="main">
-        <div className="card-top-bar" />
-
-        <div className="brand-wrap">
-          <BrandIcon />
-          <h1 className="brand-title">HR 数字员工</h1>
-          <p className="brand-sub">Management Platform</p>
+        <div className="login-hero">
+          <div className="brand-wrap">
+            <BrandIcon />
+            <h1 className="brand-title">HR 数字员工</h1>
+            <p className="brand-sub">Management Platform</p>
+          </div>
+          <p className="hero-tagline">飞书 / 钉钉一键登录，统一管理你的 HR 数字员工、知识库与渠道。</p>
         </div>
 
+        <div className="login-form">
         {errText && (
           <div className="alert alert-error" role="alert">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true">
@@ -459,6 +543,7 @@ export default function Login() {
           <span className="footer-dot">·</span>
           <span>如需帮助请联系管理员</span>
         </footer>
+        </div>
       </main>
     </div>
   );

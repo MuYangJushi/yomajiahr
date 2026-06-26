@@ -67,8 +67,9 @@ export function actionLabel(action: string): string {
 // 不回填伪造——新日志必带 operator，空值只可能是历史条目。
 export function operatorName(entry: any): string {
   const op = entry?.details?.operator;
-  const name = typeof op === "string" ? op : op?.name;
-  return name || "(历史·未落操作人)";
+  if (typeof op === "string") return op || "(历史·未落操作人)";
+  // fix/0623：结构化 { id, name }——优先人类可读 name，退化到短 id（仍是真实操作人，不可标历史）。
+  return op?.name || (op?.id ? shortId(op.id) : "") || "(历史·未落操作人)";
 }
 
 function shortId(s: unknown, head = 6, tail = 4): string {

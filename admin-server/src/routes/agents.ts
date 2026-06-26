@@ -23,7 +23,7 @@ import { envKeysSet } from "../services/secrets.js";
 import { readStore } from "../services/store.js";
 import { requireRole } from "../auth/rbac.js";
 import { rateLimit } from "../middleware.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 
 export const agentsRouter = Router();
 
@@ -59,7 +59,7 @@ agentsRouter.post("/config/agents", requireRole("ops"), async (req: Request, res
     if (role === "admin" && req.user?.platformRole !== "admin") {
       return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
     }
-    const operator = req.user?.platformUserId || "";
+    const operator = auditOperator(req);
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await createAgentProfile({ ...profileInput, role });
@@ -103,7 +103,7 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
     if (profileInput.role === "admin" && req.user?.platformRole !== "admin") {
       return res.status(403).json({ error: "仅平台管理员可授予 admin 系统权限" });
     }
-    const operator = req.user?.platformUserId || "";
+    const operator = auditOperator(req);
     const { jobId, promise } = enqueueApplyJob(
       async () => {
         const result = await updateAgentProfile(id, profileInput);
@@ -136,7 +136,7 @@ agentsRouter.put("/config/agents/:id", requireRole("ops"), async (req: Request, 
 // 渠道绑定（ADR-013 #58）。新账号（带 credentials）或复用现有空闲账号。异步 apply。
 agentsRouter.post("/config/agents/:id/channels", requireRole("ops"), onboardingLimiter, async (req: Request, res: Response) => {
   const agentId = String(req.params.id);
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const { jobId, promise } = enqueueApplyJob(
       async () => {
@@ -176,7 +176,7 @@ agentsRouter.delete("/config/agents/:id/channels/:domain/:accountId", requireRol
   const accountId = String(req.params.accountId);
   try {
     const result = await unbindAgentFromChannel(agentId, domain as any, accountId);
-    appendAuditLog("agent.channel.unbind", agentId, req.user?.platformUserId || "", {
+    appendAuditLog("agent.channel.unbind", agentId, auditOperator(req), {
       agent_id: agentId,
       domain,
       account_id: accountId,
@@ -193,7 +193,7 @@ agentsRouter.delete("/config/agents/:id", requireRole("ops"), async (req: Reques
   const id = String(req.params.id);
   try {
     const result = await deleteAgent(id);
-    appendAuditLog("agent.delete", id, req.user?.platformUserId || "", {
+    appendAuditLog("agent.delete", id, auditOperator(req), {
       agent_id: id,
     });
     res.json(result);
@@ -255,7 +255,7 @@ agentsRouter.put("/config/agents/:id/skills", requireRole("ops"), async (req: Re
   if (!Array.isArray(skills) || skills.some((s: unknown) => typeof s !== "string")) {
     return res.status(400).json({ error: "skills 必须为字符串数组" });
   }
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const { jobId, promise } = enqueueApplyJob(
       async () => {

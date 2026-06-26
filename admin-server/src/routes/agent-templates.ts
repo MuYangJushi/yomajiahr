@@ -13,7 +13,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 import { listDepartments } from "../services/departments.js";
 import {
   TEMPLATE_ID_RE,
@@ -73,7 +73,7 @@ const UpdateSchema = z.object({
 agentTemplatesRouter.post("/config/agent-templates", requireRole("ops"), (req: Request, res: Response) => {
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     // role=admin 模板要求平台 admin（与 routes/agents.ts POST /config/agents 同款守门）。
     if (parsed.data.role === "admin" && req.user?.platformRole !== "admin") {
@@ -98,7 +98,7 @@ agentTemplatesRouter.put("/config/agent-templates/:id", requireRole("ops"), (req
   const id = String(req.params.id);
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     if (parsed.data.role === "admin" && req.user?.platformRole !== "admin") {
       return res.status(403).json({ error: "仅平台管理员可将模板角色提升为 admin" });
@@ -120,7 +120,7 @@ agentTemplatesRouter.put("/config/agent-templates/:id", requireRole("ops"), (req
 
 agentTemplatesRouter.delete("/config/agent-templates/:id", requireRole("ops"), (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const result = deleteAgentTemplate(id);
     appendAuditLog("agent-template.delete", id, operator, {
@@ -138,7 +138,7 @@ agentTemplatesRouter.delete("/config/agent-templates/:id", requireRole("ops"), (
 // 恢复软隐藏的内置模板（撤销内置删除）。自建模板已真删，无法恢复。
 agentTemplatesRouter.post("/config/agent-templates/:id/restore", requireRole("ops"), (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const tpl = restoreAgentTemplate(id);
     appendAuditLog("agent-template.restore", id, operator, { id });

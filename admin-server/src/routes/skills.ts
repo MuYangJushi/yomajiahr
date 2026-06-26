@@ -10,7 +10,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { requireRole } from "../auth/rbac.js";
-import { appendAuditLog } from "../util.js";
+import { appendAuditLog, auditOperator } from "../util.js";
 import {
   SKILL_NAME_RE,
   createSkill,
@@ -68,7 +68,7 @@ skillsRouter.post("/config/skills/generate-body", requireRole("ops"), async (req
     return res.status(400).json({ error: msg, message: msg });
   }
   const startedAt = Date.now();
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const body = await generateSkillBody(parsed.data);
     appendAuditLog("skill.body.generate", parsed.data.name, operator, {
@@ -93,7 +93,7 @@ skillsRouter.get("/config/skills/:name", requireRole("ops"), (req: Request, res:
 skillsRouter.post("/config/skills", requireRole("ops"), (req: Request, res: Response) => {
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const skill = createSkill({
       name: parsed.data.name,
@@ -123,7 +123,7 @@ skillsRouter.put("/config/skills/:name", requireRole("ops"), (req: Request, res:
   const name = String(req.params.name);
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "入参非法" });
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const skill = updateSkill(name, {
       description: parsed.data.description,
@@ -150,7 +150,7 @@ skillsRouter.put("/config/skills/:name", requireRole("ops"), (req: Request, res:
 
 skillsRouter.delete("/config/skills/:name", requireRole("ops"), (req: Request, res: Response) => {
   const name = String(req.params.name);
-  const operator = req.user?.platformUserId || "";
+  const operator = auditOperator(req);
   try {
     const { referencedBy } = deleteSkill(name);
     appendAuditLog("skill.delete", name, operator, { name, referencedBy });
