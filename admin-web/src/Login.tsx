@@ -392,12 +392,16 @@ function DingIcon({ disabled }: { disabled: boolean }) {
   );
 }
 
+// 同会话内标记已自动尝试过裸链接直达登录，防失败时整页刷新死循环。
+const DIRECT_LOGIN_TRIED_KEY = "hr_demo_direct_tried";
+
 export default function Login() {
   const [providers, setProviders] = useState<Providers | null>(null);
   const [loading, setLoading] = useState(true);
   const [demoCode, setDemoCode] = useState("");
   const [demoSubmitting, setDemoSubmitting] = useState(false);
   const [demoError, setDemoError] = useState("");
+  const [autoEntering, setAutoEntering] = useState(false);
   const styleRef = useRef<HTMLStyleElement | null>(null);
 
   useEffect(() => {
@@ -441,15 +445,22 @@ export default function Login() {
     if (window.location.pathname !== "/") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("code") || params.get("error")) return;
+    // 一次性守卫：同一浏览器会话只自动尝试一次。否则当 session cookie 写不进（如
+    // COOKIE_SECURE=1 却走 http 访问）时，签发成功但 /auth/me 仍失败会回到本页再次
+    // 自动登录，造成整页刷新死循环。失败/重入后回落到下方手动访问码入口。
+    if (sessionStorage.getItem(DIRECT_LOGIN_TRIED_KEY)) return;
+    sessionStorage.setItem(DIRECT_LOGIN_TRIED_KEY, "1");
     let cancelled = false;
+    setAutoEntering(true);
     setDemoSubmitting(true);
     setDemoError("");
     loginWithDemoDirect()
       .then(() => { if (!cancelled) window.location.href = "/"; })
       .catch((err: any) => {
         if (cancelled) return;
-        setDemoError(err?.response?.data?.error || "临时入口登录失败");
+        setDemoError(err?.response?.data?.error || "临时入口登录失败，请手动输入访问码进入");
         setDemoSubmitting(false);
+        setAutoEntering(false);
       });
     return () => { cancelled = true; };
   }, [providers]);
@@ -478,6 +489,22 @@ export default function Login() {
     } finally {
       setDemoSubmitting(false);
     }
+  }
+
+  // 直达自动登录进行中：用全屏过渡态替代登录表单，避免飞书/钉钉按钮一闪而过。
+  if (autoEntering) {
+    return (
+      <div className="login-root">
+        <div className="blob blob-1" />
+        <div className="blob blob-2" />
+        <main className="login-card" role="main">
+          <div className="spinner-wrap" style={{ flexDirection: "column", gap: 16 }}>
+            <span className="spinner" aria-label="加载中" />
+            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>正在进入比赛环境…</p>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
