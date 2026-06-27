@@ -549,6 +549,7 @@ if [ "$INSTALL_SYSTEMD" = true ] || [ "$SYSTEMD_CONFIGURED" = true ]; then
     _install_service() {
       local src="$1" dst="$2"
       sed \
+        -e "s|/opt/yomajiahr/current|$REPO_DIR|g" \
         -e "s|/opt/yomajiahr|$REPO_DIR|g" \
         -e "s|/home/ubuntu/.openclaw|$STATE_DIR|g" \
         -e "s|/usr/bin/env openclaw|$OPENCLAW_BIN|g" \
