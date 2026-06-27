@@ -534,8 +534,13 @@ export interface CreateKbInput {
   boundAgents?: string[];
   restricted?: boolean;
 }
-export async function createKnowledgeBase(input: CreateKbInput): Promise<KnowledgeBinding> {
-  return (await api.post("/knowledge/bases", input)).data.base;
+export interface CreateKbResult {
+  success?: boolean;
+  base: KnowledgeBinding;
+  apply?: { status?: "success" | "failed" | "pending"; message?: string; mode?: string };
+}
+export async function createKnowledgeBase(input: CreateKbInput): Promise<CreateKbResult> {
+  return (await api.post("/knowledge/bases", input)).data;
 }
 // —— 审计（#44 vanilla→React）——
 export interface AuditEntry {

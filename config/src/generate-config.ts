@@ -16,6 +16,15 @@ const KNOWLEDGE_SEARCH_TOOL = 'knowledge_search';
 const KNOWLEDGE_IMPORT_TOOL = 'knowledge_import';
 /** 识别由本机制管理的知识库工具（无论旧名 `fastgpt__…` 还是新名 `kb-<id>__…`），用于幂等清洗。 */
 const KNOWLEDGE_TOOL_SUFFIX_RE = /__(knowledge_search|knowledge_import)$/;
+const KNOWLEDGE_MCP_URL_RE = /^http:\/\/127\.0\.0\.1:18790\/mcp(?:\/[^/?#]+)?(?:[?#].*)?$/;
+
+function isManagedKnowledgeServer(name: string, server: unknown): boolean {
+  if (name === 'fastgpt' || name.startsWith(KB_REGISTRATION_PREFIX)) return true;
+  const s = server as { url?: unknown; toolFilter?: { include?: unknown } } | null;
+  const url = typeof s?.url === 'string' ? s.url : '';
+  const include = Array.isArray(s?.toolFilter?.include) ? s.toolFilter.include : [];
+  return KNOWLEDGE_MCP_URL_RE.test(url) && include.some((tool) => tool === KNOWLEDGE_SEARCH_TOOL || tool === KNOWLEDGE_IMPORT_TOOL);
+}
 
 /** 把 agent.workspace（如 "~/.openclaw/workspaces/x"）解析为绝对路径。
  *  优先把前缀 ~/.openclaw 映射到运行时 stateDir（apply 以 root 运行时 ~ ≠ 部署用户家目录）。 */
@@ -172,7 +181,9 @@ export function applyKnowledgeBindings(config: any, store: ConfigStore): void {
   const roleById = new Map(store.agents.map((a) => [a.id, a.role]));
 
   config.mcp ??= {};
-  const servers: Record<string, unknown> = { ...(config.mcp.servers ?? {}) };
+  const servers: Record<string, unknown> = Object.fromEntries(
+    Object.entries(config.mcp.servers ?? {}).filter(([name, server]) => !isManagedKnowledgeServer(name, server)),
+  );
   const list: any[] = Array.isArray(config.agents?.list) ? config.agents.list : [];
 
   for (const agent of list) {

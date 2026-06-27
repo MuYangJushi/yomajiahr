@@ -146,6 +146,7 @@ export function mountMcp(app: Express): void {
     }
     // 路径带 agentId → 按其 knowledge.json 绑定解析 datasetIds；不带 → undefined（默认单库，向后兼容）。
     const agentId = typeof req.params.agentId === "string" ? req.params.agentId : undefined;
+    if (!agentId) log("WARN", "/mcp legacy endpoint used; generated configs should use /mcp/<agentId>");
     const datasetIds = agentId ? resolveDatasetIdsForAgent(agentId) : undefined;
     const server = buildServer(datasetIds, agentId);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
