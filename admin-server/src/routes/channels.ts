@@ -17,6 +17,7 @@ import {
   cancelChannelOnboarding, createChannelAsset, deleteChannelAsset, getChannelOnboarding,
   listChannelAssets, probeChannels, startChannelOnboarding, updateChannelAsset,
 } from "../services/channels.js";
+import { EXTENDED_APPLY_TIMEOUT_MS } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 
 export const channelsRouter = Router();
@@ -69,7 +70,7 @@ channelsRouter.post("/config/channel-assets", requireRole("ops"), async (req: Re
     if (parsed.data.mode === "qrcode") {
       return res.status(202).json(startChannelOnboarding(req.user!.platformUserId, parsed.data));
     }
-    const asset = await createChannelAsset(parsed.data);
+    const asset = await createChannelAsset(parsed.data, { timeoutMs: EXTENDED_APPLY_TIMEOUT_MS });
     appendAuditLog("channel.create", asset.id, auditOperator(req), {
       type: asset.type,
       id: asset.id,

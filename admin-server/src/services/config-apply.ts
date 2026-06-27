@@ -14,6 +14,10 @@ import { randomUUID } from "node:crypto";
 
 export type ApplyMode = "restart" | "runtime-only";
 
+// 用户发起的 agent/channel 写操作会触发生成/校验、gateway restart 或 runtime-only apply；
+// 生产上 systemd helper + 探活窗口常超过默认 30s，统一使用扩展等待窗口，避免把 pending 误判为失败。
+export const EXTENDED_APPLY_TIMEOUT_MS = 120_000;
+
 export interface ApplyResult {
   status: "success" | "failed" | "pending";
   message?: string;

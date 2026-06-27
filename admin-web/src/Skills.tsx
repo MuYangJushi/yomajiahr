@@ -58,7 +58,7 @@ function SkillCatalog() {
     setAction(next); setSelected(skill);
     form.resetFields();
     if (skill) {
-      form.setFieldsValue({ description: skill.description, requiredRole: skill.requiredRole ?? "", requiresKnowledge: skill.requiresKnowledge ?? false, body: "" });
+      form.setFieldsValue({ name: skill.name, description: skill.description, requiredRole: skill.requiredRole ?? "", requiresKnowledge: skill.requiresKnowledge ?? false, body: "" });
       // 编辑时拉全文 body
       fetchSkill(skill.name).then((full) => form.setFieldValue("body", full.body)).catch(() => {});
     } else {
