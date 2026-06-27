@@ -4,7 +4,7 @@ import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog, auditOperator } from "../util.js";
 import { listAgents, rerenderAgentWorkspace } from "../services/orchestrator.js";
-import { triggerApply } from "../services/config-apply.js";
+import { applyModeForOperation, triggerApply } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import {
@@ -161,7 +161,7 @@ knowledgeRouter.delete("/knowledge/collections/:docId", requireRole("ops"), asyn
     // 绝不传 revokedKnowledgeAgentIds —— 否则会触发「解绑负向验证」(verify-knowledge-revocation.mjs)，
     // 而 agent 实际仍 bound → 验证判 "still bound" 失败回滚 → 502（fix/0623：任何绑定库的删除都会中招）。
     const apply = affectedAgents.length > 0
-      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.delete", resetAgentIds: affectedAgents })
+      ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: applyModeForOperation("knowledge.delete"), operation: "knowledge.delete", resetAgentIds: affectedAgents })
       : undefined;
     const resetSessions = apply?.resetSessions ?? [];
     appendAuditLog("DELETE", collectionId, auditOperator(req), {
@@ -223,13 +223,22 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
       return;
     }
     const binding = await createKnowledgeBase(input);
+    if (binding.boundAgents.length > 0) {
+      for (const agentId of binding.boundAgents) {
+        try {
+          rerenderAgentWorkspace(agentId);
+        } catch {
+          /* workspace 是辅助 prompt，失败不阻断建库主流程 */
+        }
+      }
+    }
     // 新库若已绑 agent，需 apply 才会暴露 knowledge_search（ADR-011）。库已建好，apply 失败
     // 不回滚库（FastGPT dataset 合法存在）——回传 apply 状态供前端提示，运维可重试 apply。
     // pending：apply 仍在进行，不报错；前端可轮询。
     // 审计顺序：apply 之后才落库——若 apply 失败，审计记 FAILED；否则记 CREATED，使审计与 apply 终态一致。
     const apply =
       binding.boundAgents.length > 0
-        ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: "runtime-only", operation: "knowledge.base.create" })
+        ? await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: 60_000, mode: applyModeForOperation("knowledge.base.create"), operation: "knowledge.base.create" })
         : undefined;
     const applyFailed = apply?.status === "failed";
     appendAuditLog(applyFailed ? "CREATE_KB_FAILED" : "CREATE_KB", binding.id, auditOperator(req), {
@@ -307,7 +316,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
           stateDir: STATE_DIR,
           repoDir: REPO_DIR,
           timeoutMs: 60_000,
-          mode: "runtime-only",
+          mode: applyModeForOperation("knowledge.bind"),
           operation: "knowledge.bind",
           resetAgentIds: revokedAgentIds,
           revokedKnowledgeAgentIds: revokedAgentIds,
@@ -327,7 +336,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
             for (const agentId of new Set([...revokedAgentIds, ...grantedAgentIds])) {
               try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
             }
-            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "knowledge.bind" });
+            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: applyModeForOperation("knowledge.bind"), operation: "knowledge.bind" });
           } catch {
             /* 复原失败：调用方 catch 会拿到原 apply 错误 */
           }
@@ -355,7 +364,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
             for (const agentId of affected) {
               try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
             }
-            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: "runtime-only", operation: "knowledge.bind" });
+            await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: applyModeForOperation("knowledge.bind"), operation: "knowledge.bind" });
           } catch {
             /* 复原失败：保持错误返回，运维可手工 apply */
           }

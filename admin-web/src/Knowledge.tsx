@@ -81,8 +81,19 @@ function NewKbModal({
     const values = await form.validateFields();
     setSubmitting(true);
     try {
-      await createKnowledgeBase(values);
-      message.success("知识库已创建");
+      const result = await createKnowledgeBase(values);
+      const hasBoundAgents = Array.isArray(values.boundAgents) && values.boundAgents.length > 0;
+      if (!hasBoundAgents) {
+        message.success("知识库已创建");
+      } else if (result.apply?.status === "success") {
+        message.success("知识库已创建并应用");
+      } else if (result.apply?.status === "pending") {
+        message.warning("知识库已创建，配置应用中，请稍后刷新验证");
+      } else if (result.apply?.status === "failed") {
+        message.warning(result.apply.message ? `知识库已创建，但应用失败：${result.apply.message}` : "知识库已创建，但应用失败，需要重试保存绑定或应用配置");
+      } else {
+        message.success("知识库已创建");
+      }
       form.resetFields();
       onCreated();
       onClose();

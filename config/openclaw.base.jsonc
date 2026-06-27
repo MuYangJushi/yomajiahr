@@ -52,7 +52,7 @@
     "defaults": {
       "model": {
         // 当前默认使用 MiniMax 国内站；MiniMax 为单点 provider，建议接入第二家后启用 fallbacks。
-        "primary": "minimax/MiniMax-M2.7",
+        "primary": "minimax/MiniMax-M3",
         // "fallbacks": ["openai/gpt-5.1", "anthropic/claude-sonnet-4-5"],
       },
       // 心跳默认每 30 分钟执行一次，但默认不向聊天渠道外发，仅用于内部巡检与保活。

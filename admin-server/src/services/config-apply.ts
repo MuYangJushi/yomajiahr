@@ -4,8 +4,9 @@
 //
 // ADR-016 §3：apply 拆为两类模式。
 //   - mode=restart       渠道账号绑定 / 渠道凭证 / gateway 全局配置 → 走 stop→swap→start（现有强路径，不变）。
-//   - mode=runtime-only  创建 agent / 改档案 / 配技能 / 绑解绑知识库 → 仅生成+校验+原子替换 runtime，**不重启 gateway**。
+//   - mode=runtime-only  创建 agent / 改档案 / 配技能 → 仅生成+校验+原子替换 runtime，**不重启 gateway**。
 //     平台内 Web 对话与下一次 CLI run 会从磁盘重读新配置；不承诺常驻 gateway 已热加载。
+//   - 知识库绑定会新增/删除 per-agent MCP 注册，需 restart 让常驻 gateway 重载工具表。
 // `applyModeForOperation(operation)` 集中判定，避免散落布尔硬编码。
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -47,7 +48,7 @@ function readResult(resultPath: string): ApplyResult | null {
 
 /**
  * 按操作类型判定 apply 模式（ADR-016 §3.1 调用方矩阵）。
- * 渠道无关变更（agent 档案/技能/知识库绑定）→ runtime-only；渠道绑定 / 网关全局配置 → restart。
+ * 渠道无关且不改 MCP 注册的变更（agent 档案/技能）→ runtime-only；知识库绑定会改 MCP 注册，渠道绑定 / 网关全局配置 → restart。
  * `agent.delete` 视是否带渠道而定；未知操作默认 restart（安全兜底）。
  */
 export function applyModeForOperation(operation: string | undefined, opts?: { agentHasChannels?: boolean }): ApplyMode {
@@ -55,11 +56,12 @@ export function applyModeForOperation(operation: string | undefined, opts?: { ag
     case "agent.create":
     case "agent.update.profile":
     case "agent.skill.update":
+      return "runtime-only";
     case "knowledge.bind":
     case "knowledge.unbind":
     case "knowledge.delete":
     case "knowledge.base.create":
-      return "runtime-only";
+      return "restart";
     case "agent.delete":
       // 删除带渠道的 agent 等同解绑渠道 → restart；纯无渠道 agent → runtime-only。
       return opts?.agentHasChannels ? "restart" : "runtime-only";

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { generateConfig, isPlaceholderValue } from './generate-config.js';
+import { applyKnowledgeBindings, generateConfig, isPlaceholderValue } from './generate-config.js';
 import type { ConfigStore, KnowledgeStore } from './types.js';
 
 const configDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -140,6 +140,49 @@ test('幂等：剥离旧硬编码 fastgpt__knowledge_search，无绑定时不残
   assert.ok(!allow.includes('fastgpt__knowledge_search'), '旧硬编码工具应被剥离');
   assert.ok(!allow.some((t) => /__knowledge_search$/.test(t)), '无绑定不应残留任何 search 工具');
   assert.ok(allow.includes('memory_search'), '非知识库工具应保留');
+});
+
+test('幂等：清理旧 MCP 注册并只重建当前绑定 agent 的 kb 注册', () => {
+  const store = makeStore({ knowledge: fastgptStore({ [FASTGPT_DATASET]: ['hr-employee'] }) });
+  store.agents[0].tools = { allow: ['fastgpt__knowledge_search', 'kb-old-agent__knowledge_search', 'memory_search'], deny: [] };
+  const config: any = {
+    mcp: {
+      servers: {
+        fastgpt: {
+          enabled: true,
+          url: 'http://127.0.0.1:18790/mcp',
+          transport: 'streamable-http',
+          toolFilter: { include: ['knowledge_search'] },
+        },
+        'kb-old-agent': {
+          enabled: true,
+          url: 'http://127.0.0.1:18790/mcp/old-agent',
+          transport: 'streamable-http',
+          toolFilter: { include: ['knowledge_search', 'knowledge_import'] },
+        },
+        filesystem: {
+          enabled: true,
+          url: 'http://127.0.0.1:3001/mcp',
+          transport: 'streamable-http',
+          toolFilter: { include: ['read_file'] },
+        },
+      },
+    },
+    agents: {
+      list: store.agents.map(({ role: _role, ...agent }) => ({ ...agent, tools: { ...(agent.tools ?? {}) } })),
+    },
+  };
+
+  applyKnowledgeBindings(config, store);
+
+  assert.equal(config.mcp.servers.fastgpt, undefined);
+  assert.equal(config.mcp.servers['kb-old-agent'], undefined);
+  assert.equal(config.mcp.servers.filesystem?.url, 'http://127.0.0.1:3001/mcp');
+  assert.equal(config.mcp.servers['kb-hr-employee'].url, 'http://127.0.0.1:18790/mcp/hr-employee');
+  const allow = allowOf(config, 'hr-employee');
+  assert.ok(!allow.includes('fastgpt__knowledge_search'));
+  assert.ok(!allow.includes('kb-old-agent__knowledge_search'));
+  assert.ok(allow.includes('kb-hr-employee__knowledge_search'));
 });
 
 test('畸形 knowledge.json → generateConfig 抛可读结构错误', () => {
