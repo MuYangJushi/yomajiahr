@@ -10,7 +10,6 @@
 // 鉴权：Bearer 令牌，fail-closed；与 /api 的 cookie/RBAC 是两套，故挂在 /api 鉴权之外。
 import type { Express, Request, Response } from "express";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -26,7 +25,8 @@ import {
   type KbChunk,
 } from "./services/knowledge.js";
 import { listAgents } from "./services/orchestrator.js";
-import { appendAuditLog, log, normalizeUploadedFilename } from "./util.js";
+import { appendAuditLog, log } from "./util.js";
+import { resolveImportFilename } from "./services/import-filename.js";
 
 // 路A引用：title 必有锚点，文档编号/版本 best-effort（无则省略，绝不编造）。
 function citation(src: KbChunk["source"]): string {
@@ -124,22 +124,21 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
         const hint = bound.length > 0 ? `\n当前可选知识库：${bound.map((kb) => `「${kb.name}」`).join("、")}` : "";
         return { content: [{ type: "text", text: `${(err as Error).message}${hint}` }], isError: true };
       }
-      // 飞书/钉钉经 openclaw 落地的附件，本地文件名常是 UTF-8 被按 latin1 解读的 mojibake
-      // （中文 UTF-8 第二字节落在 0x80-0x9F 控制区，前端渲染成下划线/方块）。与网页上传链路
-      // （upload.ts / agent-chat.ts）一致归一化还原，避免审计台账与 FastGPT collection 标题乱码。
-      const filename = normalizeUploadedFilename(basename(filePath));
+      const fileBuffer = readFileSync(filePath);
+      const resolvedFilename = await resolveImportFilename({ filePath, fileBuffer, agentId });
+      const filename = resolvedFilename.filename;
       // 机器行为人：经数字员工在对话里触发导入，operator 记为 agent:<id> 以区别于人类登录。
       const operator = `agent:${agentId ?? "unknown"}`;
       try {
-        const { collectionId, deduped } = await importDocument(readFileSync(filePath), filename, dsId);
-        appendAuditLog("IMPORT", filename, operator, { status: deduped ? "deduped" : "success", platform: "fastgpt", collectionId, kbId: dsId, kbName, via: "chat" });
+        const { collectionId, deduped } = await importDocument(fileBuffer, filename, dsId);
+        appendAuditLog("IMPORT", filename, operator, { status: deduped ? "deduped" : "success", platform: "fastgpt", collectionId, kbId: dsId, kbName, via: "chat", filenameSource: resolvedFilename.source, originalFilename: resolvedFilename.originalFilename });
         const targetText = kbName ? `到知识库「${kbName}」` : "到知识库";
         const text = deduped
           ? `知识库「${kbName ?? dsId}」里已有同名文档「${filename}」，已复用现有内容，未重复导入。如需更新，请先在知识库页删除旧文档再上传。`
           : `已导入「${filename}」${targetText}（collectionId=${collectionId}）。FastGPT 正在切片/向量化，稍后可在知识库页查看。`;
         return { content: [{ type: "text", text }] };
       } catch (err) {
-        appendAuditLog("IMPORT", filename, operator, { status: "failed", platform: "fastgpt", reason: (err as Error).message, kbId: dsId, kbName, via: "chat" });
+        appendAuditLog("IMPORT", filename, operator, { status: "failed", platform: "fastgpt", reason: (err as Error).message, kbId: dsId, kbName, via: "chat", filenameSource: resolvedFilename.source, originalFilename: resolvedFilename.originalFilename });
         return { content: [{ type: "text", text: `导入失败：${(err as Error).message}` }], isError: true };
       }
     },
