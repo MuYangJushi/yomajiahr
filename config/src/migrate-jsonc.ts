@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseJsonc } from './generate-config.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import type { AgentsStore, ChannelsStore, BindingsStore } from './types.js';
 
 export interface MigrationOutput {
@@ -75,7 +75,15 @@ export function migrate(jsoncText: string): MigrationOutput {
 
 // —— CLI ——
 function isMain(): boolean {
-  return process.argv[1] === fileURLToPath(import.meta.url);
+  // 见 generate-config.ts isMain 注释：发布包 symlink 布局下须对 argv[1] realpath 再比较。
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const self = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(entry) === self;
+  } catch {
+    return entry === self;
+  }
 }
 
 if (isMain()) {

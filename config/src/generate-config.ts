@@ -1,6 +1,6 @@
 // 生成器（基石 A）：base.jsonc + config-store/*.json → 运行时 openclaw.json。
 // 被 install.sh（CLI）与未来 portal（programmatic）共用。
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -340,7 +340,18 @@ function parseArgs(argv: string[]): Record<string, string> {
 }
 
 function isMain(): boolean {
-  return process.argv[1] === fileURLToPath(import.meta.url);
+  const entry = process.argv[1];
+  if (!entry) return false;
+  // 发布包用 current → releases/<ver> symlink 布局调用本脚本。Node 加载 ESM 时默认对
+  // import.meta.url 做 realpath（解析 symlink），而 process.argv[1] 保留传入的 symlink 路径，
+  // 直接 === 比较会误判为「非入口」→ 整段生成逻辑被跳过、exit 0 却不写 staging。
+  // 故对 argv[1] 也 realpath 后再比较，使经 symlink 调用同样判定为入口。
+  const self = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(entry) === self;
+  } catch {
+    return entry === self;
+  }
 }
 
 if (isMain()) {
