@@ -174,6 +174,37 @@ test('空闲渠道账号保留在 store，但不注入 Gateway runtime', () => {
   assert.deepEqual(Object.keys(config.channels.feishu.accounts), ['occupied']);
 });
 
+test('dmPolicy="open" 且未设 allowFrom → 兜底注入 allowFrom:["*"]（修 DM 全丢）', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'open-acct', type: 'feishu', displayName: '开放', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' }, policy: { dmPolicy: 'open' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+  ];
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'open-acct' } }];
+  const acct = gen(store).channels.feishu.accounts['open-acct'];
+  assert.equal(acct.dmPolicy, 'open');
+  assert.deepEqual(acct.allowFrom, ['*']);
+});
+
+test('dmPolicy="open" 但 account 已显式设 allowFrom → 尊重不覆盖', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'open-acct', type: 'feishu', displayName: '开放', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}', allowFrom: ['userA', 'userB'] }, policy: { dmPolicy: 'open' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+  ];
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'open-acct' } }];
+  const acct = gen(store).channels.feishu.accounts['open-acct'];
+  assert.deepEqual(acct.allowFrom, ['userA', 'userB']);
+});
+
+test('dmPolicy="restricted" → 不注入 allowFrom', () => {
+  const store = makeStore();
+  store.channels = [
+    { id: 'restr-acct', type: 'feishu', displayName: '受限', enabled: true, account: { appId: '${FEISHU_HR_BOT_APP_ID}' }, policy: { dmPolicy: 'restricted' }, envKeys: ['FEISHU_HR_BOT_APP_ID', 'FEISHU_HR_BOT_APP_SECRET'] },
+  ];
+  store.bindings = [{ agentId: 'hr-employee', match: { channel: 'feishu', accountId: 'restr-acct' } }];
+  const acct = gen(store).channels.feishu.accounts['restr-acct'];
+  assert.equal(acct.allowFrom, undefined);
+});
+
 test('重复 (id,type) 渠道资产 → generateConfig 抛唯一性校验错误', () => {
   const store = makeStore();
   store.channels = [
