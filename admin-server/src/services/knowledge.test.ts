@@ -13,7 +13,7 @@ process.env.FASTGPT_API_KEY = "test-fastgpt-secret";
 process.env.FASTGPT_KB_ID = "test-kb-id";
 process.env.FASTGPT_EMBEDDING_MODEL = "text-embedding-v4";
 
-const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, resolveCollectionBoundAgents, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
+const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, resolveImportDatasetIdForAgent, listKnowledgeBasesForAgent, resolveCollectionBoundAgents, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
 const originalFetch = globalThis.fetch;
 
 test.afterEach(() => {
@@ -307,6 +307,36 @@ test("knowledge store validation rejects malformed bindings and unknown agents",
     ).knowledgeBases[0].boundAgents,
     ["hr-assistant"],
   );
+});
+
+
+test("resolveImportDatasetIdForAgent：单库默认、多库按名称/ID 选择，拒绝未绑定目标", () => {
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [
+      { id: "policy", name: "员工制度库", provider: "fastgpt", externalKbId: "ds_policy", boundAgents: ["admin-a"] },
+      { id: "payroll", name: "薪酬政策库", provider: "fastgpt", externalKbId: "ds_payroll", boundAgents: ["admin-b"] },
+      { id: "local", name: "本地库", provider: "local", boundAgents: ["admin-a"] },
+    ],
+  });
+
+  assert.deepEqual(listKnowledgeBasesForAgent("admin-a").map((kb) => kb.name), ["员工制度库"]);
+  assert.equal(resolveImportDatasetIdForAgent("admin-a").datasetId, "ds_policy");
+  assert.equal(resolveImportDatasetIdForAgent("admin-a", "员工制度库").datasetId, "ds_policy");
+  assert.equal(resolveImportDatasetIdForAgent("admin-a", "policy").datasetId, "ds_policy");
+  assert.equal(resolveImportDatasetIdForAgent("admin-a", "ds_policy").datasetId, "ds_policy");
+  assert.throws(() => resolveImportDatasetIdForAgent("admin-a", "薪酬政策库"), /不是该管理员已绑定/);
+
+  writeKnowledgeStore({
+    platform: "fastgpt",
+    knowledgeBases: [
+      { id: "policy", name: "员工制度库", provider: "fastgpt", externalKbId: "ds_policy", boundAgents: ["admin-a"] },
+      { id: "payroll", name: "薪酬政策库", provider: "fastgpt", externalKbId: "ds_payroll", boundAgents: ["admin-a"] },
+    ],
+  });
+
+  assert.throws(() => resolveImportDatasetIdForAgent("admin-a"), /绑定多个知识库/);
+  assert.equal(resolveImportDatasetIdForAgent("admin-a", "薪酬政策库").datasetId, "ds_payroll");
 });
 
 test("knowledge config uses key-level secret upsert and returns key names only", () => {

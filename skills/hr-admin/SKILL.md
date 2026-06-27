@@ -15,30 +15,42 @@ requiredRole: admin
 | 入口 | 适用场景 | 说明 |
 | --- | --- | --- |
 | **Admin Portal**（推荐） | 文档导入 / 列表 / 切片预览 / 删除 / 新建知识库 / 审计 | Web「知识库」页（多库管理），拖拽上传直传 FastGPT，可视化列表与索引状态 |
-| **飞书/钉钉管理 Bot** | 快捷对话式导入 | 通过聊天把服务器文件导入知识库（`knowledge_import`）|
-| **Yoma+HR Web Portal** | 对话式操作 | 与管理 Bot 功能相同，Web 聊天界面 |
+| **飞书/钉钉管理 Bot** | 快捷对话式导入 | 管理员直接把文档附件发给 Bot，并说明目标知识库（多库时必说）；Bot 调 `knowledge_import` 导入 |
+| **Yoma+HR Web Portal** | 对话式操作 | 管理员在 Web 聊天界面直接附加文档，并说明目标知识库（多库时必说） |
 
 ## 核心功能
 
 ### 1. 导入文档（聊天）
 
-管理员提供服务器文件路径，或渠道把附件注入成 `[media attached: /path/to/file]` 时，调用 **`knowledge_import`** 工具：
+管理员可以**直接在对话框发送文档附件**并说明要导入到哪个已绑定知识库。渠道或 Web Portal 会把附件落到服务器临时路径，并在消息中注入 `[media attached: /path/to/file]`；你看到该标记后，必须调用 **`knowledge_import`** 工具导入，不要要求管理员再提供服务器路径。
 
-- 参数：`filePath`（服务器文件绝对路径，必填）、`datasetId`（目标知识库，省略则默认库）
+- 参数：`filePath`（从 `[media attached: /path]` 中提取的服务器绝对路径，必填）、`targetKb`（目标知识库名称 / 平台知识库 ID / FastGPT datasetId，多库时必填）
+- 该工具只允许导入到**当前管理员 Agent 已绑定的知识库**；未绑定的目标库会被工具拒绝
 - 该工具把原始文件直传 FastGPT 原生解析/切片/向量化，并自动记审计 `IMPORT`
 - 导入成功返回 collectionId；FastGPT 后台切片/向量化，稍后在知识库页可见索引状态
+
+#### 目标知识库选择
+
+- 如果当前只绑定 1 个知识库：管理员只发附件并说“导入知识库”即可；调用 `knowledge_import` 时可省略 `targetKb`
+- 如果当前绑定了多个知识库：管理员必须说明目标库，例如“导入到员工制度库”或“传到薪酬政策库”
+- 如果管理员发了附件但没说目标库，且你知道自己绑定了多个库：先追问“请指定要导入到哪个知识库”，不要猜
+- 如果管理员指定目标库：调用 `knowledge_import` 时把用户说的库名原样填入 `targetKb`；工具会解析为实际 datasetId
 
 对话示例：
 
 ```
-管理员: 把 /tmp/overtime-policy.pdf 导入知识库
-Agent:  已导入「overtime-policy.pdf」到知识库（collectionId=...）。
-        FastGPT 正在切片/向量化，稍后可在知识库页查看；全员 Bot 随后可检索到。
+管理员: [附件: overtime-policy.pdf]
+       导入到员工制度库
+Agent:  已导入「overtime-policy.pdf」到知识库「员工制度库」（collectionId=...）。
+        FastGPT 正在切片/向量化，稍后可在知识库页查看。
 ```
+
+备用场景：如果管理员明确提供服务器上的绝对路径（如 `/tmp/overtime-policy.pdf`），也可以按同样流程调用 `knowledge_import`，但这不是主要交互方式。
 
 约定：
 
-- 只要管理员消息出现服务器文件路径，或附件注入 `[media attached: /path]`，优先用 `knowledge_import`
+- 只要管理员消息里有 `[media attached: /path]`，就把它视为用户直接上传的文件，优先调用 `knowledge_import`
+- **不要**回复“请提供服务器路径”——除非消息里既没有附件标记，也没有可读的服务器绝对路径
 - **不要**自行用 `exec` 跑本地脚本转换/切片（自研转换链已退役，ADR-010）；FastGPT 负责解析
 - 支持的文档格式由 FastGPT 决定（常见：pdf / docx / txt / md / pptx / xlsx / csv / html）
 - 多文档批量导入：逐个调用 `knowledge_import`；超过 5 份先列清单、管理员确认后再逐个执行
@@ -69,7 +81,7 @@ ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admi
 
 | 工具 | 权限 | 用途 |
 | --- | --- | --- |
-| `knowledge_import` | 允许（**仅在绑定知识库后**） | 把服务器文件导入知识库（FastGPT 原生解析）|
+| `knowledge_import` | 允许（**仅在绑定知识库后**） | 把对话中上传的文档附件导入指定的已绑定知识库（FastGPT 原生解析）|
 | `knowledge_search` | 允许（**仅在绑定知识库后**） | 检索知识库（验证导入结果 / 协助答疑） |
 | `exec` | 允许 | 一般无需；导入由 `knowledge_import` 服务端读文件，不再跑本地转换脚本 |
 | `gateway` / `sessions_spawn` / `memory_write` / `memory_delete` | 禁止 | 不操作网关、无需 Sub-agent；内置 memory 写已退役（ADR-010/012） |
@@ -83,6 +95,8 @@ ADR-010 下文档存于 FastGPT，**列表 / 切片预览 / 删除统一在 Admi
 ## 回复规范
 
 - 使用中文回复
+- 用户直接上传附件时，优先处理附件导入，不要要求用户提供服务器路径
+- 多库绑定时必须尊重用户指定的目标知识库；未指定时先追问，不要猜测
 - 导入/删除前展示将执行的操作，完成后返回明确成功/失败状态
 - 删除操作走 Admin Portal 并二次确认
 - 知识库平台不可用时如实告知，不要谎称已导入

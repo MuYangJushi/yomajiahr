@@ -530,6 +530,13 @@ export interface KnowledgeBinding {
   boundAgents: string[];
   restricted?: boolean; // ADR-010：受限库（薪酬/绩效等），其文档列表/切片预览仅 admin 可见
 }
+
+export interface AgentKnowledgeBinding {
+  id: string;
+  name: string;
+  externalKbId: string;
+  restricted?: boolean;
+}
 export interface KnowledgeStore {
   platform: "fastgpt" | "local";
   knowledgeBases: KnowledgeBinding[];
@@ -670,6 +677,51 @@ export function validateKnowledgeStore(input: unknown, validAgentIds: string[]):
     };
   });
   return { platform: raw.platform, knowledgeBases };
+}
+
+export function listKnowledgeBasesForAgent(agentId: string): AgentKnowledgeBinding[] {
+  return readKnowledgeStore().knowledgeBases
+    .filter(
+      (kb) =>
+        kb.provider === "fastgpt" &&
+        Boolean(kb.externalKbId) &&
+        Array.isArray(kb.boundAgents) &&
+        kb.boundAgents.includes(agentId),
+    )
+    .map((kb) => ({
+      id: kb.id,
+      name: kb.name,
+      externalKbId: kb.externalKbId!,
+      ...(kb.restricted === true ? { restricted: true } : {}),
+    }));
+}
+
+function normalizeKbSelector(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+export function resolveImportDatasetIdForAgent(agentId: string, requestedTarget?: string): { datasetId: string; binding?: AgentKnowledgeBinding } {
+  const bindings = listKnowledgeBasesForAgent(agentId);
+  const requested = requestedTarget?.trim();
+  if (!requested) {
+    if (bindings.length === 1) return { datasetId: bindings[0].externalKbId, binding: bindings[0] };
+    if (bindings.length > 1) {
+      throw new Error(`该管理员已绑定多个知识库，请指定目标知识库：${bindings.map((kb) => `「${kb.name}」`).join("、")}`);
+    }
+    return { datasetId: resolveImportDatasetId(), binding: undefined };
+  }
+  const normalized = normalizeKbSelector(requested);
+  const matches = bindings.filter(
+    (kb) =>
+      kb.externalKbId === requested ||
+      kb.id === requested ||
+      kb.name === requested ||
+      normalizeKbSelector(kb.id) === normalized ||
+      normalizeKbSelector(kb.name) === normalized,
+  );
+  if (matches.length === 1) return { datasetId: matches[0].externalKbId, binding: matches[0] };
+  if (matches.length > 1) throw new Error(`目标知识库「${requested}」匹配到多个绑定，请说完整名称或知识库 ID`);
+  throw new Error(`目标知识库「${requested}」不是该管理员已绑定的知识库；可选：${bindings.map((kb) => `「${kb.name}」`).join("、") || "无"}`);
 }
 
 /** 解析上传目标库；显式目标必须已经登记，省略时兼容默认单库。 */

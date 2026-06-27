@@ -415,7 +415,14 @@ export interface ChatSessionMeta {
   lastAssistantMessage?: string;
 }
 export interface ChatResult { reply: string; sessionId: string; durationMs: number }
-export async function chatWithAgent(agentId: string, message: string, sessionId?: string): Promise<ChatResult> {
+export async function chatWithAgent(agentId: string, message: string, sessionId?: string, file?: File): Promise<ChatResult> {
+  if (file) {
+    const body = new FormData();
+    body.append("message", message);
+    if (sessionId) body.append("sessionId", sessionId);
+    body.append("file", file);
+    return (await api.post(`/config/agents/${encodeURIComponent(agentId)}/chat`, body)).data;
+  }
   return (await api.post(`/config/agents/${encodeURIComponent(agentId)}/chat`, { message, sessionId })).data;
 }
 export async function listChatSessions(agentId: string): Promise<ChatSessionMeta[]> {

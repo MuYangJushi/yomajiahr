@@ -1,7 +1,7 @@
 // Web 内置对话抽屉（ADR-016 §2）：平台内直接与数字员工对话，零重启验证。
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Button, Drawer, Input, List, message, Select, Space, Tag, Typography } from "antd";
-import { DeleteOutlined, SendOutlined } from "@ant-design/icons";
+import { Alert, Button, Drawer, Input, List, message, Select, Space, Tag, Typography, Upload } from "antd";
+import { DeleteOutlined, PaperClipOutlined, SendOutlined } from "@ant-design/icons";
 import {
   chatWithAgent,
   deleteChatSession,
@@ -26,6 +26,7 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
   const [activeSid, setActiveSid] = useState<string | undefined>(undefined);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [file, setFile] = useState<File | undefined>(undefined);
   const [sending, setSending] = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -44,6 +45,8 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
     if (open && agent) {
       setMessages([]);
       setActiveSid(undefined);
+      setInput("");
+      setFile(undefined);
       void reloadSessions();
     }
   }, [open, agent, reloadSessions]);
@@ -69,13 +72,15 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
   const send = async () => {
     if (!agent) return;
     const text = input.trim();
-    if (!text) return;
+    if (!text && !file) return;
     setSending(true);
-    const next: ChatMessage[] = [...messages, { role: "user", text }];
+    const displayText = [text, file ? `附件：${file.name}` : ""].filter(Boolean).join("\n");
+    const next: ChatMessage[] = [...messages, { role: "user", text: displayText }];
     setMessages(next);
     setInput("");
+    setFile(undefined);
     try {
-      const result = await chatWithAgent(agent.id, text, activeSid);
+      const result = await chatWithAgent(agent.id, text, activeSid, file);
       setActiveSid(result.sessionId);
       setMessages((m) => [...m, { role: "assistant", text: result.reply }]);
       void reloadSessions();
@@ -106,6 +111,8 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
   const startNew = () => {
     setActiveSid(undefined);
     setMessages([]);
+    setInput("");
+    setFile(undefined);
   };
 
   return (
@@ -197,9 +204,32 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
         <div ref={listEndRef} />
       </div>
 
+      {file && (
+        <Alert
+          type="success"
+          showIcon
+          style={{ marginTop: 12, marginBottom: 0 }}
+          message={`待发送附件：${file.name}`}
+          description="发送后会把附件交给该 Agent。若它绑定多个知识库，请在消息里说明目标知识库。"
+          closable
+          onClose={() => setFile(undefined)}
+        />
+      )}
+
       <Space.Compact style={{ width: "100%", marginTop: 12 }}>
+        <Upload
+          beforeUpload={(f) => {
+            setFile(f);
+            return false;
+          }}
+          maxCount={1}
+          showUploadList={false}
+          disabled={sending}
+        >
+          <Button icon={<PaperClipOutlined />} disabled={sending} />
+        </Upload>
         <Input
-          placeholder="输入消息（Shift+Enter 换行）"
+          placeholder="输入消息；可附加文档让 admin agent 导入知识库（Shift+Enter 换行）"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onPressEnter={(e) => {
@@ -211,7 +241,7 @@ export default function AgentChatDrawer({ agent, open, onClose }: Props) {
           disabled={sending}
           maxLength={8000}
         />
-        <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} loading={sending}>
+        <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} loading={sending} disabled={!input.trim() && !file}>
           发送
         </Button>
       </Space.Compact>
