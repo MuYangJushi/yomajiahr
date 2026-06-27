@@ -19,8 +19,9 @@ import {
   KnowledgeUnavailableError,
   importDocument,
   isConfigured,
+  listKnowledgeBasesForAgent,
   resolveDatasetIdsForAgent,
-  resolveImportDatasetId,
+  resolveImportDatasetIdForAgent,
   search,
   type KbChunk,
 } from "./services/knowledge.js";
@@ -87,21 +88,22 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
     },
   );
 
-  // ADR-010 聊天导入：hr-admin agent 经此把管理员提供的服务器文件直传 FastGPT 原生解析导入。
-  // 仅对 admin 角色 agent 开放（openclaw 侧 --include 控制可见性 + 此处服务器侧角色硬闸双保险）。
+  // ADR-010 聊天导入：hr-admin agent 经此把对话附件/服务器文件直传 FastGPT 原生解析导入。
+  // 仅对 admin 角色 agent 开放；目标库只能从该 agent 已绑定的知识库中选择。
   server.registerTool(
     "knowledge_import",
     {
       title: "知识库导入（管理员）",
       description:
-        "把服务器上的文档文件导入绑定的知识库（交 FastGPT 原生解析/切片/向量化）。仅管理员可用。" +
-        "filePath 为服务器可读的文件绝对路径（管理员提供，或渠道附件注入的 [media attached: /path]）。",
+        "把对话中上传的文档附件或服务器文件导入该管理员已绑定的知识库（交 FastGPT 原生解析/切片/向量化）。仅管理员可用。" +
+        "filePath 为服务器可读的文件绝对路径；targetKb 可填用户指定的知识库名称、平台知识库 ID 或 FastGPT datasetId。" +
+        "若该管理员只绑定一个知识库，可省略 targetKb；若绑定多个知识库，必须按用户要求指定目标库。",
       inputSchema: {
-        filePath: z.string().describe("服务器上待导入文档的绝对路径"),
-        datasetId: z.string().optional().describe("目标知识库 datasetId；省略则导入默认库"),
+        filePath: z.string().describe("服务器上待导入文档的绝对路径；对话附件会由平台/渠道落盘后注入为 [media attached: /path]"),
+        targetKb: z.string().optional().describe("目标知识库名称、平台知识库 ID 或 FastGPT datasetId；绑定多个知识库时必填"),
       },
     },
-    async ({ filePath, datasetId }) => {
+    async ({ filePath, targetKb }) => {
       if (!isAdminAgent(agentId)) {
         return { content: [{ type: "text", text: "无权导入：knowledge_import 仅管理员数字员工可用。" }], isError: true };
       }
@@ -112,23 +114,29 @@ function buildServer(datasetIds?: string[], agentId?: string): McpServer {
         return { content: [{ type: "text", text: `文件不存在或不是普通文件：${filePath}` }], isError: true };
       }
       let dsId: string;
+      let kbName: string | undefined;
       try {
-        dsId = resolveImportDatasetId(datasetId);
+        const resolved = resolveImportDatasetIdForAgent(agentId!, targetKb);
+        dsId = resolved.datasetId;
+        kbName = resolved.binding?.name;
       } catch (err) {
-        return { content: [{ type: "text", text: (err as Error).message }], isError: true };
+        const bound = agentId ? listKnowledgeBasesForAgent(agentId) : [];
+        const hint = bound.length > 0 ? `\n当前可选知识库：${bound.map((kb) => `「${kb.name}」`).join("、")}` : "";
+        return { content: [{ type: "text", text: `${(err as Error).message}${hint}` }], isError: true };
       }
       const filename = basename(filePath);
       // 机器行为人：经数字员工在对话里触发导入，operator 记为 agent:<id> 以区别于人类登录。
       const operator = `agent:${agentId ?? "unknown"}`;
       try {
         const { collectionId, deduped } = await importDocument(readFileSync(filePath), filename, dsId);
-        appendAuditLog("IMPORT", filename, operator, { status: deduped ? "deduped" : "success", platform: "fastgpt", collectionId, kbId: dsId, via: "chat" });
+        appendAuditLog("IMPORT", filename, operator, { status: deduped ? "deduped" : "success", platform: "fastgpt", collectionId, kbId: dsId, kbName, via: "chat" });
+        const targetText = kbName ? `到知识库「${kbName}」` : "到知识库";
         const text = deduped
-          ? `知识库里已有同名文档「${filename}」，已复用现有内容，未重复导入。如需更新，请先在知识库页删除旧文档再上传。`
-          : `已导入「${filename}」到知识库（collectionId=${collectionId}）。FastGPT 正在切片/向量化，稍后可在知识库页查看。`;
+          ? `知识库「${kbName ?? dsId}」里已有同名文档「${filename}」，已复用现有内容，未重复导入。如需更新，请先在知识库页删除旧文档再上传。`
+          : `已导入「${filename}」${targetText}（collectionId=${collectionId}）。FastGPT 正在切片/向量化，稍后可在知识库页查看。`;
         return { content: [{ type: "text", text }] };
       } catch (err) {
-        appendAuditLog("IMPORT", filename, operator, { status: "failed", platform: "fastgpt", reason: (err as Error).message, kbId: dsId, via: "chat" });
+        appendAuditLog("IMPORT", filename, operator, { status: "failed", platform: "fastgpt", reason: (err as Error).message, kbId: dsId, kbName, via: "chat" });
         return { content: [{ type: "text", text: `导入失败：${(err as Error).message}` }], isError: true };
       }
     },
