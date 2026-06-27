@@ -7,10 +7,10 @@ Description=Yoma+HR Config Apply (oneshot)
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=/opt/yomajiahr/config
+WorkingDirectory=/opt/yomajiahr/current/config
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=REPO_DIR=/opt/yomajiahr
+Environment=REPO_DIR=/opt/yomajiahr/current
 Environment=STATE_DIR=/home/ubuntu/.openclaw
 Environment=GATEWAY_SVC=openclaw-gateway
 Environment=PROCESS_APPLY_REQUEST=1
-ExecStart=/opt/yomajiahr/config/scripts/apply-config.sh
+ExecStart=/opt/yomajiahr/current/config/scripts/apply-config.sh
