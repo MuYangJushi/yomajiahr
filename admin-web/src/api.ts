@@ -95,6 +95,7 @@ export interface Providers {
   providers: { feishu: boolean; dingtalk: boolean };
   open_enterprise_login: { enabled: boolean; role: "ops" | "audit" | null };
   demo_access_code: { enabled: boolean; role: "ops" | "audit" | null };
+  demo_direct_login?: { enabled: boolean; role: "ops" | "audit" | null };
 }
 
 export async function fetchMe(): Promise<Me> {
@@ -105,6 +106,9 @@ export async function fetchProviders(): Promise<Providers> {
 }
 export async function loginWithDemoAccessCode(code: string): Promise<void> {
   await api.post("/auth/demo/login", { code });
+}
+export async function loginWithDemoDirect(): Promise<void> {
+  await api.post("/auth/demo/direct-login");
 }
 export async function logout(): Promise<void> {
   await api.post("/auth/logout");

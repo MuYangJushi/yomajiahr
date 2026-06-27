@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import test from "node:test";
 
-process.env.SESSION_SECRET = "demo-access-test-session-secret";
+process.env.SESSION_SECRET = "demo-direct-login-test-session-secret";
 process.env.PLATFORM_DEMO_ACCESS_CODE = "demo-access-code-at-least-16";
 process.env.PLATFORM_DEMO_ACCESS_ROLE = "ops";
+process.env.PLATFORM_DEMO_DIRECT_LOGIN = "1";
 
 const { createApp } = await import("../app.js");
 const app = createApp();
@@ -16,24 +17,12 @@ const baseUrl = `http://127.0.0.1:${address.port}/api`;
 
 test.after(() => server.close());
 
-test("访问码登录不暴露密钥，错误码拒绝，正确码签发 demo session", async () => {
+test("裸链接直达登录开启后签发 demo session", async () => {
   const providers = await fetch(`${baseUrl}/auth/providers`).then((r) => r.json());
-  assert.deepEqual(providers.demo_access_code, { enabled: true, role: "ops" });
-  assert.deepEqual(providers.demo_direct_login, { enabled: false, role: null });
+  assert.deepEqual(providers.demo_direct_login, { enabled: true, role: "ops" });
   assert.equal(JSON.stringify(providers).includes(process.env.PLATFORM_DEMO_ACCESS_CODE!), false);
 
-  const denied = await fetch(`${baseUrl}/auth/demo/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code: "wrong-code" }),
-  });
-  assert.equal(denied.status, 401);
-
-  const accepted = await fetch(`${baseUrl}/auth/demo/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code: process.env.PLATFORM_DEMO_ACCESS_CODE }),
-  });
+  const accepted = await fetch(`${baseUrl}/auth/demo/direct-login`, { method: "POST" });
   assert.equal(accepted.status, 200);
   const cookie = accepted.headers.get("set-cookie");
   assert.match(cookie || "", /hr_portal_session=/);
@@ -45,9 +34,4 @@ test("访问码登录不暴露密钥，错误码拒绝，正确码签发 demo se
   assert.equal(body.name, "比赛访客");
   assert.equal(body.platformRole, "ops");
   assert.equal(body.idp, "demo");
-});
-
-test("裸链接直达登录默认关闭", async () => {
-  const denied = await fetch(`${baseUrl}/auth/demo/direct-login`, { method: "POST" });
-  assert.equal(denied.status, 404);
 });
