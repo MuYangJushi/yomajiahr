@@ -7,6 +7,7 @@ import {
   DEMO_ACCESS_CODE,
   DEMO_ACCESS_ENABLED,
   DEMO_ACCESS_ROLE,
+  DEMO_DIRECT_LOGIN_ENABLED,
   OPEN_ENTERPRISE_LOGIN_ROLE,
   DEV_LOCALHOST_ADMIN,
   PUBLIC_BASE_URL,
@@ -28,6 +29,7 @@ import { log } from "../util.js";
 
 export const authRouter = Router();
 const demoLoginLimiter = rateLimit({ windowMs: 60_000, max: 10, message: "访问码尝试过于频繁，请稍后再试" });
+const demoDirectLoginLimiter = rateLimit({ windowMs: 60_000, max: 60, message: "临时入口访问过于频繁，请稍后再试" });
 
 /** 恒定时间校验访问码；长度不同时仍执行一次 timingSafeEqual。 */
 export function verifyDemoAccessCode(candidate: unknown): boolean {
@@ -46,6 +48,17 @@ function baseUrl(req: Request): string {
   return `${proto}://${host}`;
 }
 
+function issueDemoAccessSession(res: Response): string {
+  const visitorId = randomUUID();
+  issueSession(res, {
+    platformUserId: `demo:${visitorId}`,
+    name: "比赛访客",
+    platformRole: DEMO_ACCESS_ROLE as "ops" | "audit",
+    idp: "demo",
+  });
+  return visitorId;
+}
+
 /** 前端用：哪些 IdP 可用 + 是否已启用 session（SESSION_SECRET 配置与否）。 */
 authRouter.get("/auth/providers", (_req: Request, res: Response) => {
   res.json({
@@ -61,6 +74,10 @@ authRouter.get("/auth/providers", (_req: Request, res: Response) => {
     demo_access_code: {
       enabled: DEMO_ACCESS_ENABLED,
       role: DEMO_ACCESS_ENABLED ? DEMO_ACCESS_ROLE : null,
+    },
+    demo_direct_login: {
+      enabled: DEMO_DIRECT_LOGIN_ENABLED,
+      role: DEMO_DIRECT_LOGIN_ENABLED ? DEMO_ACCESS_ROLE : null,
     },
   });
 });
@@ -91,14 +108,16 @@ authRouter.post("/auth/demo/login", demoLoginLimiter, (req: Request, res: Respon
     return res.status(401).json({ error: "访问码错误" });
   }
 
-  const visitorId = randomUUID();
-  issueSession(res, {
-    platformUserId: `demo:${visitorId}`,
-    name: "比赛访客",
-    platformRole: DEMO_ACCESS_ROLE as "ops" | "audit",
-    idp: "demo",
-  });
+  const visitorId = issueDemoAccessSession(res);
   log("INFO", `比赛访问码登录成功：visitor=${visitorId}（${DEMO_ACCESS_ROLE}）`);
+  return res.json({ ok: true });
+});
+
+/** 比赛裸链接直达登录：仅在 PLATFORM_DEMO_DIRECT_LOGIN=1 时开放。 */
+authRouter.post("/auth/demo/direct-login", demoDirectLoginLimiter, (_req: Request, res: Response) => {
+  if (!DEMO_DIRECT_LOGIN_ENABLED) return res.status(404).json({ error: "比赛临时直达登录未启用" });
+  const visitorId = issueDemoAccessSession(res);
+  log("INFO", `比赛临时直达登录成功：visitor=${visitorId}（${DEMO_ACCESS_ROLE}）`);
   return res.json({ ok: true });
 });
 

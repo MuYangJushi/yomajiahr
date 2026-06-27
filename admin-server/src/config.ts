@@ -107,6 +107,8 @@ const DEMO_ACCESS_ROLE_RAW = (env.PLATFORM_DEMO_ACCESS_ROLE || "ops").trim();
 export const DEMO_ACCESS_ROLE: "ops" | "audit" | "" =
   DEMO_ACCESS_ROLE_RAW === "ops" || DEMO_ACCESS_ROLE_RAW === "audit" ? DEMO_ACCESS_ROLE_RAW : "";
 export const DEMO_ACCESS_ENABLED = Boolean(SESSION_SECRET && DEMO_ACCESS_CODE.length >= 16 && DEMO_ACCESS_ROLE);
+/** 比赛裸链接直达登录：必须显式打开，且依赖访问码通道本身有效。 */
+export const DEMO_DIRECT_LOGIN_ENABLED = DEMO_ACCESS_ENABLED && env.PLATFORM_DEMO_DIRECT_LOGIN === "1";
 export const MAX_UPLOAD_FILE_MB = Math.max(1, Number(env.ADMIN_PORTAL_MAX_UPLOAD_MB || 50));
 export const MAX_UPLOAD_FILE_BYTES = MAX_UPLOAD_FILE_MB * 1024 * 1024;
 

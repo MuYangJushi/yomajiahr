@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchProviders, loginWithDemoAccessCode, type Providers } from "./api";
+import { fetchProviders, loginWithDemoAccessCode, loginWithDemoDirect, type Providers } from "./api";
 
 const ERROR_MSG: Record<string, string> = {
   unauthorized: "账号未获授权或不属于本企业，请联系管理员",
@@ -430,6 +430,25 @@ export default function Login() {
       .catch((err: any) => {
         if (cancelled) return;
         setDemoError(err?.response?.data?.error || "访问码登录失败");
+        setDemoSubmitting(false);
+      });
+    return () => { cancelled = true; };
+  }, [providers]);
+
+  // 比赛临时裸链接直达：生产仅在后端显式开启 demo_direct_login 时生效。
+  useEffect(() => {
+    if (!providers?.demo_direct_login?.enabled) return;
+    if (window.location.pathname !== "/") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("code") || params.get("error")) return;
+    let cancelled = false;
+    setDemoSubmitting(true);
+    setDemoError("");
+    loginWithDemoDirect()
+      .then(() => { if (!cancelled) window.location.href = "/"; })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setDemoError(err?.response?.data?.error || "临时入口登录失败");
         setDemoSubmitting(false);
       });
     return () => { cancelled = true; };
