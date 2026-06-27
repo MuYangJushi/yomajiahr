@@ -46,10 +46,19 @@ fail() { echo "[apply-release] ERROR: $*" >&2; exit 1; }
 systemctl_cmd() { sudo env SYSTEMD_BUS_TIMEOUT="$SYSTEMD_BUS_TIMEOUT" systemctl "$@"; }
 
 health_check() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS --max-time 5 http://127.0.0.1:18790/api/health >/dev/null || return 1
-    curl -fsS --max-time 5 http://127.0.0.1:18789/health >/dev/null || return 1
-  fi
+  command -v curl >/dev/null 2>&1 || return 0
+  # systemctl restart 返回 ≠ 服务已监听端口；admin-server 冷启动需 ~1-2s。
+  # 轮询重试给服务 ready 窗口（默认 ~30s），消除「restart 后立即 curl 秒失败 → 误判回滚」竞态。
+  local attempts="${HEALTH_CHECK_ATTEMPTS:-15}" i=1
+  while [ "$i" -le "$attempts" ]; do
+    if curl -fsS --max-time 5 http://127.0.0.1:18790/api/health >/dev/null 2>&1 \
+       && curl -fsS --max-time 5 http://127.0.0.1:18789/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+    i=$((i + 1))
+  done
+  return 1
 }
 
 restart_without_systemd() {
