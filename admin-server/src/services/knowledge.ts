@@ -438,6 +438,49 @@ async function readFgErrorMessage(res: Response): Promise<string> {
   }
 }
 
+/**
+ * 删除 FastGPT 数据集（整库：`dataset/delete?id=`）。与 createKnowledgeBase 的 dataset/create 对称。
+ * ⚠️ 销毁性操作：连同库内所有集合/切片一并删除。
+ *
+ * 幂等语义（与 removeCollection 同口径）：FastGPT 把应用层错误一律包成 HTTP 500 + `{message}`，
+ * 含「数据集已不存在」。删除遇非 2xx 时**回查数据集是否仍存在**：已不在 → 当成功（幂等终态）；
+ * 仍在才抛出，并带上 FastGPT 真实 message。调用方（路由）已先注销平台登记，故此处失败是「平台已注销、
+ * FastGPT 侧残留」的部分成功，由路由翻成提示而非整体失败。
+ */
+export async function removeDataset(datasetId: string): Promise<void> {
+  if (!isConfigured()) throw new KnowledgeUnavailableError("FastGPT 未配置");
+  if (!datasetId) throw new Error("datasetId 不能为空");
+  let res: Response;
+  try {
+    res = await fgFetch(`/api/core/dataset/delete?id=${encodeURIComponent(datasetId)}`, {
+      method: "DELETE",
+    });
+  } catch (err) {
+    throw new KnowledgeUnavailableError(`FastGPT 删库不可达（${(err as Error).name}）`);
+  }
+  if (res.ok) return;
+  const fgMessage = await readFgErrorMessage(res);
+  if (!(await datasetExists(datasetId))) return;
+  throw new KnowledgeUnavailableError(
+    `FastGPT 删库返回 ${res.status}${fgMessage ? `：${fgMessage}` : ""}`,
+  );
+}
+
+/** 数据集是否仍存在于 FastGPT（detail 端点；404/「not exist」类视为不存在；网络等不确定按存在处理）。 */
+async function datasetExists(datasetId: string): Promise<boolean> {
+  try {
+    const res = await fgFetch(`/api/core/dataset/detail?id=${encodeURIComponent(datasetId)}`, {
+      method: "GET",
+    });
+    if (res.ok) return true;
+    const msg = await readFgErrorMessage(res);
+    if (/not exist/i.test(msg)) return false;
+    return true; // 不确定 → 保守按「仍存在」，让删库报真失败。
+  } catch {
+    return true;
+  }
+}
+
 /** 集合是否仍存在于 FastGPT（detail 端点；404/「not exist」类视为不存在；网络等不确定按存在处理）。 */
 async function collectionExists(collectionId: string): Promise<boolean> {
   try {

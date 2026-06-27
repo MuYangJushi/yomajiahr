@@ -61,6 +61,7 @@ export function applyModeForOperation(operation: string | undefined, opts?: { ag
     case "knowledge.unbind":
     case "knowledge.delete":
     case "knowledge.base.create":
+    case "knowledge.base.delete":
       return "restart";
     case "agent.delete":
       // 删除带渠道的 agent 等同解绑渠道 → restart；纯无渠道 agent → runtime-only。

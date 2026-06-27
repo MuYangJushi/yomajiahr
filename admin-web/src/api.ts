@@ -549,6 +549,16 @@ export interface CreateKbResult {
 export async function createKnowledgeBase(input: CreateKbInput): Promise<CreateKbResult> {
   return (await api.post("/knowledge/bases", input)).data;
 }
+export interface DeleteKbResult {
+  success?: boolean;
+  revokedAgentIds?: string[];
+  datasetDeleted?: boolean;
+  note?: string;
+  apply?: { status?: "success" | "failed" | "pending"; message?: string; mode?: string };
+}
+export async function deleteKnowledgeBase(kbId: string): Promise<DeleteKbResult> {
+  return (await api.delete(`/knowledge/bases/${encodeURIComponent(kbId)}`)).data;
+}
 // —— 审计（#44 vanilla→React）——
 export interface AuditEntry {
   timestamp: string;

@@ -13,7 +13,7 @@ process.env.FASTGPT_API_KEY = "test-fastgpt-secret";
 process.env.FASTGPT_KB_ID = "test-kb-id";
 process.env.FASTGPT_EMBEDDING_MODEL = "text-embedding-v4";
 
-const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, resolveImportDatasetIdForAgent, listKnowledgeBasesForAgent, resolveCollectionBoundAgents, writeKnowledgeStore, listCollections, removeCollection, listChunks, isCollectionRestricted } = await import("./knowledge.js");
+const { KnowledgeUnavailableError, health, search, importDocument, updateKnowledgeConfig, resolveDatasetIdsForAgent, resolveImportDatasetIdForAgent, listKnowledgeBasesForAgent, resolveCollectionBoundAgents, writeKnowledgeStore, listCollections, removeCollection, removeDataset, listChunks, isCollectionRestricted } = await import("./knowledge.js");
 const originalFetch = globalThis.fetch;
 
 test.afterEach(() => {
@@ -445,6 +445,48 @@ test("removeCollection still throws (with FastGPT message) when delete 500s but 
     throw new Error(`unexpected fetch: ${url}`);
   };
   await assert.rejects(removeCollection("col_real"), (err: unknown) => {
+    assert.ok(err instanceof KnowledgeUnavailableError);
+    assert.match((err as Error).message, /internal cleanup failed/);
+    return true;
+  });
+});
+
+test("removeDataset issues DELETE to dataset/delete with the id, throws on real failure", async () => {
+  let seen = "";
+  globalThis.fetch = async (input, init) => {
+    seen = `${(init?.method ?? "GET")} ${String(input)}`;
+    return new Response(JSON.stringify({ code: 200, data: null }), { status: 200 });
+  };
+  await removeDataset("ds_abc123");
+  assert.match(seen, /^DELETE .*\/api\/core\/dataset\/delete\?id=ds_abc123$/);
+});
+
+test("removeDataset is idempotent: 500 + dataset already gone resolves without throwing", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/dataset/delete")) {
+      return new Response(JSON.stringify({ code: 500, message: "Dataset is not exist" }), { status: 500 });
+    }
+    if (url.includes("/dataset/detail")) {
+      return new Response(JSON.stringify({ code: 500, message: "Dataset is not exist" }), { status: 500 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  await removeDataset("ds_ghost"); // 不抛即通过
+});
+
+test("removeDataset still throws (with FastGPT message) when delete 500s but dataset still exists", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/dataset/delete")) {
+      return new Response(JSON.stringify({ code: 500, message: "internal cleanup failed" }), { status: 500 });
+    }
+    if (url.includes("/dataset/detail")) {
+      return new Response(JSON.stringify({ code: 200, data: { _id: "ds_real" } }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  await assert.rejects(removeDataset("ds_real"), (err: unknown) => {
     assert.ok(err instanceof KnowledgeUnavailableError);
     assert.match((err as Error).message, /internal cleanup failed/);
     return true;
