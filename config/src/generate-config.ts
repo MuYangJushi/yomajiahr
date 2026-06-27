@@ -264,6 +264,12 @@ export function generateConfig(opts: GenerateOptions): GenerateResult {
       ...(asset.policy?.groupPolicy ? { groupPolicy: asset.policy.groupPolicy } : {}),
       ...(asset.policy?.requireMention !== undefined ? { requireMention: asset.policy.requireMention } : {}),
     };
+    // dmPolicy="open" 但未显式 allowFrom 时，OpenClaw 会丢弃所有 DM（要求显式 allowlist，
+    // 见 config validate 警告）。"open" 的语义即「对所有人开放 DM」，故兜底注入 allowFrom:["*"]；
+    // 用户已在 account 里显式设过 allowFrom 则尊重不覆盖。
+    if (accountObj.dmPolicy === 'open' && accountObj.allowFrom === undefined) {
+      accountObj.allowFrom = ['*'];
+    }
     // health / envKeys / displayName / enabled 都是平台编辑层语义；不进 OpenClaw 运行时。
     void (asset as any).health;
     void (asset as any).envKeys;

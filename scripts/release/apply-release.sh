@@ -222,6 +222,15 @@ rollback() {
     sudo ln -sfn "$prev" "$CURRENT_LINK"
     systemctl_cmd daemon-reload
     systemctl_cmd restart "$GATEWAY_SVC" "$ADMIN_SVC" || true
+    # 回滚也要确认恢复——切回 previous 不等于服务起得来（如环境性 Node SEGV，
+    # 重启同环境同样崩）。失败时明确告警人工介入，不静默 exit 假装回滚成功。
+    if health_check; then
+      echo "[apply-release] rolled back to $prev and healthy" >&2
+    else
+      echo "[apply-release] ERROR: rolled back to $prev but services still unhealthy — MANUAL INTERVENTION REQUIRED (若为已知 Node SEGV 崩溃循环，需重启整机恢复)" >&2
+    fi
+  else
+    echo "[apply-release] ERROR: no previous release to roll back to — MANUAL INTERVENTION REQUIRED" >&2
   fi
   exit 1
 }
