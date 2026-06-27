@@ -73,11 +73,23 @@ else
   APPLY_MODE="${APPLY_MODE:-restart}"
 fi
 
-set_runtime_permissions() {
-  chmod 600 "$RUNTIME"
+set_config_permissions() { # file
+  local target="${1:?target required}"
+  chmod 600 "$target"
   # apply.service 以 root 运行，但 gateway 以 STATE_DIR 所有者运行。
   # 每次原子替换/回滚后必须恢复归属，否则 gateway 无法读取 0600 配置。
-  chown --reference="$STATE_DIR" "$RUNTIME" 2>/dev/null || true
+  chown --reference="$STATE_DIR" "$target" 2>/dev/null || true
+}
+
+set_runtime_permissions() {
+  set_config_permissions "$RUNTIME"
+}
+
+set_staging_permissions() {
+  # runtime-only 模式下 gateway 仍在运行并监听 $RUNTIME。若先 mv 再 chown，
+  # watcher 可能在极短窗口内看到 root:root 0600 的新文件并 EACCES。
+  # 所以 staging 必须先修正为最终权限/属主，再原子替换。
+  set_config_permissions "$STAGING"
 }
 
 stop_gateway() {
@@ -165,6 +177,7 @@ node "$CONFIG_DIR/dist/generate-config.js" \
   --state-dir "$STATE_DIR" \
   --check-fs --skills-dir "$SKILLS_DIR" \
   || fail "生成/校验失败（未改动运行时配置）"
+set_staging_permissions
 
 # 平台校验只覆盖本仓库约束；停止现有 Gateway 前再用 OpenClaw 原生 schema 校验 staging，
 # 避免平台新增字段意外进入运行时配置后导致 Gateway 启动失败。
@@ -211,7 +224,7 @@ fi
 if [ "$APPLY_MODE" = "runtime-only" ]; then
   # runtime-only：不启动、不探活。平台内 Web 对话与下次 CLI run 会读取新配置。
   write_result success "applied (runtime-only)" "$TS"
-  log "OK（runtime-only，version=$TS，未重启 gateway）"
+  log "OK（runtime-only，version=${TS}，未重启 gateway）"
   exit 0
 fi
 
