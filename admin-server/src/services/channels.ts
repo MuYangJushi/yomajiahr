@@ -7,7 +7,7 @@ import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { appendAuditLog } from "../util.js";
-import { triggerApply, type ApplyResult } from "./config-apply.js";
+import { triggerApply, EXTENDED_APPLY_TIMEOUT_MS, type ApplyResult } from "./config-apply.js";
 import { withConfigLock } from "./orchestrator.js";
 import { ENV_PATH, envKeysAllConfigured, envKeysSet, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type ChannelAsset } from "./store.js";
@@ -75,7 +75,7 @@ export function startChannelOnboarding(owner: string, input: {
         ? await onboarding.registerFeishuApplication({ id: input.id, name: input.displayName, role: "employee", skills: [], domain: "feishu" }, callbacks)
         : await onboarding.registerDingTalkApplication(callbacks);
       session.status = "applying";
-      await createChannelAsset({ ...input, clientId: credentials.clientId, secret: credentials.clientSecret });
+      await createChannelAsset({ ...input, clientId: credentials.clientId, secret: credentials.clientSecret }, { timeoutMs: EXTENDED_APPLY_TIMEOUT_MS });
       appendAuditLog("channel.create", input.id, owner, { type: input.type, id: input.id, mode: "qrcode" });
       session.status = "success"; session.message = "渠道账号已创建";
     } catch (err) {
@@ -252,7 +252,7 @@ async function mutateChannels<T>(
         } else {
           rmSync(ENV_PATH, { force: true });
         }
-        await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR });
+        await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: opts.timeoutMs });
       } catch {
         /* 复原失败：保持原错误返回，运维可手工 apply */
       }
@@ -268,7 +268,7 @@ export async function createChannelAsset(input: {
   clientId: string;
   secret: string;
   policy?: ChannelAsset["policy"];
-}): Promise<ChannelAsset> {
+}, opts: { timeoutMs?: number } = {}): Promise<ChannelAsset> {
   const credentials = credentialsFor(input);
   return mutateChannels((store) => {
     if (store.channels.some((c) => c.id === input.id && c.type === input.type)) throw new Error(`渠道账号 ID 已存在：${input.type}/${input.id}`);
@@ -276,7 +276,7 @@ export async function createChannelAsset(input: {
     const asset: ChannelAsset = { id: input.id, type: input.type, displayName: input.displayName, enabled: true, account: credentials.account, envKeys: credentials.envKeys, policy: input.policy };
     store.channels.push(asset);
     return asset;
-  });
+  }, opts);
 }
 
 export async function updateChannelAsset(type: "feishu" | "dingtalk", id: string, input: {
@@ -306,7 +306,7 @@ export async function deleteChannelAsset(type: "feishu" | "dingtalk", id: string
     if (store.bindings.some((b) => b.match.channel === domain && b.match.accountId === id)) throw new Error("CHANNEL_IN_USE");
     store.channels = store.channels.filter((c) => !(c.type === type && c.id === id));
     removeEnv(asset.envKeys || []);
-  }, { timeoutMs: 120_000 });
+  }, { timeoutMs: EXTENDED_APPLY_TIMEOUT_MS });
 }
 
 /** 列出脱敏账号资产、实时占用状态与员工名称。 */
