@@ -14,6 +14,7 @@ import {
 import {
   awaitApplyJob,
   createKnowledgeBase,
+  deleteKnowledgeBase,
   deleteKnowledgeCollection,
   fetchCollectionChunks,
   fetchKnowledgeBases,
@@ -151,6 +152,7 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string>("");
 
   const load = () => {
     setLoading(true);
@@ -163,6 +165,21 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+
+  const handleDelete = async (kb: KnowledgeBinding) => {
+    setDeletingId(kb.id);
+    try {
+      const result = await deleteKnowledgeBase(kb.id);
+      if (result.note) message.warning(result.note);
+      else message.success(`已删除知识库「${kb.name}」`);
+      load();
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      message.error(msg || "删除知识库失败");
+    } finally {
+      setDeletingId("");
+    }
+  };
 
   const columns: ColumnsType<KnowledgeBinding> = [
     {
@@ -194,9 +211,25 @@ function KbList({ onSelect }: { onSelect: (kb: KnowledgeBinding) => void }) {
     },
     {
       title: "操作",
-      width: 100,
+      width: 140,
       render: (_, r) => (
-        <a onClick={() => onSelect(r)}>进入</a>
+        <Space>
+          <a onClick={() => onSelect(r)}>进入</a>
+          <Popconfirm
+            title={`删除知识库「${r.name}」`}
+            description={
+              r.boundAgents.length
+                ? `将注销平台登记，并尝试销毁对应 FastGPT 数据集（含全部文档）。已绑定的数字员工 ${r.boundAgents.join("、")} 将失去对该库的检索能力。此操作不可恢复。`
+                : "将注销平台登记，并尝试销毁对应 FastGPT 数据集（含全部文档）。此操作不可恢复。"
+            }
+            okText="删除"
+            okButtonProps={{ danger: true }}
+            cancelText="取消"
+            onConfirm={() => handleDelete(r)}
+          >
+            <a style={{ color: "#ff4d4f" }}>{deletingId === r.id ? "删除中…" : "删除"}</a>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

@@ -6,7 +6,7 @@ import { appendAuditLog, auditOperator } from "../util.js";
 import { listAgents, rerenderAgentWorkspace } from "../services/orchestrator.js";
 import { applyModeForOperation, triggerApply } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
-import { REPO_DIR, STATE_DIR } from "../config.js";
+import { FASTGPT_KB_ID, REPO_DIR, STATE_DIR } from "../config.js";
 import {
   KnowledgeStore,
   KnowledgeUnavailableError,
@@ -19,6 +19,7 @@ import {
   listKnowledgeBases,
   readKnowledgeStore,
   removeCollection,
+  removeDataset,
   resolveCollectionBoundAgents,
   search,
   updateKnowledgeConfig,
@@ -285,6 +286,113 @@ knowledgeRouter.post("/knowledge/bases", requireRole("admin"), async (req: Reque
       return;
     }
     res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+// DELETE /knowledge/bases/:id —— 删除整库（注销平台登记 + 销毁 FastGPT 数据集）。审计 DELETE_KB。
+//
+// 与 POST /knowledge/bases 对称（同步、admin），但因「删库改绑定」必须借 PUT /knowledge/bindings 的
+// 撤权/回滚机制：删的库若被 agent 绑定，那些**只**绑这一个库的 agent 彻底失去知识访问，须计入
+// revokedKnowledgeAgentIds（生成器撤工具 + 过负向验证 verify-knowledge-revocation.mjs）；同绑其他库的
+// agent 不算撤权（否则「runtime still exposes a knowledge tool」会回滚整次保存 → 502）。复用
+// computeRevokedAgentIds 精确区分二者。
+//
+// 顺序铁律：先写 store + apply，**apply 成功后才删 FastGPT 数据集**——这样 apply 失败回滚 store 时，
+// 登记永远不会指向一个已被销毁的数据集。删数据集是销毁性的最后一步，失败只作部分成功提示（库已注销）。
+knowledgeRouter.delete("/knowledge/bases/:id", requireRole("admin"), async (req: Request, res: Response) => {
+  const operator = auditOperator(req);
+  try {
+    const kbId = String(req.params.id);
+    const prev = readKnowledgeStore();
+    const target = prev.knowledgeBases.find((kb) => kb.id === kbId);
+    if (!target) {
+      res.status(404).json({ error: "知识库未在平台登记" });
+      return;
+    }
+    const next: KnowledgeStore = {
+      ...prev,
+      knowledgeBases: prev.knowledgeBases.filter((kb) => kb.id !== kbId),
+    };
+    const revokedAgentIds = computeRevokedAgentIds(prev, next);
+    const boundAgents = [...new Set(target.boundAgents)];
+
+    writeKnowledgeStore(next);
+    // 解绑后被绑 agent 的 TOOLS.md 须从「已绑定」切回「未绑定」（与 PUT /knowledge/bindings 对称）。
+    for (const agentId of boundAgents) {
+      try { rerenderAgentWorkspace(agentId); } catch { /* 静默：渲染失败由下次 agent 操作纠正 */ }
+    }
+
+    // 无绑定的库（典型：建了测试库从未绑）免 apply，直接落注销。
+    const apply = boundAgents.length > 0
+      ? await triggerApply({
+          stateDir: STATE_DIR,
+          repoDir: REPO_DIR,
+          timeoutMs: 60_000,
+          mode: applyModeForOperation("knowledge.base.delete"),
+          operation: "knowledge.base.delete",
+          // 删整库=内容全部销毁（强于删单文档）→ 凡绑过该库的 agent 会话都可能残留被销毁内容，
+          // 全部归档（与 DELETE /collections 删单文档用 resolveCollectionBoundAgents 的归档口径一致）。
+          resetAgentIds: boundAgents,
+          // 撤工具/负向验证仍只针对**彻底**失去知识访问的子集（同绑他库者不算撤权，否则回滚 502）。
+          revokedKnowledgeAgentIds: revokedAgentIds,
+        })
+      : undefined;
+
+    if (apply?.status === "failed") {
+      // 回滚：复原登记 + workspace + 再 apply 一次（数据集尚未触碰，无需回滚 FastGPT）。
+      writeKnowledgeStore(prev);
+      for (const agentId of boundAgents) {
+        try { rerenderAgentWorkspace(agentId); } catch { /* 静默 */ }
+      }
+      await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, mode: applyModeForOperation("knowledge.base.delete"), operation: "knowledge.base.delete" });
+      appendAuditLog("DELETE_KB_FAILED", kbId, operator, {
+        name: target.name,
+        externalKbId: target.externalKbId,
+        revokedAgentIds,
+        applyStatus: apply.status,
+        applyMessage: apply.message,
+      });
+      res.status(502).json({ error: "应用配置失败，已回滚删除；请重试", apply });
+      return;
+    }
+
+    // apply 成功（或无绑定）后才销毁 FastGPT 数据集。
+    // 跳过默认库（externalKbId === FASTGPT_KB_ID）—— 它是 env 配置的共享回退库（resolveImportDatasetId/search
+    // 兜底），只注销登记不销毁数据；local 库无外部数据集可删。
+    let datasetDeleted: boolean | undefined;
+    let datasetNote: string | undefined;
+    if (target.provider === "fastgpt" && target.externalKbId && target.externalKbId !== FASTGPT_KB_ID) {
+      try {
+        await removeDataset(target.externalKbId);
+        datasetDeleted = true;
+      } catch (err) {
+        // 库已从平台注销（部分成功）；FastGPT 侧残留由提示告知，可在平台视图手动清理，不整体失败。
+        datasetDeleted = false;
+        datasetNote = `平台登记已删除，但 FastGPT 数据集未能删除：${(err as Error).message}`;
+      }
+    }
+
+    appendAuditLog("DELETE_KB", kbId, operator, {
+      name: target.name,
+      externalKbId: target.externalKbId,
+      revokedAgentIds,
+      resetSessions: apply?.resetSessions ?? [],
+      applyStatus: apply?.status,
+      datasetDeleted,
+    });
+    res.status(apply?.status === "pending" ? 202 : 200).json({
+      success: apply?.status !== "pending",
+      revokedAgentIds,
+      datasetDeleted,
+      note: datasetNote,
+      apply,
+    });
+  } catch (err) {
+    if (err instanceof KnowledgeUnavailableError) {
+      res.status(503).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
   }
 });
 
