@@ -92,9 +92,10 @@ export default function Channels() {
         // qrcode 模式返回顶层 OnboardingSession（含 id/qr_url）→ 弹扫码窗轮询；
         // manual 模式（填已有应用凭据）后端同步落库返回 { asset }，不该弹扫码窗，提示已完成即可。
         if (mode === "qrcode") { setOnboarding(res); setAction(null); return; }
+        // manual 模式后端走 enqueueApplyJob：res 带 jobId，trackApplyJob 轮询终态并负责成功/失败提示。
         setAction(null); await reload();
-        await trackApplyJob(res, "创建账号");
-        message.success("账号已创建");
+        const result = await trackApplyJob(res, "创建账号");
+        if (result.ok) await reload();
         return;
       }
       if (action === "edit" && selected) {

@@ -30,6 +30,32 @@ import {
 
 export const knowledgeRouter = Router();
 
+/**
+ * 计算本次绑定变更中**完全失去**知识库访问的 agent（全局口径，与
+ * config/scripts/verify-knowledge-revocation.mjs 的「是否仍绑任意 FastGPT 库」判定对齐）。
+ *
+ * 候选 = 从某个 KB 的 boundAgents 被移除的 agent；真正撤权 = 候选里在 next 中
+ * 不再绑定**任何** FastGPT 库的 agent。仅从多绑库之一解绑、仍绑其他库的 agent **不算撤权**
+ * （它仍合法持有 knowledge_search，生成器也会保留其工具/MCP 注册）——若把它误计入
+ * revoked 传给负向验证，会因「runtime still exposes a knowledge tool」判失败回滚整个保存
+ * （fix/qa-fixes：hr-admin 同绑默认库+人才发展库时解绑其一必中招）。
+ */
+export function computeRevokedAgentIds(prev: KnowledgeStore, next: KnowledgeStore): string[] {
+  const stillBoundInNext = new Set(
+    next.knowledgeBases
+      .filter((kb) => kb.provider === "fastgpt" && Boolean(kb.externalKbId))
+      .flatMap((kb) => kb.boundAgents),
+  );
+  return [
+    ...new Set(
+      prev.knowledgeBases.flatMap((oldKb) => {
+        const nextKb = next.knowledgeBases.find((kb) => kb.id === oldKb.id);
+        return oldKb.boundAgents.filter((agentId) => !nextKb?.boundAgents.includes(agentId));
+      }),
+    ),
+  ].filter((agentId) => !stillBoundInNext.has(agentId));
+}
+
 // GET /knowledge/health —— 平台类型/可达/回退态（#37 核心，不依赖实例）。
 knowledgeRouter.get("/knowledge/health", requireRole("ops"), async (_req: Request, res: Response) => {
   try {
@@ -283,14 +309,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
         const next = validateKnowledgeStore(req.body, listAgents().map((agent) => agent.id));
         prev = readKnowledgeStore();
         ownsRollback = true;
-        const revokedAgentIds = [
-          ...new Set(
-            prev.knowledgeBases.flatMap((oldKb) => {
-              const nextKb = next.knowledgeBases.find((kb) => kb.id === oldKb.id);
-              return oldKb.boundAgents.filter((agentId) => !nextKb?.boundAgents.includes(agentId));
-            }),
-          ),
-        ];
+        const revokedAgentIds = computeRevokedAgentIds(prev, next);
         // 同时收集"新增"绑定的 agent —— 它们的 TOOLS.md 也要从"未绑定"切到"已绑定"。
         const grantedAgentIds = [
           ...new Set(

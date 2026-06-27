@@ -70,12 +70,26 @@ channelsRouter.post("/config/channel-assets", requireRole("ops"), async (req: Re
     if (parsed.data.mode === "qrcode") {
       return res.status(202).json(startChannelOnboarding(req.user!.platformUserId, parsed.data));
     }
-    const asset = await createChannelAsset(parsed.data, { timeoutMs: EXTENDED_APPLY_TIMEOUT_MS });
-    appendAuditLog("channel.create", asset.id, auditOperator(req), {
-      type: asset.type,
-      id: asset.id,
-    });
-    res.status(201).json({ asset: listChannelAssets().find((item) => item.type === asset.type && item.id === asset.id) });
+    const input = parsed.data;
+    const operator = auditOperator(req);
+    // 手工录入已有应用同样要跑 apply（生产含 gateway restart + 探活，常 >30s），不能在 HTTP 请求里同步死等
+    // （否则前端抽屉久挂无反馈、超时还报错）。与 PATCH/DELETE/bind 一致走 enqueueApplyJob + 800ms race：
+    // 快则同步返回 { asset, jobId }，慢则 202 + jobId，前端 trackApplyJob 轮询终态后关弹窗 + 成功提示。
+    const { jobId, promise } = enqueueApplyJob(
+      async () => {
+        const asset = await createChannelAsset(input, { timeoutMs: EXTENDED_APPLY_TIMEOUT_MS });
+        appendAuditLog("channel.create", asset.id, operator, { type: asset.type, id: asset.id });
+        return { asset: listChannelAssets().find((item) => item.type === asset.type && item.id === asset.id) };
+      },
+      "channel.create",
+    );
+    const raced = await Promise.race([
+      promise.then((r) => ({ kind: "done" as const, value: r })).catch((err: Error) => ({ kind: "error" as const, err })),
+      new Promise<{ kind: "pending" }>((resolve) => setTimeout(() => resolve({ kind: "pending" }), 800)),
+    ]);
+    if (raced.kind === "done") return res.status(201).json({ ...raced.value, jobId });
+    if (raced.kind === "error") return res.status(/已存在/.test(raced.err.message) ? 409 : 400).json({ error: raced.err.message, jobId });
+    res.status(202).json({ jobId, status: "running" });
   } catch (err) {
     res.status(/已存在/.test((err as Error).message) ? 409 : 400).json({ error: (err as Error).message });
   }
