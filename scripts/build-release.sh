@@ -120,10 +120,13 @@ cp "$REPO_DIR/config/openclaw-gateway.service" "$STAGING_DIR/systemd/openclaw-ga
 cp "$REPO_DIR/config/openclaw-admin.service" "$STAGING_DIR/systemd/openclaw-admin.service"
 cp "$REPO_DIR/config/openclaw-apply.service" "$STAGING_DIR/systemd/openclaw-apply.service"
 cp "$REPO_DIR/config/openclaw-apply.path" "$STAGING_DIR/systemd/openclaw-apply.path"
+cp "$REPO_DIR/config/yomajiahr-monitor.service" "$STAGING_DIR/systemd/yomajiahr-monitor.service"
+cp "$REPO_DIR/config/yomajiahr-monitor.timer" "$STAGING_DIR/systemd/yomajiahr-monitor.timer"
 
 cp "$REPO_DIR/scripts/release/apply-release.sh" "$STAGING_DIR/bin/apply-release.sh"
 cp "$REPO_DIR/scripts/release/rollback-release.sh" "$STAGING_DIR/bin/rollback-release.sh"
 cp "$REPO_DIR/scripts/release/verify-release.sh" "$STAGING_DIR/bin/verify-release.sh"
+cp "$REPO_DIR/scripts/monitor/yomajiahr-monitor.sh" "$STAGING_DIR/bin/yomajiahr-monitor.sh"
 chmod +x "$STAGING_DIR/bin/"*.sh "$STAGING_DIR/config/scripts/"*.sh
 
 run_step install_prod_deps "$STAGING_DIR/admin-server"

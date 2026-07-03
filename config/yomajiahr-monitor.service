@@ -1,0 +1,15 @@
+[Unit]
+Description=Yoma+HR minimal monitor probe (Sprint 10 #75)
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+# journalctl 读系统 unit 日志所需（SEGV 计数）；零 sudo，纯只读探测
+SupplementaryGroups=systemd-journal
+ExecStart=/opt/yomajiahr/current/bin/yomajiahr-monitor.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
+# 单次探测硬上限，防 hang 占坑
+TimeoutStartSec=90
