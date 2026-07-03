@@ -195,6 +195,8 @@ install_service "$RELEASE_DIR/systemd/openclaw-gateway.service" /etc/systemd/sys
 install_service "$RELEASE_DIR/systemd/openclaw-admin.service" /etc/systemd/system/openclaw-admin.service
 install_service "$RELEASE_DIR/systemd/openclaw-apply.service" /etc/systemd/system/openclaw-apply.service
 install_service "$RELEASE_DIR/systemd/openclaw-apply.path" /etc/systemd/system/openclaw-apply.path
+install_service "$RELEASE_DIR/systemd/yomajiahr-monitor.service" /etc/systemd/system/yomajiahr-monitor.service
+install_service "$RELEASE_DIR/systemd/yomajiahr-monitor.timer" /etc/systemd/system/yomajiahr-monitor.timer
 
 OLD_CURRENT=""
 if [ -L "$CURRENT_LINK" ]; then
@@ -242,5 +244,12 @@ log "Checking services"
 systemctl_cmd is-active --quiet "$GATEWAY_SVC" || rollback "$GATEWAY_SVC is not active"
 systemctl_cmd is-active --quiet "$ADMIN_SVC" || rollback "$ADMIN_SVC is not active"
 health_check || rollback "health check failed"
+
+# 监控 timer 非关键路径：启用失败只警告，不触发回滚
+if systemctl_cmd enable --now yomajiahr-monitor.timer; then
+  log "Monitor timer enabled (yomajiahr-monitor.timer)"
+else
+  log "WARN: failed to enable yomajiahr-monitor.timer; enable manually after deploy"
+fi
 
 log "Release $VERSION is live"
