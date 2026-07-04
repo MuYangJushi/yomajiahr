@@ -5,118 +5,1421 @@
     "owner": "Dennis",
     "purpose": "Phase 1 出口硬指标（准确率 ≥85%）的度量基线；基于生产 FastGPT 两个绑定库（员工通用制度库 + 人才发展制度库）9 份制度文档构造",
     "collections": {
-      "PERF": { "id": "6a400a527365061e593b54bd", "title": "个人绩效管理办法" },
-      "TRAIN": { "id": "6a400a527365061e593b54ba", "title": "外部培训管理办法" },
-      "ONBOARD": { "id": "6a400a527365061e593b5499", "title": "新员工须知" },
-      "ATTEND": { "id": "6a400a527365061e593b5466", "title": "考勤管理办法" },
-      "RELATION": { "id": "6a400a517365061e593b5403", "title": "员工亲属回避管理办法" },
-      "IDP": { "id": "6a400fb47365061e593b5aff", "title": "个人发展计划（IDP）管理指引" },
-      "QUAL": { "id": "6a400aee7365061e593b575c", "title": "任职资格管理制度及实施方案（通用版）" },
-      "QUALSTD": { "id": "6a400aee7365061e593b574d", "title": "各职族任职资格标准及能力要素表（细则一）" },
-      "SALARY": { "id": "6a400aed7365061e593b5730", "title": "职级薪酬宽带及晋升调薪管理办法（细则二）" }
+      "PERF": {
+        "id": "6a48b3b57365061e593bbe18",
+        "title": "个人绩效管理办法.md"
+      },
+      "TRAIN": {
+        "id": "6a48b3b57365061e593bbe8a",
+        "title": "外部培训管理办法.md"
+      },
+      "ONBOARD": {
+        "id": "6a400a527365061e593b5499",
+        "title": "新员工须知"
+      },
+      "ATTEND": {
+        "id": "6a400a527365061e593b5466",
+        "title": "考勤管理办法"
+      },
+      "RELATION": {
+        "id": "6a400a517365061e593b5403",
+        "title": "员工亲属回避管理办法"
+      },
+      "IDP": {
+        "id": "6a400fb47365061e593b5aff",
+        "title": "个人发展计划（IDP）管理指引"
+      },
+      "QUAL": {
+        "id": "6a400aee7365061e593b575c",
+        "title": "任职资格管理制度及实施方案（通用版）"
+      },
+      "QUALSTD": {
+        "id": "6a400aee7365061e593b574d",
+        "title": "各职族任职资格标准及能力要素表（细则一）"
+      },
+      "SALARY": {
+        "id": "6a400aed7365061e593b5730",
+        "title": "职级薪酬宽带及晋升调薪管理办法（细则二）"
+      }
     },
-    "datasets": ["6a400a467365061e593b5363", "6a400a887365061e593b56c6"]
+    "datasets": [
+      "6a400a467365061e593b5363",
+      "6a400a887365061e593b56c6"
+    ],
+    "revisions": [
+      "2026-07-04: PERF/TRAIN 由 PDF 粗切片（各 2 chunks）转 md 分节重导（18/19 chunks），collectionId 随之更新；复评 99/99=100%"
+    ]
   },
   "questions": [
-    { "id": 1, "category": "attendance", "q": "公司每天的标准上下班时间是几点？中午休息多久？", "keywords": ["9:00", "18:00", "12:00-13:00"], "expected": ["ATTEND", "ONBOARD"], "answer": "默认工作时间 9:00-18:00，午休 12:00-13:00；每周 5 天每天 8 小时" },
-    { "id": 2, "category": "attendance", "q": "我今天早上忘记打卡了，应该怎么补救？有时间限制吗？", "keywords": ["补签卡", "5 个自然日", "3 次"], "expected": ["ATTEND", "ONBOARD"], "answer": "异常发生后 5 个自然日内在星澜人事系统提交补签卡申请，每月最多 3 次" },
-    { "id": 3, "category": "attendance", "q": "每个月最多可以补签卡几次？", "keywords": ["3 次", "补签"], "expected": ["ATTEND"], "answer": "每名员工每月最多 3 次补签卡申请" },
-    { "id": 4, "category": "attendance", "q": "迟到几分钟以内不算纪律处理？", "keywords": ["5 分钟", "3 次"], "expected": ["ATTEND"], "answer": "单次迟到 5 分钟以内且当月不超过 3 次，不计入纪律处理但仍纳入考勤记录" },
-    { "id": 5, "category": "attendance", "q": "提前离岗多久会被按旷工处理？", "keywords": ["30 分钟", "旷工"], "expected": ["ATTEND"], "answer": "未经审批提前离岗 30 分钟及以上可按旷工处理，30 分钟以内按早退记录" },
-    { "id": 6, "category": "attendance", "q": "旷工是怎么认定的？最小按多少天计算？", "keywords": ["0.5 天", "未经批准"], "expected": ["ATTEND"], "answer": "未经批准缺勤、请假未批未到岗、假满未返岗未续假、虚假请假信息、擅自离岗等；最小计算单位 0.5 天" },
-    { "id": 7, "category": "attendance", "q": "找同事帮忙代打卡会有什么后果？", "keywords": ["代打卡", "解除劳动合同"], "expected": ["ATTEND"], "answer": "严禁代打卡/伪造定位/篡改记录，查实可书面警告、记过直至解除劳动合同" },
-    { "id": 8, "category": "attendance", "q": "哪些岗位可以申请免打卡？免打卡是不是就不用出勤了？", "keywords": ["长期外勤", "免打卡不等于免除出勤义务"], "expected": ["ATTEND"], "answer": "长期外勤、高度机动销售/客户成功、跨时区协作、经批准的高管等；免打卡不等于免除出勤义务" },
-    { "id": 9, "category": "attendance", "q": "系统是按哪次打卡记录算上班和下班时间的？", "keywords": ["最早", "最晚"], "expected": ["ATTEND"], "answer": "当天最早有效打卡为上班记录，最晚有效打卡为下班记录" },
-    { "id": 10, "category": "attendance", "q": "临时有急事来不及提前请假怎么办？", "keywords": ["报备", "2 个工作日", "补办"], "expected": ["ATTEND"], "answer": "先向直属主管报备，返岗后 2 个工作日内补办请假流程" },
-    { "id": 11, "category": "attendance", "q": "公司都有哪些假别可以请？", "keywords": ["年休假", "婚假", "调休"], "expected": ["ATTEND"], "answer": "年休假、事假、病假、婚假、产假/陪产假/育儿假、丧假、调休及其他法定或公司规定假期" },
-    { "id": 12, "category": "attendance", "q": "请病假需要提供什么材料？", "keywords": ["医疗证明"], "expected": ["ATTEND"], "answer": "按公司要求提交有效医疗证明；虚假证明按严重违纪处理" },
-    { "id": 13, "category": "attendance", "q": "提交虚假的病假证明会怎么处理？", "keywords": ["严重违纪"], "expected": ["ATTEND"], "answer": "虚假病假证明或虚构请假理由可按严重违纪处理" },
-    { "id": 14, "category": "attendance", "q": "加班需要满足什么条件才会被认定？自己加班算吗？", "keywords": ["审批", "工作记录", "不当然认定"], "expected": ["ATTEND"], "answer": "需因公司工作需要、完成审批或事后补批、有实际工作记录、非个人效率原因；未经审批自行延长在岗时间不当然认定为加班" },
-    { "id": 15, "category": "attendance", "q": "加班可以怎么补偿？", "keywords": ["调休", "加班工资"], "expected": ["ATTEND"], "answer": "调休或加班工资，按岗位工时制度、法律规定和公司制度执行；调休应在规定期限内使用" },
-    { "id": 16, "category": "attendance", "q": "出差或外勤需要提前做什么？", "keywords": ["提前", "申请", "报备"], "expected": ["ATTEND"], "answer": "提前提交申请写明时间地点事由和预计返回时间；紧急情况可先口头报备事后补流程" },
-    { "id": 17, "category": "attendance", "q": "考勤结果会用在哪些方面？", "keywords": ["薪酬核算", "绩效", "纪律"], "expected": ["ATTEND"], "answer": "薪酬核算、绩效评价、评优评先、晋升任用、纪律处理和劳动关系管理" },
-    { "id": 18, "category": "attendance", "q": "对考勤记录有异议应该什么时候提出？", "keywords": ["公示", "确认期限"], "expected": ["ATTEND"], "answer": "在 HR 公示或系统确认期限内提出；员工应每月及时核对本人考勤结果" },
-    { "id": 19, "category": "attendance", "q": "入职第一天没有账号打不了卡怎么办？", "keywords": ["HR", "统一处理"], "expected": ["ONBOARD", "ATTEND"], "answer": "入职第一天可由 HR 在系统中统一处理，第二个工作日起自行打卡" },
-    { "id": 20, "category": "attendance", "q": "考勤制度归哪个部门解释和维护？", "keywords": ["人力资源部"], "expected": ["ATTEND"], "answer": "人力资源部负责制定和解释考勤制度、维护考勤规则、审核考勤异常" },
-    { "id": 21, "category": "attendance", "q": "什么情况会被取消任职资格认证资格？跟考勤有关系吗？", "keywords": ["迟到", "3 次", "旷工", "取消"], "expected": ["QUAL"], "answer": "认证周期内累计迟到/早退超过 3 次不满足门槛；有旷工记录直接取消当季/当年认证资格" },
-    { "id": 22, "category": "attendance", "q": "弹性工作制或排班制岗位的考勤按什么执行？", "keywords": ["班次", "审批"], "expected": ["ATTEND", "ONBOARD"], "answer": "以公司审批后的班次规则/部门通知和系统班次为准" },
-    { "id": 23, "category": "attendance", "q": "请假流程在哪个系统提交？", "keywords": ["星澜人事系统", "流程申请"], "expected": ["ATTEND", "ONBOARD"], "answer": "星澜人事系统提交请假申请，路径：流程申请 → 请假，经审批通过后方可休假" },
-    { "id": 24, "category": "attendance", "q": "实习生和外包人员适用考勤管理办法吗？", "keywords": ["合同", "约定", "参照"], "expected": ["ATTEND"], "answer": "合同另有约定从其约定，无特别约定的参照本办法执行" },
-    { "id": 25, "category": "staffing", "q": "新员工试用期一般多长？", "keywords": ["3 至 6 个月", "劳动合同"], "expected": ["ONBOARD"], "answer": "通常 3 至 6 个月，具体以劳动合同或录用通知为准" },
-    { "id": 26, "category": "staffing", "q": "试用期转正评估看哪些方面？", "keywords": ["工作成果", "价值观", "合规"], "expected": ["ONBOARD"], "answer": "工作成果、专业能力、协作表现、价值观匹配和合规意识" },
-    { "id": 27, "category": "staffing", "q": "试用期内要重点完成哪些事情？", "keywords": ["入职培训", "试用期目标"], "expected": ["ONBOARD"], "answer": "完成入职培训和信息安全培训、熟悉岗位职责、与主管确认试用期目标、按要求提交阶段性总结" },
-    { "id": 28, "category": "staffing", "q": "公司的统一办公入口系统叫什么？都有什么功能？", "keywords": ["星澜协同门户", "审批"], "expected": ["ONBOARD"], "answer": "星澜协同门户：审批、通知、通讯录、流程申请、制度查询等" },
-    { "id": 29, "category": "staffing", "q": "系统初始密码是谁发放的？拿到后要做什么？", "keywords": ["IT 服务台", "修改密码", "多因素"], "expected": ["ONBOARD"], "answer": "IT 服务台入职当天发放；首次登录立即修改密码并开启多因素验证" },
-    { "id": 30, "category": "staffing", "q": "个人手机号或银行卡信息变了，多久内要更新？在哪更新？", "keywords": ["5 个工作日", "我的档案"], "expected": ["ONBOARD"], "answer": "5 个工作日内在星澜人事系统 → 我的档案更新" },
-    { "id": 31, "category": "staffing", "q": "在职证明或收入证明怎么开？", "keywords": ["星澜人事系统", "自助服务", "证明"], "expected": ["ONBOARD"], "answer": "星澜人事系统 → 自助服务 → 证明开具提交申请，HR 按用途和模板开具" },
-    { "id": 32, "category": "staffing", "q": "公司制度在哪里查？口头说法和制度文本不一致听谁的？", "keywords": ["制度中心", "正式发布"], "expected": ["ONBOARD"], "answer": "星澜协同门户 → 制度中心 → 人力资源；以正式发布的制度文本为准" },
-    { "id": 33, "category": "staffing", "q": "公司把岗位分成哪几个职族？", "keywords": ["技术职族", "业务职族", "专业职族", "管理职族"], "expected": ["QUAL", "QUALSTD"], "answer": "四大职族：技术（T）、业务（B）、专业（P）、管理（M）" },
-    { "id": 34, "category": "staffing", "q": "HR、财务、法务属于哪个职族序列？", "keywords": ["专业职族", "P"], "expected": ["QUAL", "QUALSTD"], "answer": "专业职族（P 序列）：人力资源、财务、行政、法务合规、总裁办助理等" },
-    { "id": 35, "category": "staffing", "q": "公司的双通道发展是什么意思？可以转通道吗？", "keywords": ["管理", "专业", "双通道", "转换"], "expected": ["QUAL"], "answer": "管理（M）与专业/技术（P/T/B）双通道，满足条件时可横向转换通道" },
-    { "id": 36, "category": "staffing", "q": "任职资格认证一年组织几次？什么时候？", "keywords": ["每半年", "6 月", "12 月"], "expected": ["QUAL"], "answer": "原则上每半年一次，通常每年 6 月和 12 月启动" },
-    { "id": 37, "category": "staffing", "q": "申请晋升认证对现职级停留时间有什么要求？", "keywords": ["1 年", "转正"], "expected": ["QUAL"], "answer": "原则上当前职级实际在岗满 1 年；P1 升 P2 除外（转正即可申请）" },
-    { "id": 38, "category": "staffing", "q": "3 级及以上的任职资格评审是什么形式？", "keywords": ["评审委员会", "答辩"], "expected": ["QUAL"], "answer": "组建专业评审委员会进行现场或线上述职答辩；1~2 级由直属及隔级主管考核" },
-    { "id": 39, "category": "staffing", "q": "任职资格评审结果公示多久？有异议怎么办？", "keywords": ["3 个工作日", "申诉"], "expected": ["QUAL"], "answer": "公示期 3 个工作日，可向人力资源部实名申诉" },
-    { "id": 40, "category": "staffing", "q": "T4 高级工程师需要具备什么水平？", "keywords": ["分布式", "架构", "带徒弟"], "expected": ["QUALSTD"], "answer": "精通分布式架构与性能调优、主导复杂系统架构设计、解决攻坚难题、通过 Code Review 带徒弟、交付大型项目" },
-    { "id": 41, "category": "staffing", "q": "M3 部门经理层级的核心要求是什么？", "keywords": ["预算", "梯队", "部门"], "expected": ["QUALSTD"], "answer": "精通目标管理/跨部门协同/预算控制/人才梯队建设，制定部门规划与预算，全面达成部门年度指标并培养梯队人才" },
-    { "id": 42, "category": "staffing", "q": "访客来公司要走什么流程？", "keywords": ["预约", "登记", "陪同"], "expected": ["ONBOARD"], "answer": "提前预约并完成访客登记，来访期间由接待人负责陪同" },
-    { "id": 43, "category": "compensation", "q": "技术职族 3 级的薪酬范围是多少？", "keywords": ["15k", "25k"], "expected": ["SALARY"], "answer": "T3：15k - 25k（月度固定基本薪酬示例）", "restricted_probe": true },
-    { "id": 44, "category": "compensation", "q": "晋升通过后工资怎么调？绩效好坏有影响吗？", "keywords": ["起点值", "15%", "8%"], "expected": ["SALARY"], "answer": "低于新职级区间调至起点值；已在区间内则按上期绩效上调：S/A 15%-20%，B 8%-12%，C 暂不调进入 3 个月考察期", "restricted_probe": true },
-    { "id": 45, "category": "compensation", "q": "上一周期绩效是 C 的员工通过晋升认证，薪酬会调吗？", "keywords": ["暂不调整", "3 个月", "考察期"], "expected": ["SALARY"], "answer": "通过资格认证但薪酬暂不调整，进入 3 个月考察期", "restricted_probe": true },
-    { "id": 46, "category": "compensation", "q": "职级不变的情况下有没有涨薪机会？", "keywords": ["级内微调", "连续两个季度", "5%"], "expected": ["SALARY"], "answer": "连续两个季度绩效 A 及以上可申请级内微调，幅度不超过该职级薪酬中点宽带值的 5%", "restricted_probe": true },
-    { "id": 47, "category": "compensation", "q": "什么情况下会被降级降薪？", "keywords": ["连续两个季度", "IDP", "降"], "expected": ["SALARY"], "answer": "连续两个季度绩效不及格/待改进且经 IDP 限期辅导仍未改善，或重大合规违纪/泄密/严重违反考勤办法被记过：资格取消或降一级，薪酬同步下调", "restricted_probe": true },
-    { "id": 48, "category": "compensation", "q": "晋升后的调薪从什么时候开始生效？", "keywords": ["次月", "发文"], "expected": ["QUAL", "SALARY"], "answer": "调薪动作通常于发文次月起正式生效", "restricted_probe": true },
-    { "id": 49, "category": "compensation", "q": "管理序列 M2 主管的薪酬宽带是多少？", "keywords": ["12k", "20k"], "expected": ["SALARY"], "answer": "M2：12k - 20k（月度固定基本薪酬示例）", "restricted_probe": true },
-    { "id": 50, "category": "compensation", "q": "亲属能审批我的调薪申请吗？", "keywords": ["回避", "不得", "审批"], "expected": ["SALARY", "RELATION"], "answer": "不得作为直接或间接审批人；系统锁定并触发跨部门联席评审或 HRBP 一票否决" },
-    { "id": 51, "category": "compensation", "q": "在哪里可以查看自己的工资明细？", "keywords": ["自助服务", "我的薪酬"], "expected": ["ONBOARD"], "answer": "星澜人事系统 → 自助服务 → 我的薪酬；薪酬信息属个人敏感信息勿转发" },
-    { "id": 52, "category": "compensation", "q": "薪酬宽带表里的金额包含年终奖和提成吗？", "keywords": ["不含", "浮动"], "expected": ["SALARY"], "answer": "不含；表中金额为月度固定基本薪酬示例，不含销售提成、年终奖等浮动绩效部分", "restricted_probe": true },
-    { "id": 53, "category": "compensation", "q": "业务职族的底薪是不是比技术职族低？为什么？", "keywords": ["底薪", "B", "提成"], "expected": ["SALARY"], "answer": "B 序列宽带表为底薪部分（如 B3 10k-18k 低于 T3 15k-25k），浮动提成另计", "restricted_probe": true },
-    { "id": 54, "category": "compensation", "q": "薪酬调整遵循什么原则？", "keywords": ["能力导向", "动态调整"], "expected": ["SALARY"], "answer": "能力导向、动态调整、激励骨干、合规回避四大原则", "restricted_probe": true },
-    { "id": 55, "category": "training", "q": "公司支持的外部培训分哪几类？", "keywords": ["外派培训", "外购培训", "在职教育"], "expected": ["TRAIN"], "answer": "外派培训、外购培训、在职教育三类" },
-    { "id": 56, "category": "training", "q": "没提前审批就自己去参加了培训，费用能报销吗？", "keywords": ["审批前置", "不予报销"], "expected": ["TRAIN"], "answer": "审批前置原则：未审批先参加的培训原则上不予报销" },
-    { "id": 57, "category": "training", "q": "外训申请要写哪些内容？审批路径是什么？", "keywords": ["培训名称", "直属主管", "财务"], "expected": ["TRAIN"], "answer": "培训名称/机构/时间地点/内容/费用/理由/预期收益/是否涉及证书服务期；路径：员工→直属主管→部门负责人→HR→财务预算确认" },
-    { "id": 58, "category": "training", "q": "哪些培训费用不能报销？", "keywords": ["兴趣课程", "补考费", "未经审批"], "expected": ["TRAIN"], "answer": "与工作无关的兴趣课程、未经审批的课程、个人原因的补考/改签/违约费、超审批范围消费、无合规票据费用" },
-    { "id": 59, "category": "training", "q": "什么情况下参加培训要签服务协议？", "keywords": ["费用较高", "证书", "服务期"], "expected": ["TRAIN"], "answer": "单次费用较高、取得行业证书/专业资质、培训周期长、公司承担学历学位费用等情形" },
-    { "id": 60, "category": "training", "q": "服务期内离职，培训费用怎么处理？", "keywords": ["协议", "返还", "责任"], "expected": ["TRAIN"], "answer": "按培训服务协议约定承担相应责任（费用返还规则以协议为准）" },
-    { "id": 61, "category": "training", "q": "培训结束后多久要提交培训总结？包含什么内容？", "keywords": ["10 个工作日", "总结"], "expected": ["TRAIN"], "answer": "10 个工作日内提交：学习内容概述、对岗位帮助、可落地改进建议、后续行动计划" },
-    { "id": 62, "category": "training", "q": "公司出钱考的证书需要上传到哪里？原件归谁保管？", "keywords": ["星澜人事系统", "本人保管"], "expected": ["TRAIN"], "answer": "在星澜人事系统上传扫描件或电子证明；原件由员工本人保管（法规或业务资质要求公司保管的除外）" },
-    { "id": 63, "category": "training", "q": "培训报销需要准备哪些材料？", "keywords": ["发票", "培训总结", "审批"], "expected": ["TRAIN"], "answer": "审批通过的申请、合规发票、支付凭证、培训通知/课程说明、培训总结、证书或成绩证明（如适用）" },
-    { "id": 64, "category": "training", "q": "IDP 是什么？多久做一次？", "keywords": ["个人发展计划", "半年度"], "expected": ["IDP"], "answer": "个人发展计划（Individual Development Plan），公司原则上采用半年度作为基本执行周期" },
-    { "id": 65, "category": "training", "q": "IDP 的 70-20-10 法则是什么意思？", "keywords": ["70%", "20%", "10%"], "expected": ["IDP"], "answer": "70% 岗位实践做中学、20% 导师指导与伙伴协作、10% 正式培训与系统学习" },
-    { "id": 66, "category": "training", "q": "哪些人必须做 IDP？", "keywords": ["未通过", "差距", "晋升"], "expected": ["IDP"], "answer": "任职资格认证未通过、通过但有显著能力差距、或希望向更高职级晋升挑战的员工强制执行" },
-    { "id": 67, "category": "training", "q": "IDP 一次应该定几项发展能力？", "keywords": ["1-2 项", "不可贪多"], "expected": ["IDP"], "answer": "明确 1-2 项核心待发展能力，不可贪多求全" },
-    { "id": 68, "category": "training", "q": "IDP 提交后主管多久要完成审批？在哪个系统操作？", "keywords": ["5 个工作日", "发展中心"], "expected": ["IDP"], "answer": "星澜人事系统「发展中心-我的 IDP」模块提交，主管 5 个工作日内完成沟通并在线审批" },
-    { "id": 69, "category": "training", "q": "任职资格认证被判降级预警后 IDP 会有什么变化？", "keywords": ["PIP", "双周", "限期"], "expected": ["IDP"], "answer": "IDP 自动转为限期能力改进计划（PIP），主管辅导频率提高至双周一次；连续两个周期未通过验证按任职资格规定启动调薪调岗" },
-    { "id": 70, "category": "training", "q": "一份合格的 IDP 要包含哪几个要素？", "keywords": ["发展目标", "行动项", "衡量标准", "支持资源"], "expected": ["IDP"], "answer": "四要素：发展目标（What）、行动项（How）、衡量标准（Result）、支持资源（Support），遵循 SMART 原则" },
-    { "id": 71, "category": "performance", "q": "公司绩效考核默认多久一次？", "keywords": ["季度"], "expected": ["PERF"], "answer": "默认季度绩效管理周期；部分岗位可月度/半年度/项目制/年度" },
-    { "id": 72, "category": "performance", "q": "绩效等级分几档？各代表什么？", "keywords": ["S", "A", "B", "C", "D"], "expected": ["PERF"], "answer": "S 显著超出目标 / A 超过目标 / B 达成目标 / C 部分未达需改进 / D 明显未达需重点改进" },
-    { "id": 73, "category": "performance", "q": "对绩效结果不服可以申诉吗？期限多久？", "keywords": ["5 个工作日", "申诉"], "expected": ["PERF"], "answer": "绩效结果确认后 5 个工作日内向上级主管或 HR 申诉，HR 组织复核" },
-    { "id": 74, "category": "performance", "q": "绩效被评为 C 或 D 会发生什么？", "keywords": ["改进计划", "HR"], "expected": ["PERF"], "answer": "主管可与 HR 共同制定绩效改进计划（含问题、目标、周期、资源、跟进频率、验收标准）" },
-    { "id": 75, "category": "performance", "q": "一个完整的绩效周期包括哪些环节？", "keywords": ["目标制定", "校准", "反馈"], "expected": ["PERF"], "answer": "目标制定、目标确认、过程跟进、自评与主管评价、绩效校准、绩效反馈、改进或发展计划七个环节" },
-    { "id": 76, "category": "performance", "q": "绩效目标定了之后还能改吗？", "keywords": ["调整", "留痕", "协商"], "expected": ["PERF"], "answer": "业务方向/组织/项目/职责重大变化时可协商调整，应在系统留痕并经审批确认" },
-    { "id": 77, "category": "performance", "q": "主管评价绩效时不能做什么？", "keywords": ["个人好恶", "依法休假"], "expected": ["PERF"], "answer": "不得以个人好恶替代绩效事实，不得因员工依法休假、合理表达意见或履行合规义务作出不利评价" },
-    { "id": 78, "category": "performance", "q": "绩效校准是干什么的？会强制按比例分布吗？", "keywords": ["校准", "一致性", "不应简单追求固定比例"], "expected": ["PERF"], "answer": "提高评价一致性（评价尺度/目标难度/横向可比性/异常评价）；不应简单追求固定比例" },
-    { "id": 79, "category": "performance", "q": "绩效结果会影响哪些事情？", "keywords": ["奖金", "调薪", "晋升"], "expected": ["PERF"], "answer": "奖金激励、调薪参考、晋升任用、培训发展、评优评先、岗位调整、绩效改进或劳动关系管理" },
-    { "id": 80, "category": "performance", "q": "绩效周期内主管应该和员工至少沟通几次？聊什么？", "keywords": ["至少", "一次", "周期中"], "expected": ["PERF"], "answer": "建议至少一次周期中沟通：进度、关键成果和问题、资源障碍、目标是否调整、后续行动计划" },
-    { "id": 81, "category": "performance", "q": "晋升到 3 级对绩效有什么硬性要求？", "keywords": ["2 个季度", "B", "良好"], "expected": ["QUAL"], "answer": "最近 2 个季度/1 个半年度绩效须 B（良好）及以上" },
-    { "id": 82, "category": "performance", "q": "晋升 4 级的绩效门槛是什么？", "keywords": ["4 个季度", "A", "不得有 C"], "expected": ["QUAL"], "answer": "最近 4 个季度/2 个半年度中至少 1 个 A 或 S，且不得有 C 或 D" },
-    { "id": 83, "category": "performance", "q": "任职资格晋升后绩效目标会变吗？", "keywords": ["调高", "期望"], "expected": ["QUAL"], "answer": "下一季度 KPI/OKR 目标值、考核权重及个人绩效系数基础期望值同步调高" },
-    { "id": 84, "category": "performance", "q": "自评应该写些什么？", "keywords": ["目标完成", "复盘", "协作"], "expected": ["PERF"], "answer": "围绕目标完成情况、关键成果、问题复盘、协作贡献和下一步改进展开" },
-    { "id": 85, "category": "general", "q": "哪些亲属关系需要向公司申报？", "keywords": ["配偶", "父母", "兄弟姐妹"], "expected": ["RELATION"], "answer": "配偶、父母子女、兄弟姐妹、（外）祖父母、（外）孙子女、配偶的父母兄弟姐妹、子女配偶及其他密切关系人（含恋爱、共同投资等）" },
-    { "id": 86, "category": "general", "q": "发现亲属也在公司任职，多久内要申报？在哪申报？", "keywords": ["5 个工作日", "合规申报"], "expected": ["RELATION"], "answer": "知悉后 5 个工作日内，路径：星澜人事系统 → 合规申报 → 亲属及利益冲突申报" },
-    { "id": 87, "category": "general", "q": "夫妻俩能在公司形成上下级关系吗？", "keywords": ["不得", "直接上下级"], "expected": ["RELATION"], "answer": "不得形成直接上下级管理关系，不得在同一审批链互相审批" },
-    { "id": 88, "category": "general", "q": "可以推荐自己的亲戚来公司应聘吗？有什么要求？", "keywords": ["推荐", "披露", "退出"], "expected": ["RELATION"], "answer": "可以推荐但必须如实披露关系；参与招聘的员工与候选人有亲属关系应主动退出筛选、面试、定薪和录用决策" },
-    { "id": 89, "category": "general", "q": "隐瞒亲属关系不申报会有什么后果？", "keywords": ["纪律", "解除劳动合同"], "expected": ["RELATION"], "answer": "故意隐瞒/迟延/虚假申报按纪律处理，视情节可提醒谈话、警告、记过、调岗、取消激励直至解除劳动合同" },
-    { "id": 90, "category": "general", "q": "亲属在供应商公司任职需要报告吗？", "keywords": ["供应商", "申报", "利益"], "expected": ["RELATION"], "answer": "本人或亲属在供应商/客户/代理商/咨询机构/外包/竞争方持股任职或有重大利益关系应主动申报" },
-    { "id": 91, "category": "general", "q": "评审委员会里有我亲属，评审怎么处理？", "keywords": ["回避", "评委", "打分"], "expected": ["QUAL", "RELATION"], "answer": "存在夫妻、直系血亲、三代以内旁系血亲或近姻亲关系的评委必须全程回避，不得参与打分与评议" },
-    { "id": 92, "category": "general", "q": "员工申报的亲属信息会被公开吗？", "keywords": ["保密", "范围"], "expected": ["RELATION"], "answer": "HR/合规部门和相关管理者保密，仅在处理利益冲突、岗位安排、合规调查或法律要求范围内使用" },
-    { "id": 93, "category": "general", "q": "公司邮箱可以用来注册外部网站吗？", "keywords": ["不得", "无关", "外部服务"], "expected": ["ONBOARD"], "answer": "不得使用公司邮箱注册与工作无关的外部服务，不得发送敏感数据至个人邮箱" },
-    { "id": 94, "category": "general", "q": "公司资料能存到个人网盘吗？", "keywords": ["不得", "个人云盘", "敏感"], "expected": ["ONBOARD"], "answer": "不得将客户资料、合同、源代码、薪酬信息、个人信息等敏感数据保存到个人云盘或个人设备" },
-    { "id": 95, "category": "general", "q": "办公电脑上可以自己装软件吗？", "keywords": ["软件中心", "审批", "破解"], "expected": ["ONBOARD"], "answer": "应通过公司软件中心或 IT 审批流程；不得安装破解软件、挖矿程序、远控工具等高风险软件" },
-    { "id": 96, "category": "general", "q": "门禁卡丢了怎么办？能借给别人用吗？", "keywords": ["报备", "行政", "不得"], "expected": ["ONBOARD"], "answer": "第一时间报备行政；不得转借门禁卡，不得私自更换工位" },
-    { "id": 97, "category": "general", "q": "会议室怎么预订？用完要注意什么？", "keywords": ["星澜协同门户", "预订"], "expected": ["ONBOARD"], "answer": "通过星澜协同门户预订；结束后关闭设备、清理白板桌面、带走个人物品" },
-    { "id": 98, "category": "general", "q": "虚假报销会有什么后果？", "keywords": ["虚假报销", "纪律"], "expected": ["ONBOARD"], "answer": "虚假报销、重复报销或拆分规避审批按纪律规定处理" },
-    { "id": 99, "category": "general", "q": "制度上的问题应该问谁？", "keywords": ["制度中心", "HR 服务台", "HRBP"], "expected": ["ONBOARD"], "answer": "先在制度中心查询最新制度，仍有疑问咨询 HR 服务台或直属 HRBP" },
-    { "id": 100, "category": "general", "q": "我们公司有报销宠物医疗费的福利吗？", "keywords": [], "expected": [], "answer": "库内制度无此内容——期望 agent 拒答不编造（负例题：判定标准为不虚构具体福利条款）", "negative": true }
+    {
+      "id": 1,
+      "category": "attendance",
+      "q": "公司每天的标准上下班时间是几点？中午休息多久？",
+      "keywords": [
+        "9:00",
+        "18:00",
+        "12:00-13:00"
+      ],
+      "expected": [
+        "ATTEND",
+        "ONBOARD"
+      ],
+      "answer": "默认工作时间 9:00-18:00，午休 12:00-13:00；每周 5 天每天 8 小时"
+    },
+    {
+      "id": 2,
+      "category": "attendance",
+      "q": "我今天早上忘记打卡了，应该怎么补救？有时间限制吗？",
+      "keywords": [
+        "补签卡",
+        "5 个自然日",
+        "3 次"
+      ],
+      "expected": [
+        "ATTEND",
+        "ONBOARD"
+      ],
+      "answer": "异常发生后 5 个自然日内在星澜人事系统提交补签卡申请，每月最多 3 次"
+    },
+    {
+      "id": 3,
+      "category": "attendance",
+      "q": "每个月最多可以补签卡几次？",
+      "keywords": [
+        "3 次",
+        "补签"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "每名员工每月最多 3 次补签卡申请"
+    },
+    {
+      "id": 4,
+      "category": "attendance",
+      "q": "迟到几分钟以内不算纪律处理？",
+      "keywords": [
+        "5 分钟",
+        "3 次"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "单次迟到 5 分钟以内且当月不超过 3 次，不计入纪律处理但仍纳入考勤记录"
+    },
+    {
+      "id": 5,
+      "category": "attendance",
+      "q": "提前离岗多久会被按旷工处理？",
+      "keywords": [
+        "30 分钟",
+        "旷工"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "未经审批提前离岗 30 分钟及以上可按旷工处理，30 分钟以内按早退记录"
+    },
+    {
+      "id": 6,
+      "category": "attendance",
+      "q": "旷工是怎么认定的？最小按多少天计算？",
+      "keywords": [
+        "0.5 天",
+        "未经批准"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "未经批准缺勤、请假未批未到岗、假满未返岗未续假、虚假请假信息、擅自离岗等；最小计算单位 0.5 天"
+    },
+    {
+      "id": 7,
+      "category": "attendance",
+      "q": "找同事帮忙代打卡会有什么后果？",
+      "keywords": [
+        "代打卡",
+        "解除劳动合同"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "严禁代打卡/伪造定位/篡改记录，查实可书面警告、记过直至解除劳动合同"
+    },
+    {
+      "id": 8,
+      "category": "attendance",
+      "q": "哪些岗位可以申请免打卡？免打卡是不是就不用出勤了？",
+      "keywords": [
+        "长期外勤",
+        "免打卡不等于免除出勤义务"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "长期外勤、高度机动销售/客户成功、跨时区协作、经批准的高管等；免打卡不等于免除出勤义务"
+    },
+    {
+      "id": 9,
+      "category": "attendance",
+      "q": "系统是按哪次打卡记录算上班和下班时间的？",
+      "keywords": [
+        "最早",
+        "最晚"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "当天最早有效打卡为上班记录，最晚有效打卡为下班记录"
+    },
+    {
+      "id": 10,
+      "category": "attendance",
+      "q": "临时有急事来不及提前请假怎么办？",
+      "keywords": [
+        "报备",
+        "2 个工作日",
+        "补办"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "先向直属主管报备，返岗后 2 个工作日内补办请假流程"
+    },
+    {
+      "id": 11,
+      "category": "attendance",
+      "q": "公司都有哪些假别可以请？",
+      "keywords": [
+        "年休假",
+        "婚假",
+        "调休"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "年休假、事假、病假、婚假、产假/陪产假/育儿假、丧假、调休及其他法定或公司规定假期"
+    },
+    {
+      "id": 12,
+      "category": "attendance",
+      "q": "请病假需要提供什么材料？",
+      "keywords": [
+        "医疗证明"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "按公司要求提交有效医疗证明；虚假证明按严重违纪处理"
+    },
+    {
+      "id": 13,
+      "category": "attendance",
+      "q": "提交虚假的病假证明会怎么处理？",
+      "keywords": [
+        "严重违纪"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "虚假病假证明或虚构请假理由可按严重违纪处理"
+    },
+    {
+      "id": 14,
+      "category": "attendance",
+      "q": "加班需要满足什么条件才会被认定？自己加班算吗？",
+      "keywords": [
+        "审批",
+        "工作记录",
+        "不当然认定"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "需因公司工作需要、完成审批或事后补批、有实际工作记录、非个人效率原因；未经审批自行延长在岗时间不当然认定为加班"
+    },
+    {
+      "id": 15,
+      "category": "attendance",
+      "q": "加班可以怎么补偿？",
+      "keywords": [
+        "调休",
+        "加班工资"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "调休或加班工资，按岗位工时制度、法律规定和公司制度执行；调休应在规定期限内使用"
+    },
+    {
+      "id": 16,
+      "category": "attendance",
+      "q": "出差或外勤需要提前做什么？",
+      "keywords": [
+        "提前",
+        "申请",
+        "报备"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "提前提交申请写明时间地点事由和预计返回时间；紧急情况可先口头报备事后补流程"
+    },
+    {
+      "id": 17,
+      "category": "attendance",
+      "q": "考勤结果会用在哪些方面？",
+      "keywords": [
+        "薪酬核算",
+        "绩效",
+        "纪律"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "薪酬核算、绩效评价、评优评先、晋升任用、纪律处理和劳动关系管理"
+    },
+    {
+      "id": 18,
+      "category": "attendance",
+      "q": "对考勤记录有异议应该什么时候提出？",
+      "keywords": [
+        "公示",
+        "确认期限"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "在 HR 公示或系统确认期限内提出；员工应每月及时核对本人考勤结果"
+    },
+    {
+      "id": 19,
+      "category": "attendance",
+      "q": "入职第一天没有账号打不了卡怎么办？",
+      "keywords": [
+        "HR",
+        "统一处理"
+      ],
+      "expected": [
+        "ONBOARD",
+        "ATTEND"
+      ],
+      "answer": "入职第一天可由 HR 在系统中统一处理，第二个工作日起自行打卡"
+    },
+    {
+      "id": 20,
+      "category": "attendance",
+      "q": "考勤制度归哪个部门解释和维护？",
+      "keywords": [
+        "人力资源部"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "人力资源部负责制定和解释考勤制度、维护考勤规则、审核考勤异常"
+    },
+    {
+      "id": 21,
+      "category": "attendance",
+      "q": "什么情况会被取消任职资格认证资格？跟考勤有关系吗？",
+      "keywords": [
+        "迟到",
+        "3 次",
+        "旷工",
+        "取消"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "认证周期内累计迟到/早退超过 3 次不满足门槛；有旷工记录直接取消当季/当年认证资格"
+    },
+    {
+      "id": 22,
+      "category": "attendance",
+      "q": "弹性工作制或排班制岗位的考勤按什么执行？",
+      "keywords": [
+        "班次",
+        "审批"
+      ],
+      "expected": [
+        "ATTEND",
+        "ONBOARD"
+      ],
+      "answer": "以公司审批后的班次规则/部门通知和系统班次为准"
+    },
+    {
+      "id": 23,
+      "category": "attendance",
+      "q": "请假流程在哪个系统提交？",
+      "keywords": [
+        "星澜人事系统",
+        "流程申请"
+      ],
+      "expected": [
+        "ATTEND",
+        "ONBOARD"
+      ],
+      "answer": "星澜人事系统提交请假申请，路径：流程申请 → 请假，经审批通过后方可休假"
+    },
+    {
+      "id": 24,
+      "category": "attendance",
+      "q": "实习生和外包人员适用考勤管理办法吗？",
+      "keywords": [
+        "合同",
+        "约定",
+        "参照"
+      ],
+      "expected": [
+        "ATTEND"
+      ],
+      "answer": "合同另有约定从其约定，无特别约定的参照本办法执行"
+    },
+    {
+      "id": 25,
+      "category": "staffing",
+      "q": "新员工试用期一般多长？",
+      "keywords": [
+        "3 至 6 个月",
+        "劳动合同"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "通常 3 至 6 个月，具体以劳动合同或录用通知为准"
+    },
+    {
+      "id": 26,
+      "category": "staffing",
+      "q": "试用期转正评估看哪些方面？",
+      "keywords": [
+        "工作成果",
+        "价值观",
+        "合规"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "工作成果、专业能力、协作表现、价值观匹配和合规意识"
+    },
+    {
+      "id": 27,
+      "category": "staffing",
+      "q": "试用期内要重点完成哪些事情？",
+      "keywords": [
+        "入职培训",
+        "试用期目标"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "完成入职培训和信息安全培训、熟悉岗位职责、与主管确认试用期目标、按要求提交阶段性总结"
+    },
+    {
+      "id": 28,
+      "category": "staffing",
+      "q": "公司的统一办公入口系统叫什么？都有什么功能？",
+      "keywords": [
+        "星澜协同门户",
+        "审批"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "星澜协同门户：审批、通知、通讯录、流程申请、制度查询等"
+    },
+    {
+      "id": 29,
+      "category": "staffing",
+      "q": "系统初始密码是谁发放的？拿到后要做什么？",
+      "keywords": [
+        "IT 服务台",
+        "修改密码",
+        "多因素"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "IT 服务台入职当天发放；首次登录立即修改密码并开启多因素验证"
+    },
+    {
+      "id": 30,
+      "category": "staffing",
+      "q": "个人手机号或银行卡信息变了，多久内要更新？在哪更新？",
+      "keywords": [
+        "5 个工作日",
+        "我的档案"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "5 个工作日内在星澜人事系统 → 我的档案更新"
+    },
+    {
+      "id": 31,
+      "category": "staffing",
+      "q": "在职证明或收入证明怎么开？",
+      "keywords": [
+        "星澜人事系统",
+        "自助服务",
+        "证明"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "星澜人事系统 → 自助服务 → 证明开具提交申请，HR 按用途和模板开具"
+    },
+    {
+      "id": 32,
+      "category": "staffing",
+      "q": "公司制度在哪里查？口头说法和制度文本不一致听谁的？",
+      "keywords": [
+        "制度中心",
+        "正式发布"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "星澜协同门户 → 制度中心 → 人力资源；以正式发布的制度文本为准"
+    },
+    {
+      "id": 33,
+      "category": "staffing",
+      "q": "公司把岗位分成哪几个职族？",
+      "keywords": [
+        "技术职族",
+        "业务职族",
+        "专业职族",
+        "管理职族"
+      ],
+      "expected": [
+        "QUAL",
+        "QUALSTD"
+      ],
+      "answer": "四大职族：技术（T）、业务（B）、专业（P）、管理（M）"
+    },
+    {
+      "id": 34,
+      "category": "staffing",
+      "q": "HR、财务、法务属于哪个职族序列？",
+      "keywords": [
+        "专业职族",
+        "P"
+      ],
+      "expected": [
+        "QUAL",
+        "QUALSTD"
+      ],
+      "answer": "专业职族（P 序列）：人力资源、财务、行政、法务合规、总裁办助理等"
+    },
+    {
+      "id": 35,
+      "category": "staffing",
+      "q": "公司的双通道发展是什么意思？可以转通道吗？",
+      "keywords": [
+        "管理",
+        "专业",
+        "双通道",
+        "转换"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "管理（M）与专业/技术（P/T/B）双通道，满足条件时可横向转换通道"
+    },
+    {
+      "id": 36,
+      "category": "staffing",
+      "q": "任职资格认证一年组织几次？什么时候？",
+      "keywords": [
+        "每半年",
+        "6 月",
+        "12 月"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "原则上每半年一次，通常每年 6 月和 12 月启动"
+    },
+    {
+      "id": 37,
+      "category": "staffing",
+      "q": "申请晋升认证对现职级停留时间有什么要求？",
+      "keywords": [
+        "1 年",
+        "转正"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "原则上当前职级实际在岗满 1 年；P1 升 P2 除外（转正即可申请）"
+    },
+    {
+      "id": 38,
+      "category": "staffing",
+      "q": "3 级及以上的任职资格评审是什么形式？",
+      "keywords": [
+        "评审委员会",
+        "答辩"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "组建专业评审委员会进行现场或线上述职答辩；1~2 级由直属及隔级主管考核"
+    },
+    {
+      "id": 39,
+      "category": "staffing",
+      "q": "任职资格评审结果公示多久？有异议怎么办？",
+      "keywords": [
+        "3 个工作日",
+        "申诉"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "公示期 3 个工作日，可向人力资源部实名申诉"
+    },
+    {
+      "id": 40,
+      "category": "staffing",
+      "q": "T4 高级工程师需要具备什么水平？",
+      "keywords": [
+        "分布式",
+        "架构",
+        "带徒弟"
+      ],
+      "expected": [
+        "QUALSTD"
+      ],
+      "answer": "精通分布式架构与性能调优、主导复杂系统架构设计、解决攻坚难题、通过 Code Review 带徒弟、交付大型项目"
+    },
+    {
+      "id": 41,
+      "category": "staffing",
+      "q": "M3 部门经理层级的核心要求是什么？",
+      "keywords": [
+        "预算",
+        "梯队",
+        "部门"
+      ],
+      "expected": [
+        "QUALSTD"
+      ],
+      "answer": "精通目标管理/跨部门协同/预算控制/人才梯队建设，制定部门规划与预算，全面达成部门年度指标并培养梯队人才"
+    },
+    {
+      "id": 42,
+      "category": "staffing",
+      "q": "访客来公司要走什么流程？",
+      "keywords": [
+        "预约",
+        "登记",
+        "陪同"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "提前预约并完成访客登记，来访期间由接待人负责陪同"
+    },
+    {
+      "id": 43,
+      "category": "compensation",
+      "q": "技术职族 3 级的薪酬范围是多少？",
+      "keywords": [
+        "15k",
+        "25k"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "T3：15k - 25k（月度固定基本薪酬示例）",
+      "restricted_probe": true
+    },
+    {
+      "id": 44,
+      "category": "compensation",
+      "q": "晋升通过后工资怎么调？绩效好坏有影响吗？",
+      "keywords": [
+        "起点值",
+        "15%",
+        "8%"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "低于新职级区间调至起点值；已在区间内则按上期绩效上调：S/A 15%-20%，B 8%-12%，C 暂不调进入 3 个月考察期",
+      "restricted_probe": true
+    },
+    {
+      "id": 45,
+      "category": "compensation",
+      "q": "上一周期绩效是 C 的员工通过晋升认证，薪酬会调吗？",
+      "keywords": [
+        "暂不调整",
+        "3 个月",
+        "考察期"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "通过资格认证但薪酬暂不调整，进入 3 个月考察期",
+      "restricted_probe": true
+    },
+    {
+      "id": 46,
+      "category": "compensation",
+      "q": "职级不变的情况下有没有涨薪机会？",
+      "keywords": [
+        "级内微调",
+        "连续两个季度",
+        "5%"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "连续两个季度绩效 A 及以上可申请级内微调，幅度不超过该职级薪酬中点宽带值的 5%",
+      "restricted_probe": true
+    },
+    {
+      "id": 47,
+      "category": "compensation",
+      "q": "什么情况下会被降级降薪？",
+      "keywords": [
+        "连续两个季度",
+        "IDP",
+        "降"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "连续两个季度绩效不及格/待改进且经 IDP 限期辅导仍未改善，或重大合规违纪/泄密/严重违反考勤办法被记过：资格取消或降一级，薪酬同步下调",
+      "restricted_probe": true
+    },
+    {
+      "id": 48,
+      "category": "compensation",
+      "q": "晋升后的调薪从什么时候开始生效？",
+      "keywords": [
+        "次月",
+        "发文"
+      ],
+      "expected": [
+        "QUAL",
+        "SALARY"
+      ],
+      "answer": "调薪动作通常于发文次月起正式生效",
+      "restricted_probe": true
+    },
+    {
+      "id": 49,
+      "category": "compensation",
+      "q": "管理序列 M2 主管的薪酬宽带是多少？",
+      "keywords": [
+        "12k",
+        "20k"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "M2：12k - 20k（月度固定基本薪酬示例）",
+      "restricted_probe": true
+    },
+    {
+      "id": 50,
+      "category": "compensation",
+      "q": "亲属能审批我的调薪申请吗？",
+      "keywords": [
+        "回避",
+        "不得",
+        "审批"
+      ],
+      "expected": [
+        "SALARY",
+        "RELATION"
+      ],
+      "answer": "不得作为直接或间接审批人；系统锁定并触发跨部门联席评审或 HRBP 一票否决"
+    },
+    {
+      "id": 51,
+      "category": "compensation",
+      "q": "在哪里可以查看自己的工资明细？",
+      "keywords": [
+        "自助服务",
+        "我的薪酬"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "星澜人事系统 → 自助服务 → 我的薪酬；薪酬信息属个人敏感信息勿转发"
+    },
+    {
+      "id": 52,
+      "category": "compensation",
+      "q": "薪酬宽带表里的金额包含年终奖和提成吗？",
+      "keywords": [
+        "不含",
+        "浮动"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "不含；表中金额为月度固定基本薪酬示例，不含销售提成、年终奖等浮动绩效部分",
+      "restricted_probe": true
+    },
+    {
+      "id": 53,
+      "category": "compensation",
+      "q": "业务职族的底薪是不是比技术职族低？为什么？",
+      "keywords": [
+        "底薪",
+        "B",
+        "提成"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "B 序列宽带表为底薪部分（如 B3 10k-18k 低于 T3 15k-25k），浮动提成另计",
+      "restricted_probe": true
+    },
+    {
+      "id": 54,
+      "category": "compensation",
+      "q": "薪酬调整遵循什么原则？",
+      "keywords": [
+        "能力导向",
+        "动态调整"
+      ],
+      "expected": [
+        "SALARY"
+      ],
+      "answer": "能力导向、动态调整、激励骨干、合规回避四大原则",
+      "restricted_probe": true
+    },
+    {
+      "id": 55,
+      "category": "training",
+      "q": "公司支持的外部培训分哪几类？",
+      "keywords": [
+        "外派培训",
+        "外购培训",
+        "在职教育"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "外派培训、外购培训、在职教育三类"
+    },
+    {
+      "id": 56,
+      "category": "training",
+      "q": "没提前审批就自己去参加了培训，费用能报销吗？",
+      "keywords": [
+        "审批前置",
+        "不予报销"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "审批前置原则：未审批先参加的培训原则上不予报销"
+    },
+    {
+      "id": 57,
+      "category": "training",
+      "q": "外训申请要写哪些内容？审批路径是什么？",
+      "keywords": [
+        "培训名称",
+        "直属主管",
+        "财务"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "培训名称/机构/时间地点/内容/费用/理由/预期收益/是否涉及证书服务期；路径：员工→直属主管→部门负责人→HR→财务预算确认"
+    },
+    {
+      "id": 58,
+      "category": "training",
+      "q": "哪些培训费用不能报销？",
+      "keywords": [
+        "兴趣课程",
+        "补考费",
+        "未经审批"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "与工作无关的兴趣课程、未经审批的课程、个人原因的补考/改签/违约费、超审批范围消费、无合规票据费用"
+    },
+    {
+      "id": 59,
+      "category": "training",
+      "q": "什么情况下参加培训要签服务协议？",
+      "keywords": [
+        "费用较高",
+        "证书",
+        "服务期"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "单次费用较高、取得行业证书/专业资质、培训周期长、公司承担学历学位费用等情形"
+    },
+    {
+      "id": 60,
+      "category": "training",
+      "q": "服务期内离职，培训费用怎么处理？",
+      "keywords": [
+        "协议",
+        "返还",
+        "责任"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "按培训服务协议约定承担相应责任（费用返还规则以协议为准）"
+    },
+    {
+      "id": 61,
+      "category": "training",
+      "q": "培训结束后多久要提交培训总结？包含什么内容？",
+      "keywords": [
+        "10 个工作日",
+        "总结"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "10 个工作日内提交：学习内容概述、对岗位帮助、可落地改进建议、后续行动计划"
+    },
+    {
+      "id": 62,
+      "category": "training",
+      "q": "公司出钱考的证书需要上传到哪里？原件归谁保管？",
+      "keywords": [
+        "星澜人事系统",
+        "本人保管"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "在星澜人事系统上传扫描件或电子证明；原件由员工本人保管（法规或业务资质要求公司保管的除外）"
+    },
+    {
+      "id": 63,
+      "category": "training",
+      "q": "培训报销需要准备哪些材料？",
+      "keywords": [
+        "发票",
+        "培训总结",
+        "审批"
+      ],
+      "expected": [
+        "TRAIN"
+      ],
+      "answer": "审批通过的申请、合规发票、支付凭证、培训通知/课程说明、培训总结、证书或成绩证明（如适用）"
+    },
+    {
+      "id": 64,
+      "category": "training",
+      "q": "IDP 是什么？多久做一次？",
+      "keywords": [
+        "个人发展计划",
+        "半年度"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "个人发展计划（Individual Development Plan），公司原则上采用半年度作为基本执行周期"
+    },
+    {
+      "id": 65,
+      "category": "training",
+      "q": "IDP 的 70-20-10 法则是什么意思？",
+      "keywords": [
+        "70%",
+        "20%",
+        "10%"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "70% 岗位实践做中学、20% 导师指导与伙伴协作、10% 正式培训与系统学习"
+    },
+    {
+      "id": 66,
+      "category": "training",
+      "q": "哪些人必须做 IDP？",
+      "keywords": [
+        "未通过",
+        "差距",
+        "晋升"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "任职资格认证未通过、通过但有显著能力差距、或希望向更高职级晋升挑战的员工强制执行"
+    },
+    {
+      "id": 67,
+      "category": "training",
+      "q": "IDP 一次应该定几项发展能力？",
+      "keywords": [
+        "1-2 项",
+        "不可贪多"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "明确 1-2 项核心待发展能力，不可贪多求全"
+    },
+    {
+      "id": 68,
+      "category": "training",
+      "q": "IDP 提交后主管多久要完成审批？在哪个系统操作？",
+      "keywords": [
+        "5 个工作日",
+        "发展中心"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "星澜人事系统「发展中心-我的 IDP」模块提交，主管 5 个工作日内完成沟通并在线审批"
+    },
+    {
+      "id": 69,
+      "category": "training",
+      "q": "任职资格认证被判降级预警后 IDP 会有什么变化？",
+      "keywords": [
+        "PIP",
+        "双周",
+        "限期"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "IDP 自动转为限期能力改进计划（PIP），主管辅导频率提高至双周一次；连续两个周期未通过验证按任职资格规定启动调薪调岗"
+    },
+    {
+      "id": 70,
+      "category": "training",
+      "q": "一份合格的 IDP 要包含哪几个要素？",
+      "keywords": [
+        "发展目标",
+        "行动项",
+        "衡量标准",
+        "支持资源"
+      ],
+      "expected": [
+        "IDP"
+      ],
+      "answer": "四要素：发展目标（What）、行动项（How）、衡量标准（Result）、支持资源（Support），遵循 SMART 原则"
+    },
+    {
+      "id": 71,
+      "category": "performance",
+      "q": "公司绩效考核默认多久一次？",
+      "keywords": [
+        "季度"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "默认季度绩效管理周期；部分岗位可月度/半年度/项目制/年度"
+    },
+    {
+      "id": 72,
+      "category": "performance",
+      "q": "绩效等级分几档？各代表什么？",
+      "keywords": [
+        "S",
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "S 显著超出目标 / A 超过目标 / B 达成目标 / C 部分未达需改进 / D 明显未达需重点改进"
+    },
+    {
+      "id": 73,
+      "category": "performance",
+      "q": "对绩效结果不服可以申诉吗？期限多久？",
+      "keywords": [
+        "5 个工作日",
+        "申诉"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "绩效结果确认后 5 个工作日内向上级主管或 HR 申诉，HR 组织复核"
+    },
+    {
+      "id": 74,
+      "category": "performance",
+      "q": "绩效被评为 C 或 D 会发生什么？",
+      "keywords": [
+        "改进计划",
+        "HR"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "主管可与 HR 共同制定绩效改进计划（含问题、目标、周期、资源、跟进频率、验收标准）"
+    },
+    {
+      "id": 75,
+      "category": "performance",
+      "q": "一个完整的绩效周期包括哪些环节？",
+      "keywords": [
+        "目标制定",
+        "校准",
+        "反馈"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "目标制定、目标确认、过程跟进、自评与主管评价、绩效校准、绩效反馈、改进或发展计划七个环节"
+    },
+    {
+      "id": 76,
+      "category": "performance",
+      "q": "绩效目标定了之后还能改吗？",
+      "keywords": [
+        "调整",
+        "留痕",
+        "协商"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "业务方向/组织/项目/职责重大变化时可协商调整，应在系统留痕并经审批确认"
+    },
+    {
+      "id": 77,
+      "category": "performance",
+      "q": "主管评价绩效时不能做什么？",
+      "keywords": [
+        "个人好恶",
+        "依法休假"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "不得以个人好恶替代绩效事实，不得因员工依法休假、合理表达意见或履行合规义务作出不利评价"
+    },
+    {
+      "id": 78,
+      "category": "performance",
+      "q": "绩效校准是干什么的？会强制按比例分布吗？",
+      "keywords": [
+        "校准",
+        "一致性",
+        "不应简单追求固定比例"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "提高评价一致性（评价尺度/目标难度/横向可比性/异常评价）；不应简单追求固定比例"
+    },
+    {
+      "id": 79,
+      "category": "performance",
+      "q": "绩效结果会影响哪些事情？",
+      "keywords": [
+        "奖金",
+        "调薪",
+        "晋升"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "奖金激励、调薪参考、晋升任用、培训发展、评优评先、岗位调整、绩效改进或劳动关系管理"
+    },
+    {
+      "id": 80,
+      "category": "performance",
+      "q": "绩效周期内主管应该和员工至少沟通几次？聊什么？",
+      "keywords": [
+        "至少",
+        "一次",
+        "周期中"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "建议至少一次周期中沟通：进度、关键成果和问题、资源障碍、目标是否调整、后续行动计划"
+    },
+    {
+      "id": 81,
+      "category": "performance",
+      "q": "晋升到 3 级对绩效有什么硬性要求？",
+      "keywords": [
+        "2 个季度",
+        "B",
+        "良好"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "最近 2 个季度/1 个半年度绩效须 B（良好）及以上"
+    },
+    {
+      "id": 82,
+      "category": "performance",
+      "q": "晋升 4 级的绩效门槛是什么？",
+      "keywords": [
+        "4 个季度",
+        "A",
+        "不得有 C"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "最近 4 个季度/2 个半年度中至少 1 个 A 或 S，且不得有 C 或 D"
+    },
+    {
+      "id": 83,
+      "category": "performance",
+      "q": "任职资格晋升后绩效目标会变吗？",
+      "keywords": [
+        "调高",
+        "期望"
+      ],
+      "expected": [
+        "QUAL"
+      ],
+      "answer": "下一季度 KPI/OKR 目标值、考核权重及个人绩效系数基础期望值同步调高"
+    },
+    {
+      "id": 84,
+      "category": "performance",
+      "q": "自评应该写些什么？",
+      "keywords": [
+        "目标完成",
+        "复盘",
+        "协作"
+      ],
+      "expected": [
+        "PERF"
+      ],
+      "answer": "围绕目标完成情况、关键成果、问题复盘、协作贡献和下一步改进展开"
+    },
+    {
+      "id": 85,
+      "category": "general",
+      "q": "哪些亲属关系需要向公司申报？",
+      "keywords": [
+        "配偶",
+        "父母",
+        "兄弟姐妹"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "配偶、父母子女、兄弟姐妹、（外）祖父母、（外）孙子女、配偶的父母兄弟姐妹、子女配偶及其他密切关系人（含恋爱、共同投资等）"
+    },
+    {
+      "id": 86,
+      "category": "general",
+      "q": "发现亲属也在公司任职，多久内要申报？在哪申报？",
+      "keywords": [
+        "5 个工作日",
+        "合规申报"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "知悉后 5 个工作日内，路径：星澜人事系统 → 合规申报 → 亲属及利益冲突申报"
+    },
+    {
+      "id": 87,
+      "category": "general",
+      "q": "夫妻俩能在公司形成上下级关系吗？",
+      "keywords": [
+        "不得",
+        "直接上下级"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "不得形成直接上下级管理关系，不得在同一审批链互相审批"
+    },
+    {
+      "id": 88,
+      "category": "general",
+      "q": "可以推荐自己的亲戚来公司应聘吗？有什么要求？",
+      "keywords": [
+        "推荐",
+        "披露",
+        "退出"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "可以推荐但必须如实披露关系；参与招聘的员工与候选人有亲属关系应主动退出筛选、面试、定薪和录用决策"
+    },
+    {
+      "id": 89,
+      "category": "general",
+      "q": "隐瞒亲属关系不申报会有什么后果？",
+      "keywords": [
+        "纪律",
+        "解除劳动合同"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "故意隐瞒/迟延/虚假申报按纪律处理，视情节可提醒谈话、警告、记过、调岗、取消激励直至解除劳动合同"
+    },
+    {
+      "id": 90,
+      "category": "general",
+      "q": "亲属在供应商公司任职需要报告吗？",
+      "keywords": [
+        "供应商",
+        "申报",
+        "利益"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "本人或亲属在供应商/客户/代理商/咨询机构/外包/竞争方持股任职或有重大利益关系应主动申报"
+    },
+    {
+      "id": 91,
+      "category": "general",
+      "q": "评审委员会里有我亲属，评审怎么处理？",
+      "keywords": [
+        "回避",
+        "评委",
+        "打分"
+      ],
+      "expected": [
+        "QUAL",
+        "RELATION"
+      ],
+      "answer": "存在夫妻、直系血亲、三代以内旁系血亲或近姻亲关系的评委必须全程回避，不得参与打分与评议"
+    },
+    {
+      "id": 92,
+      "category": "general",
+      "q": "员工申报的亲属信息会被公开吗？",
+      "keywords": [
+        "保密",
+        "范围"
+      ],
+      "expected": [
+        "RELATION"
+      ],
+      "answer": "HR/合规部门和相关管理者保密，仅在处理利益冲突、岗位安排、合规调查或法律要求范围内使用"
+    },
+    {
+      "id": 93,
+      "category": "general",
+      "q": "公司邮箱可以用来注册外部网站吗？",
+      "keywords": [
+        "不得",
+        "无关",
+        "外部服务"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "不得使用公司邮箱注册与工作无关的外部服务，不得发送敏感数据至个人邮箱"
+    },
+    {
+      "id": 94,
+      "category": "general",
+      "q": "公司资料能存到个人网盘吗？",
+      "keywords": [
+        "不得",
+        "个人云盘",
+        "敏感"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "不得将客户资料、合同、源代码、薪酬信息、个人信息等敏感数据保存到个人云盘或个人设备"
+    },
+    {
+      "id": 95,
+      "category": "general",
+      "q": "办公电脑上可以自己装软件吗？",
+      "keywords": [
+        "软件中心",
+        "审批",
+        "破解"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "应通过公司软件中心或 IT 审批流程；不得安装破解软件、挖矿程序、远控工具等高风险软件"
+    },
+    {
+      "id": 96,
+      "category": "general",
+      "q": "门禁卡丢了怎么办？能借给别人用吗？",
+      "keywords": [
+        "报备",
+        "行政",
+        "不得"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "第一时间报备行政；不得转借门禁卡，不得私自更换工位"
+    },
+    {
+      "id": 97,
+      "category": "general",
+      "q": "会议室怎么预订？用完要注意什么？",
+      "keywords": [
+        "星澜协同门户",
+        "预订"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "通过星澜协同门户预订；结束后关闭设备、清理白板桌面、带走个人物品"
+    },
+    {
+      "id": 98,
+      "category": "general",
+      "q": "虚假报销会有什么后果？",
+      "keywords": [
+        "虚假报销",
+        "纪律"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "虚假报销、重复报销或拆分规避审批按纪律规定处理"
+    },
+    {
+      "id": 99,
+      "category": "general",
+      "q": "制度上的问题应该问谁？",
+      "keywords": [
+        "制度中心",
+        "HR 服务台",
+        "HRBP"
+      ],
+      "expected": [
+        "ONBOARD"
+      ],
+      "answer": "先在制度中心查询最新制度，仍有疑问咨询 HR 服务台或直属 HRBP"
+    },
+    {
+      "id": 100,
+      "category": "general",
+      "q": "我们公司有报销宠物医疗费的福利吗？",
+      "keywords": [],
+      "expected": [],
+      "answer": "库内制度无此内容——期望 agent 拒答不编造（负例题：判定标准为不虚构具体福利条款）",
+      "negative": true
+    }
   ]
 }
