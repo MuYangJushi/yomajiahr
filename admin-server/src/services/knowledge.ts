@@ -334,7 +334,25 @@ export async function importDocument(
   const collectionId =
     (typeof json.data === "string" ? json.data : json.data?.collectionId || json.data?.insertId) || "";
   if (!collectionId) throw new KnowledgeUnavailableError("FastGPT 导入未返回 collectionId");
+  await fixCollectionName(collectionId, filename);
   return { externalDocId: collectionId, collectionId, deduped: false };
+}
+
+/**
+ * 导入后把集合名显式改写为规范文件名，根治 FastGPT 侧 multipart filename 按 latin-1
+ * 解码导致的中文标题 mojibake（影响全部上传路径：Web/curl/agent；引用格式
+ * `[来源: filename]` 会直接展示该名）。update 走 JSON body，UTF-8 无损。
+ * best-effort：改名失败不影响导入结果（集合已建成、可检索），只留乱码名。
+ */
+async function fixCollectionName(collectionId: string, filename: string): Promise<void> {
+  try {
+    await fgFetch("/api/core/dataset/collection/update", {
+      method: "POST",
+      body: JSON.stringify({ id: collectionId, name: filename }),
+    });
+  } catch {
+    // 忽略：名字修正是修饰性步骤，不阻断导入
+  }
 }
 
 /**

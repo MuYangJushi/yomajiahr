@@ -149,12 +149,21 @@ test("importDocument converts a FastGPT network failure into an explicit fallbac
 });
 
 test("importDocument forwards the raw file to create/localFile and returns collectionId (ADR-010)", async () => {
-  let calledUrl = "";
+  let createUrl = "";
   let bodyIsFormData = false;
+  let renamePayload: { id?: string; name?: string } | undefined;
   globalThis.fetch = async (input, init) => {
-    calledUrl = String(input);
-    bodyIsFormData = init?.body instanceof FormData;
-    return new Response(JSON.stringify({ code: 200, data: { collectionId: "col_abc123" } }), { status: 200 });
+    const url = String(input);
+    if (url.includes("collection/create/localFile")) {
+      createUrl = url;
+      bodyIsFormData = init?.body instanceof FormData;
+      return new Response(JSON.stringify({ code: 200, data: { collectionId: "col_abc123" } }), { status: 200 });
+    }
+    if (url.includes("collection/update")) {
+      renamePayload = JSON.parse(String(init?.body));
+      return new Response("{}", { status: 200 });
+    }
+    return new Response("{}", { status: 200 });
   };
 
   const result = await importDocument(Buffer.from("年假最小单位 0.5 小时。"), "年假规则.pdf", "test-kb-id");
@@ -162,8 +171,27 @@ test("importDocument forwards the raw file to create/localFile and returns colle
   assert.equal(result.collectionId, "col_abc123");
   assert.equal(result.externalDocId, "col_abc123");
   // 走文件导入端点、multipart（FastGPT 原生解析）；不再注入 doc_id/metadata。
-  assert.equal(calledUrl, "http://10.99.0.1:3000/api/core/dataset/collection/create/localFile");
+  assert.equal(createUrl, "http://10.99.0.1:3000/api/core/dataset/collection/create/localFile");
   assert.equal(bodyIsFormData, true);
+  // 导入后显式改写集合名，根治 FastGPT 侧 multipart filename latin-1 解码 mojibake。
+  assert.deepEqual(renamePayload, { id: "col_abc123", name: "年假规则.pdf" });
+});
+
+test("importDocument 改名调用失败不阻断导入（best-effort）", async () => {
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("collection/create/localFile")) {
+      return new Response(JSON.stringify({ data: { collectionId: "col_ok" } }), { status: 200 });
+    }
+    if (url.includes("collection/update")) {
+      throw new TypeError("fetch failed");
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  const result = await importDocument(Buffer.from("内容"), "文档.md", "test-kb-id");
+  assert.equal(result.collectionId, "col_ok");
+  assert.equal(result.deduped, false);
 });
 
 test("importDocument 同名文件命中已有集合 → 复用不新建（#54 去重）", async () => {
