@@ -1,0 +1,7 @@
+{
+  "id": "citation-enforcer",
+  "name": "Yoma+HR Citation Enforcer",
+  "description": "出站回复缺 [来源:] 行且本轮有检索来源时自动追加（盲测 v1.1 引用率兜底）",
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}
