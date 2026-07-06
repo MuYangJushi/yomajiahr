@@ -1,12 +1,13 @@
 // 平台外壳（自研 AppShell，脱离 ProLayout）+ 鉴权门。对齐 design tokens v0.2 mockup。
 import { useEffect, useState } from "react";
 import { Spin } from "antd";
-import { RobotOutlined, BookOutlined, AuditOutlined, ApiOutlined, ToolOutlined, IdcardOutlined, PartitionOutlined } from "@ant-design/icons";
+import { RobotOutlined, BookOutlined, AuditOutlined, ApiOutlined, ToolOutlined, IdcardOutlined, PartitionOutlined, LineChartOutlined } from "@ant-design/icons";
 import { AppShell, type NavSection } from "./shell";
 import Agents from "./Agents";
 import Templates from "./Templates";
 import Knowledge from "./Knowledge";
 import Audit from "./Audit";
+import Interactions from "./Interactions";
 import Channels from "./Channels";
 import Skills from "./Skills";
 import Login from "./Login";
@@ -20,6 +21,7 @@ const SECTIONS: NavSection[] = [
       { path: "/skills", name: "技能配置", icon: <ToolOutlined /> },
       { path: "/knowledge", name: "知识库", icon: <BookOutlined /> },
       { path: "/channels", name: "渠道管理", icon: <ApiOutlined /> },
+      { path: "/interactions", name: "交互分析", icon: <LineChartOutlined /> },
       { path: "/audit-log", name: "审计", icon: <AuditOutlined /> },
     ],
   },
@@ -31,7 +33,7 @@ const SECTIONS: NavSection[] = [
   },
 ];
 
-const SHELL_PAGES = new Set(["/agents", "/templates", "/skills", "/channels", "/knowledge", "/audit-log"]);
+const SHELL_PAGES = new Set(["/agents", "/templates", "/skills", "/channels", "/knowledge", "/interactions", "/audit-log"]);
 
 function currentShellPath(): string {
   const path = window.location.pathname;
@@ -83,6 +85,7 @@ export default function App() {
       {path === "/skills" && <Skills />}
       {path === "/channels" && <Channels />}
       {path === "/knowledge" && <Knowledge />}
+      {path === "/interactions" && <Interactions />}
       {path === "/audit-log" && <Audit />}
     </AppShell>
   );

@@ -19,6 +19,7 @@ import { channelsRouter } from "./routes/channels.js";
 import { skillsRouter } from "./routes/skills.js";
 import { applyJobsRouter } from "./routes/apply-jobs.js";
 import { agentChatRouter } from "./routes/agent-chat.js";
+import { interactionsRouter } from "./routes/interactions.js";
 import { mountMcp } from "./mcp.js";
 
 export function createApp() {
@@ -55,6 +56,7 @@ export function createApp() {
   app.use("/api", skillsRouter);
   app.use("/api", applyJobsRouter);
   app.use("/api", agentChatRouter);
+  app.use("/api", interactionsRouter);
 
   // 服务信息
   app.get("/api/info", (_req: Request, res: Response) => {
