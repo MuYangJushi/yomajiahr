@@ -8,7 +8,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { respWidth } from "./responsive";
 import {
-  awaitApplyJob, applyModeLabel, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobIdOf, saveAgentSkills, updateSkill,
+  awaitApplyJob, applyModeLabel, createSkill, deleteSkill, fetchAgents, fetchAgentSkills, fetchSkill, fetchSkills, generateSkillBody, jobApplyPending, jobIdOf, saveAgentSkills, updateSkill,
   type AgentRow, type Skill, type SkillAssignment, type SkillMeta, type SkillRole,
 } from "./api";
 
@@ -219,12 +219,15 @@ function SkillAssignment() {
       const data = await saveAgentSkills(agentId, picked);
       const jobId = jobIdOf(data);
       let mode: string | undefined;
+      let pending = false;
       if (jobId) {
         const job = await awaitApplyJob(jobId);
         if (job.status !== "success") { message.error(`保存失败：${job.message || job.status}`); setSaving(false); return; }
         mode = (job.result as any)?.apply?.mode;
+        pending = jobApplyPending(job);
       }
-      message.success(`技能分配已应用（${applyModeLabel(mode)}）`);
+      if (pending) message.info("技能分配已保存，配置应用中（请稍后刷新确认）");
+      else message.success(`技能分配已应用（${applyModeLabel(mode)}）`);
       await load(agentId);
     } catch (err: any) { message.error(err?.response?.data?.error || err.message || "保存失败"); }
     finally { setSaving(false); }

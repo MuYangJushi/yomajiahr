@@ -3,7 +3,7 @@ import { Button, Card, Col, Drawer, Form, Input, Modal, QRCode, Row, Select, Spa
 import type { ColumnsType } from "antd/es/table";
 import {
   awaitApplyJob, bindChannelAsset, cancelChannelAssetOnboarding, createChannelAsset, deleteChannelAsset, fetchAgents, fetchChannelAssets, fetchChannelOnboarding,
-  jobIdOf, probeChannelAsset, probeChannels, unbindChannelAsset, updateChannelAsset,
+  jobApplyPending, jobIdOf, probeChannelAsset, probeChannels, unbindChannelAsset, updateChannelAsset,
   type AgentRow, type ChannelAsset,
 } from "./api";
 
@@ -75,7 +75,9 @@ export default function Channels() {
     message.loading({ content: `${label}进行中…`, key, duration: 0 });
     const job = await awaitApplyJob(jobId, opts);
     if (job.status === "success") {
-      message.success({ content: `${label}已应用`, key });
+      // pending apply：store 已写入但配置应用终态未知，如实提示「应用中」。
+      if (jobApplyPending(job)) message.info({ content: `${label}已保存，配置应用中（请稍后刷新确认）`, key, duration: 6 });
+      else message.success({ content: `${label}已应用`, key });
       return { ok: true };
     }
     message.error({ content: `${label}失败：${job.message || job.status}`, key, duration: 6 });

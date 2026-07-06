@@ -4,7 +4,7 @@ import { Router, type Request, type Response } from "express";
 import { requireRole } from "../auth/rbac.js";
 import { appendAuditLog, auditOperator } from "../util.js";
 import { listAgents, rerenderAgentWorkspace } from "../services/orchestrator.js";
-import { applyModeForOperation, triggerApply } from "../services/config-apply.js";
+import { applyModeForOperation, trackPendingApply, triggerApply } from "../services/config-apply.js";
 import { enqueueApplyJob } from "../services/apply-jobs.js";
 import { FASTGPT_KB_ID, REPO_DIR, STATE_DIR } from "../config.js";
 import {
@@ -470,6 +470,7 @@ knowledgeRouter.put("/knowledge/bindings", requireRole("ops"), async (req: Reque
           throw new Error(`应用失败：${apply.message || apply.status}；已回滚绑定`);
         }
         ownsRollback = false;
+        if (apply.status === "pending") trackPendingApply(STATE_DIR, apply, "knowledge.bind");
         return {
           success: apply.status === "success",
           store: readKnowledgeStore(),

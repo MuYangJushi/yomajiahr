@@ -7,7 +7,7 @@ import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
 import { appendAuditLog } from "../util.js";
-import { triggerApply, EXTENDED_APPLY_TIMEOUT_MS, type ApplyResult } from "./config-apply.js";
+import { triggerApply, ensureApplied, EXTENDED_APPLY_TIMEOUT_MS, type ApplyResult } from "./config-apply.js";
 import { withConfigLock } from "./orchestrator.js";
 import { ENV_PATH, envKeysAllConfigured, envKeysSet, removeEnv, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type ChannelAsset } from "./store.js";
@@ -235,10 +235,10 @@ async function mutateChannels<T>(
       const result = operation(store);
       writeStore(store);
       // 删除渠道账号走 restart 模式（停掉对应 channel client），生产 apply 含 gateway 重启 +
-      // 探活（PROBE_WINDOW 30s + READY_SUSTAIN 11s），常超 triggerApply 默认 30s。超时返回 pending
-      // 会被下方判定为失败并回滚 → 删除被撤销。故允许调用方按操作抬高超时。
+      // 探活（PROBE_WINDOW 30s + READY_SUSTAIN 11s），常超 triggerApply 默认 30s，允许调用方按操作抬高超时。
+      // pending 语义收口：failed 才回滚；pending = 终态未知，store 保留、后台追踪终态。
       const apply = await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: opts.timeoutMs }) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`配置应用失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "配置应用失败", STATE_DIR);
       return result;
     } catch (err) {
       // 原子还原：writeStore 逐文件 tmp+rename；.env 同样 tmp+rename+chmod。

@@ -16,6 +16,7 @@
 // 这是现状权衡：不引入额外存储；前端在 jobId 失踪时退化为"reload 列表看现状"）。
 
 import { randomUUID } from "node:crypto";
+import { hasPendingApply } from "./config-apply.js";
 
 export type ApplyJobStatus = "queued" | "running" | "success" | "failed";
 
@@ -76,7 +77,9 @@ export function enqueueApplyJob<T>(work: () => Promise<T>, label: string): { job
   const promise = work().then(
     (result) => {
       job.status = "success";
-      job.message = "已应用";
+      // pending 语义收口：service 放行了 pending apply（store 已写入、配置应用终态未知），
+      // 如实告知「应用中」而非假装「已应用」；终态由 trackPendingApply 后台落日志。
+      job.message = hasPendingApply(result) ? "已保存，配置应用中（请稍后刷新确认生效）" : "已应用";
       job.result = result;
       job.finishedAt = new Date().toISOString();
       return result;

@@ -22,6 +22,7 @@ import {
   fetchKnowledgeCollections,
   fetchKnowledgeHealth,
   fetchSkills,
+  jobApplyPending,
   saveKnowledgeBindings,
   searchTest,
   uploadKnowledgeDocument,
@@ -376,8 +377,10 @@ function KbBindingTab({ kb }: { kb: KnowledgeBinding }) {
         message.loading({ content: "绑定提交，配置应用中…", key, duration: 0 });
         setSaving(false);
         const job = await awaitApplyJob(result.jobId);
-        if (job.status === "success") message.success({ content: "绑定已保存并应用", key });
-        else message.error({ content: `绑定保存失败：${job.message || job.status}`, key, duration: 6 });
+        if (job.status === "success") {
+          if (jobApplyPending(job)) message.info({ content: "绑定已保存，配置应用中（请稍后刷新确认）", key, duration: 6 });
+          else message.success({ content: "绑定已保存并应用", key });
+        } else message.error({ content: `绑定保存失败：${job.message || job.status}`, key, duration: 6 });
         return;
       }
       message.success("绑定已保存");
