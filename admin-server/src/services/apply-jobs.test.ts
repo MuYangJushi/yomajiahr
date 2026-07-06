@@ -57,3 +57,13 @@ test("并发入队：每个 jobId 独立追踪", async () => {
   assert.equal(getApplyJob(a.jobId)?.result, "A");
   assert.equal(getApplyJob(b.jobId)?.result, "B");
 });
+
+test("pending apply 的任务 message 如实标注「应用中」而非「已应用」", async () => {
+  _resetApplyJobs();
+  const pending = enqueueApplyJob(async () => ({ apply: { status: "pending", requestId: "r1" } }), "test.pending");
+  const applied = enqueueApplyJob(async () => ({ apply: { status: "success" } }), "test.applied");
+  await Promise.all([pending.promise, applied.promise]);
+  assert.equal(getApplyJob(pending.jobId)?.status, "success");
+  assert.match(getApplyJob(pending.jobId)?.message || "", /配置应用中/);
+  assert.equal(getApplyJob(applied.jobId)?.message, "已应用");
+});

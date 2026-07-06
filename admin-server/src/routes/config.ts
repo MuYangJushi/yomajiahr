@@ -17,8 +17,13 @@ configRouter.post("/config/apply", requireRole("admin"), async (_req: Request, r
   }
 });
 
-configRouter.get("/config/apply/result", requireRole("ops"), (_req: Request, res: Response) => {
+configRouter.get("/config/apply/result", requireRole("ops"), (req: Request, res: Response) => {
   const result = readLastResult(STATE_DIR);
   if (!result) return res.status(404).json({ status: "none", message: "尚无 apply 结果" });
+  // ?requestId= 精确查询：结果文件只存最近一次，若已被后续请求覆盖则该请求终态不可考，如实返回 pending。
+  const requestId = typeof req.query.requestId === "string" ? req.query.requestId : undefined;
+  if (requestId && result.requestId !== requestId) {
+    return res.status(202).json({ status: "pending", requestId, message: "指定请求的结果尚未返回（或已被后续 apply 覆盖）" });
+  }
   res.json(result);
 });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Descriptions, Form, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { ProForm, ProFormRadio, ProFormText, ProFormTextArea, StepsForm } from "@ant-design/pro-components";
-import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, fetchDepartments, generateAgentProfile, jobIdOf, type AgentProfile, type AgentTemplate, type Department } from "./api";
+import { applyModeLabel, awaitApplyJob, createAgent, fetchAgentTemplates, fetchDepartments, generateAgentProfile, jobApplyPending, jobIdOf, type AgentProfile, type AgentTemplate, type Department } from "./api";
 import { respWidth } from "./responsive";
 
 // 招募向导（ADR-013 #N）。
@@ -53,7 +53,8 @@ export default function CreateAgentWizard({ open, onClose, onCreated, initialTem
               awaitApplyJob(jobId).then((job) => {
                 if (job.status === "success") {
                   const mode = (job.result as any)?.apply?.mode;
-                  message.success({ content: `数字员工已招募，可在「对话」即时试聊（${applyModeLabel(mode)}）`, key });
+                  if (jobApplyPending(job)) message.info({ content: "数字员工已招募，配置应用中（请稍后刷新确认生效）", key, duration: 6 });
+                  else message.success({ content: `数字员工已招募，可在「对话」即时试聊（${applyModeLabel(mode)}）`, key });
                   onCreated();
                 } else {
                   message.error({ content: `招募失败：${job.message || job.status}`, key, duration: 6 });

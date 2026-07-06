@@ -35,6 +35,8 @@ function hasSystemd(): boolean {
 }
 
 function isDirectMode(): boolean {
+  // "0" 显式强制队列模式（写 request 文件 + 轮询，即生产语义）；无 systemd 环境下供 pending 路径测试。
+  if (process.env.OPENCLAW_APPLY_DIRECT === "0") return false;
   return process.env.OPENCLAW_APPLY_DIRECT === "1" || !hasSystemd();
 }
 
@@ -142,10 +144,75 @@ export async function triggerApply({
     const r = readResult(resultPath);
     if (r?.requestId === id) return { ...r, mode: r.mode || mode };
   }
-  return { status: "pending", message: "apply 已触发，结果未在超时内返回，请稍后查询", mode };
+  // pending = 已触发但终态未知，不是失败；带出 requestId 供调用方/后台继续追踪同一请求的终态。
+  return { status: "pending", message: "apply 已触发，结果未在超时内返回，请稍后查询", mode, requestId: id };
 }
 
 /** 读取最近一次 apply 结果（供状态查询）。 */
 export function readLastResult(stateDir: string): ApplyResult | null {
   return readResult(join(stateDir, "control", "apply-result.json"));
+}
+
+/**
+ * 按 requestId 轮询 apply 终态。只认同一 requestId 的结果，避免并发写操作时误读他人结果。
+ * 局限：apply-result.json 只存最近一次结果，若后续请求覆盖了结果文件则本请求终态不可再得 → 超时返回 null。
+ */
+export async function waitForApplyResult(
+  stateDir: string,
+  requestId: string,
+  timeoutMs: number,
+  intervalMs = 1000,
+): Promise<ApplyResult | null> {
+  const resultPath = join(stateDir, "control", "apply-result.json");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const r = readResult(resultPath);
+    if (r?.requestId === requestId) return r;
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+  return null;
+}
+
+// 已在后台追踪的 pending requestId，去重防止同一请求起多个轮询。
+const trackedPending = new Set<string>();
+
+/** 追踪窗口：pending 后再等 10 分钟。生产 restart apply 含 gateway 重启+探活，正常几分钟内出终态。 */
+export const PENDING_TRACK_TIMEOUT_MS = 600_000;
+
+/**
+ * pending 后台追踪（fire-and-forget）：继续等同一 requestId 的终态并落日志（journald 可查）。
+ * 终态 failed 只记录不自动回滚——store 已写入且用户已收到「应用中」，静默回滚比失败本身更难排查；
+ * 生产服务不健康另有监控（#75）兜底。
+ */
+export function trackPendingApply(stateDir: string, apply: ApplyResult, label: string): void {
+  const requestId = apply.requestId;
+  if (apply.status !== "pending" || !requestId || trackedPending.has(requestId)) return;
+  trackedPending.add(requestId);
+  void waitForApplyResult(stateDir, requestId, PENDING_TRACK_TIMEOUT_MS).then((r) => {
+    trackedPending.delete(requestId);
+    if (!r) {
+      console.warn(`[apply-pending] ${label} requestId=${requestId} 追踪超时（${PENDING_TRACK_TIMEOUT_MS / 60000} 分钟内无终态），请人工核查 apply 结果`);
+    } else if (r.status === "failed") {
+      console.error(`[apply-pending] ${label} requestId=${requestId} 最终失败：${r.message || ""}（store 已写入，需人工重试 apply 或回退变更）`);
+    } else {
+      console.log(`[apply-pending] ${label} requestId=${requestId} 最终成功`);
+    }
+  });
+}
+
+/**
+ * apply 结果判定（pending 语义收口，设计债 apply-pending-design-debt.md 方向 3）：
+ * - failed  = 明确失败 → throw，交由调用方回滚；
+ * - pending = 终态未知 → 不当失败、不触发回滚，后台继续追踪终态；
+ * - success = 通过。
+ */
+export function ensureApplied(apply: ApplyResult, label: string, stateDir?: string): void {
+  if (apply.status === "failed") throw new Error(`${label}：${apply.message || apply.status}`);
+  if (apply.status === "pending" && stateDir) trackPendingApply(stateDir, apply, label);
+}
+
+/** 结果对象里是否携带 pending 的 apply（供 job message 与前端提示判定）。 */
+export function hasPendingApply(result: unknown): boolean {
+  const apply = (result as { apply?: ApplyResult } | null | undefined)?.apply;
+  return Boolean(apply && typeof apply === "object" && apply.status === "pending");
 }

@@ -73,6 +73,12 @@ export async function awaitApplyJob(jobId: string, opts?: { timeoutMs?: number; 
   return { id: jobId, label: "", status: "failed", message: "等待任务完成超时，请刷新查看最新状态", startedAt: new Date().toISOString() };
 }
 
+/** 任务成功但 apply 是 pending（终态未知、store 已写入）：提示须如实说「应用中」而非「已应用」。 */
+export function jobApplyPending(job: ApplyJob): boolean {
+  const apply = (job.result as { apply?: { status?: string } } | null | undefined)?.apply;
+  return apply?.status === "pending";
+}
+
 /** 写操作响应里如果带了 jobId（即后端走了异步路径），返回 jobId 字符串供调用方挂轮询；否则 undefined。 */
 export function jobIdOf(data: unknown): string | undefined {
   if (data && typeof data === "object" && "jobId" in data) {

@@ -10,7 +10,7 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_DIR, STATE_DIR } from "../config.js";
-import { triggerApply, EXTENDED_APPLY_TIMEOUT_MS } from "./config-apply.js";
+import { triggerApply, ensureApplied, trackPendingApply, EXTENDED_APPLY_TIMEOUT_MS, type ApplyResult } from "./config-apply.js";
 import { unbindAgentFromKnowledge, readKnowledgeStore } from "./knowledge.js";
 import { ENV_PATH, runtimeEnv, upsertEnv } from "./secrets.js";
 import { STORE_DIR, readStore, writeStore, type AgentEntry } from "./store.js";
@@ -130,12 +130,8 @@ export interface ChannelCredentials {
   clientSecret: string;
 }
 
-export interface ApplyResult {
-  status: "success" | "failed" | "pending";
-  message?: string;
-  version?: string;
-  mode?: string;
-}
+// pending 语义收口后统一复用 config-apply 的 ApplyResult（含 requestId，供 pending 追踪）。
+export type { ApplyResult } from "./config-apply.js";
 
 export interface UpdateAgentInput {
   name: string;
@@ -503,7 +499,7 @@ export async function createAgentProfile(
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.create" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`上线失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "上线失败", STATE_DIR);
       onApplied?.();
 
       rmSync(snap, { recursive: true, force: true });
@@ -514,8 +510,11 @@ export async function createAgentProfile(
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         rmSync(wsDir, { recursive: true, force: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.create" })) as ApplyResult;
-        if (rollbackApply.status !== "success") {
+        if (rollbackApply.status === "failed") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
         }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -619,7 +618,7 @@ export async function bindAgentToChannel(
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "restart", operation: "agent.channel.bind" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`绑定失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "绑定失败", STATE_DIR);
       onApplied?.();
 
       rmSync(snap, { recursive: true, force: true });
@@ -631,8 +630,11 @@ export async function bindAgentToChannel(
         if (envExisted) cpSync(join(snap, ".env"), ENV_PATH);
         else if (existsSync(ENV_PATH)) rmSync(ENV_PATH, { force: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "restart", operation: "agent.channel.bind" })) as ApplyResult;
-        if (rollbackApply.status !== "success") {
+        if (rollbackApply.status === "failed") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
         }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -672,7 +674,7 @@ export async function unbindAgentFromChannel(
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "restart", operation: "agent.channel.unbind" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`解绑失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "解绑失败", STATE_DIR);
       onApplied?.();
 
       rmSync(snap, { recursive: true, force: true });
@@ -682,8 +684,11 @@ export async function unbindAgentFromChannel(
       try {
         cpSync(join(snap, "config-store"), STORE_DIR, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "restart", operation: "agent.channel.unbind" })) as ApplyResult;
-        if (rollbackApply.status !== "success") {
+        if (rollbackApply.status === "failed") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
         }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -788,7 +793,7 @@ export async function createAgent(
 
       // 4. apply（权威校验 + 重启 + 探活 + runtime 回滚）
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`上线失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "上线失败", STATE_DIR);
       onApplied?.();
       for (const ch of input.channels) await verifyChannel(ch.domain, ch.accountId);
 
@@ -803,8 +808,11 @@ export async function createAgent(
         else if (existsSync(ENV_PATH)) rmSync(ENV_PATH, { force: true });
         rmSync(wsDir, { recursive: true, force: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS })) as ApplyResult;
-        if (rollbackApply.status !== "success") {
+        if (rollbackApply.status === "failed") {
           rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
         }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
@@ -946,7 +954,7 @@ export async function updateAgentProfile(
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.update.profile" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "更新失败", STATE_DIR);
 
       rmSync(snap, { recursive: true, force: true });
       return { agent: next, apply };
@@ -957,7 +965,12 @@ export async function updateAgentProfile(
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.update.profile" })) as ApplyResult;
-        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        if (rollbackApply.status === "failed") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
+        }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
       } finally {
@@ -1062,7 +1075,7 @@ export async function updateAgentSkills(id: string, nextSkills: string[]): Promi
       rerenderAgentWorkspace(id);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.skill.update" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`技能更新失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "技能更新失败", STATE_DIR);
 
       rmSync(snap, { recursive: true, force: true });
       return { before, after: dedup, unmet: computeSkillUnmet(id, dedup), warnings: computeSkillWarnings(id, dedup), apply };
@@ -1073,7 +1086,12 @@ export async function updateAgentSkills(id: string, nextSkills: string[]): Promi
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: "runtime-only", operation: "agent.skill.update" })) as ApplyResult;
-        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        if (rollbackApply.status === "failed") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
+        }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
       } finally {
@@ -1187,7 +1205,7 @@ export async function updateAgent(
       writeStore(store);
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`更新失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "更新失败", STATE_DIR);
       if (addedChannel) await verifyChannel(addedChannel.domain, addedChannel.accountId);
       rmSync(snap, { recursive: true, force: true });
       return { agent: next, apply };
@@ -1200,7 +1218,12 @@ export async function updateAgent(
         rmSync(wsDir, { recursive: true, force: true });
         cpSync(join(snap, "workspace"), wsDir, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS })) as ApplyResult;
-        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        if (rollbackApply.status === "failed") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
+        }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
       } finally {
@@ -1237,7 +1260,7 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
       rmSync(wsDir, { recursive: true, force: true });
 
       const apply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: deleteMode, operation: "agent.delete" })) as ApplyResult;
-      if (apply.status !== "success") throw new Error(`删除失败：${apply.message || apply.status}`);
+      ensureApplied(apply, "删除失败", STATE_DIR);
       rmSync(join(STATE_DIR, "agents", id), { recursive: true, force: true });
       rmSync(snap, { recursive: true, force: true });
       return { apply };
@@ -1250,7 +1273,12 @@ export async function deleteAgent(id: string): Promise<{ apply: ApplyResult }> {
         rmSync(wsDir, { recursive: true, force: true });
         if (existsSync(join(snap, "workspace"))) cpSync(join(snap, "workspace"), wsDir, { recursive: true });
         const rollbackApply = (await triggerApply({ stateDir: STATE_DIR, repoDir: REPO_DIR, timeoutMs: EXTENDED_APPLY_TIMEOUT_MS, mode: deleteMode, operation: "agent.delete" })) as ApplyResult;
-        if (rollbackApply.status !== "success") rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        if (rollbackApply.status === "failed") {
+          rollbackMessage = `恢复原配置失败：${rollbackApply.message || rollbackApply.status}`;
+        } else if (rollbackApply.status === "pending") {
+          trackPendingApply(STATE_DIR, rollbackApply, "回滚 apply");
+          rollbackMessage = "已恢复原配置（配置应用中）";
+        }
       } catch (rollbackErr) {
         rollbackMessage = `恢复原配置失败：${(rollbackErr as Error).message}`;
       } finally {
