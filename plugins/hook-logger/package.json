@@ -1,0 +1,8 @@
+{
+  "name": "hook-logger",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "description": "Yoma+HR interaction logger plugin (#31)",
+  "openclaw": { "extensions": ["./index.js"] }
+}

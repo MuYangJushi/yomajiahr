@@ -148,6 +148,25 @@ else
   log "Keeping existing $STATE_DIR/config-store"
 fi
 
+# 平台自有插件随发布包安装（版本随包走；交互数据在 data/ 不受影响）。
+# 必须用 openclaw plugins install（手放 $STATE_DIR/plugins 不会被发现）。
+# 非关键路径：安装失败只警告不中止（插件是采集旁路，不影响主服务）。
+if [ -d "$RELEASE_DIR/plugins" ] && command -v openclaw >/dev/null 2>&1; then
+  for plugin_dir in "$RELEASE_DIR"/plugins/*/; do
+    [ -f "$plugin_dir/openclaw.plugin.json" ] || continue
+    plugin_id="$(basename "$plugin_dir")"
+    rm -rf "$STATE_DIR/extensions/$plugin_id"
+    if TMPDIR="${TMPDIR:-/run/user/$(id -u)}" \
+       OPENCLAW_CONFIG_PATH="$STATE_DIR/openclaw.json" \
+       OPENCLAW_STATE_DIR="$STATE_DIR" \
+       openclaw plugins install "$plugin_dir" >/dev/null 2>&1; then
+      log "Installed plugin: $plugin_id"
+    else
+      log "WARN: failed to install plugin $plugin_id; interaction logging may be off"
+    fi
+  done
+fi
+
 if [ ! -f "$STATE_DIR/.env" ] && [ -f "$RELEASE_DIR/config/.env.example" ]; then
   cp "$RELEASE_DIR/config/.env.example" "$STATE_DIR/.env"
 fi

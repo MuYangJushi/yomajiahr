@@ -1,0 +1,7 @@
+{
+  "id": "hook-logger",
+  "name": "Yoma+HR Interaction Logger",
+  "description": "支柱三交互采集（#31）：把员工↔数字员工交互事件按 runId 串链落 JSONL 交互库",
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}

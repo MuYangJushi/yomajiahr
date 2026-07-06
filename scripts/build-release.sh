@@ -113,6 +113,7 @@ cp "$REPO_DIR/config/openclaw.base.jsonc" "$STAGING_DIR/config/openclaw.base.jso
 cp "$REPO_DIR/config/.env.example" "$STAGING_DIR/config/.env.example"
 
 copy_dir "$REPO_DIR/skills" "$STAGING_DIR/skills"
+copy_dir "$REPO_DIR/plugins" "$STAGING_DIR/plugins"
 mkdir -p "$STAGING_DIR/workspaces"
 copy_dir "$REPO_DIR/workspaces/_templates" "$STAGING_DIR/workspaces/_templates"
 
